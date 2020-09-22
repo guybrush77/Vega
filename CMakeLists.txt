@@ -4,5 +4,6 @@ project(Vega LANGUAGES CXX)
 
 add_subdirectory(external)
 add_subdirectory(src)
+add_subdirectory(tests)
 
 set_property(DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT vega)
