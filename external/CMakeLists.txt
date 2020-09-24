@@ -9,6 +9,9 @@ set(FETCHCONTENT_QUIET OFF)
 # Fetch doctest
 #------------------------------------------------------------------------------------
 
+set(DOCTEST_WITH_TESTS OFF)
+set(DOCTEST_NO_INSTALL ON)
+
 FetchContent_Declare(
     doctest
     GIT_REPOSITORY  https://github.com/onqtam/doctest
@@ -17,14 +20,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(doctest)
 
+set_target_properties(doctest_with_main PROPERTIES FOLDER "external")
+
 
 #------------------------------------------------------------------------------------
 # Fetch glfw
 #------------------------------------------------------------------------------------
 
-set(GLFW_BUILD_DOCS OFF)
-set(GLFW_BUILD_TESTS OFF)
 set(GLFW_BUILD_EXAMPLES OFF)
+set(GLFW_BUILD_TESTS OFF)
 
 FetchContent_Declare(
     glfw
@@ -33,6 +37,9 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(glfw)
+
+set_target_properties(glfw PROPERTIES FOLDER "external/glfw")
+set_target_properties(uninstall PROPERTIES FOLDER "external/glfw")
 
 
 #------------------------------------------------------------------------------------
@@ -47,3 +54,4 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(spdlog)
 
+set_target_properties(spdlog PROPERTIES FOLDER "external")
