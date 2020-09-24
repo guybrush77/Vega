@@ -1,6 +1,9 @@
+#pragma once
+
+#include "utils/throw_exception.hpp"
+
 #include <type_traits>
 
-void throw_runtime_error(const char* description);
 
 template <class T, class U>
 struct have_same_sign : std::integral_constant<bool, std::is_signed<T>::value == std::is_signed<U>::value>
