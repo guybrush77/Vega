@@ -1,0 +1,18 @@
+﻿---
+BasedOnStyle: Mozilla
+AlignConsecutiveMacros: 'true'
+AlignConsecutiveAssignments: 'true'
+AlignConsecutiveDeclarations: 'true'
+AlignTrailingComments: 'true'
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakAfterReturnType: None
+AlwaysBreakTemplateDeclarations: 'Yes'
+ColumnLimit: '120'
+FixNamespaceComments: 'true'
+IndentWidth: '4'
+KeepEmptyLinesAtTheStartOfBlocks: 'false'
+SpaceAfterTemplateKeyword: 'true'
+SpacesInContainerLiterals: 'true'
+UseTab: Never
+
+...

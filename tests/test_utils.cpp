@@ -2,7 +2,6 @@
 
 #include <doctest/doctest.h>
 
-
 TEST_CASE("testing narrow_cast function")
 {
     CHECK_NOTHROW(narrow_cast<char>(0));

@@ -29,6 +29,7 @@ set_target_properties(doctest_with_main PROPERTIES FOLDER "external")
 
 set(GLFW_BUILD_EXAMPLES OFF)
 set(GLFW_BUILD_TESTS OFF)
+set(GLFW_BUILD_DOCS OFF)
 
 FetchContent_Declare(
     glfw

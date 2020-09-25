@@ -5,8 +5,7 @@
 
 #include <algorithm>
 
-namespace etna
-{
+namespace etna {
 
 bool AreExtensionsAvailable(std::span<cstring> extensions)
 {
@@ -32,13 +31,11 @@ bool AreLayersAvailable(std::span<cstring> layers)
 
 vk::UniqueInstance CreateInstance(std::span<cstring> requested_extensions, std::span<cstring> requested_layers)
 {
-    if (false == AreExtensionsAvailable(requested_extensions))
-    {
+    if (false == AreExtensionsAvailable(requested_extensions)) {
         throw_runtime_error("Requested Vulkan extensions are not available");
     }
 
-    if (false == AreLayersAvailable(requested_layers))
-    {
+    if (false == AreLayersAvailable(requested_layers)) {
         throw_runtime_error("Requested Vulkan layers are not available");
     }
 
@@ -61,4 +58,4 @@ vk::UniqueInstance CreateInstance(std::span<cstring> requested_extensions, std::
     return vk::createInstanceUnique(create_info);
 }
 
-}
+} // namespace etna
