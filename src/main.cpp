@@ -1,5 +1,8 @@
+#include "etna/device.hpp"
 #include "etna/instance.hpp"
+
 #include <spdlog/spdlog.h>
+
 int main()
 {
 #ifdef NDEBUG
@@ -18,6 +21,7 @@ int main()
 
     auto instance = etna::CreateUniqueInstance(extensions, layers);
     auto debug    = etna::CreateUniqueDebugMessenger(instance.get());
+    auto device   = etna::CreateUniqueDevice(instance.get());
 
     return 0;
 }

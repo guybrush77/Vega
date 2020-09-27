@@ -18,6 +18,7 @@ BraceWrapping:
 BreakBeforeBraces: Custom
 ColumnLimit: 120
 ContinuationIndentWidth: 4
+Cpp11BracedListStyle: false
 FixNamespaceComments: true
 IndentWidth: 4
 KeepEmptyLinesAtTheStartOfBlocks: false

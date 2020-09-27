@@ -75,12 +75,12 @@ class Context {
     info_map_t m_info_map;
 };
 
-vk::DebugUtilsMessengerCreateInfoEXT GetDebugUtilsMessengerCreateInfo()
+static vk::DebugUtilsMessengerCreateInfoEXT GetDebugUtilsMessengerCreateInfo()
 {
     vk::DebugUtilsMessengerCreateInfoEXT create_info;
     {
         create_info.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-                                      vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+                                      //vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
                                       vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
                                       vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
 
