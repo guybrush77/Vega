@@ -1,18 +1,31 @@
 ﻿---
-BasedOnStyle: Mozilla
-AlignConsecutiveMacros: 'true'
-AlignConsecutiveAssignments: 'true'
-AlignConsecutiveDeclarations: 'true'
-AlignTrailingComments: 'true'
+AlignAfterOpenBracket: AlwaysBreak
+AlignConsecutiveAssignments: true
+AlignConsecutiveMacros: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignTrailingComments: true
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortFunctionsOnASingleLine: InlineOnly
 AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
-AlwaysBreakTemplateDeclarations: 'Yes'
-ColumnLimit: '120'
-FixNamespaceComments: 'true'
-IndentWidth: '4'
-KeepEmptyLinesAtTheStartOfBlocks: 'false'
-SpaceAfterTemplateKeyword: 'true'
-SpacesInContainerLiterals: 'true'
+AlwaysBreakTemplateDeclarations: true
+BinPackParameters: false
+BraceWrapping:
+    AfterFunction: true
+    SplitEmptyFunction: false
+    SplitEmptyRecord: false
+BreakBeforeBraces: Custom
+ColumnLimit: 120
+ContinuationIndentWidth: 4
+FixNamespaceComments: true
+IndentWidth: 4
+KeepEmptyLinesAtTheStartOfBlocks: false
+PenaltyBreakAssignment: 20
+PenaltyReturnTypeOnItsOwnLine: 200
+PointerAlignment: Left
+SpaceAfterTemplateKeyword: true
+SpacesInContainerLiterals: true
 UseTab: Never
 
 ...

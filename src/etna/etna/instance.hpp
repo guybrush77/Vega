@@ -5,12 +5,14 @@
 
 namespace etna {
 
-using cstring = const char*;
+using UniqueDebugMessenger = vk::UniqueHandle<vk::DebugUtilsMessengerEXT, vk::DispatchLoaderDynamic>;
 
-bool AreExtensionsAvailable(std::span<cstring> extensions);
+bool AreExtensionsAvailable(std::span<const char*> extensions);
 
-bool AreLayersAvailable(std::span<cstring> layers);
+bool AreLayersAvailable(std::span<const char*> layers);
 
-vk::UniqueInstance CreateInstance(std::span<cstring> requested_extensions, std::span<cstring> requested_layers);
+auto CreateUniqueInstance(std::span<const char*> extensions, std::span<const char*> layers) -> vk::UniqueInstance;
+
+auto CreateUniqueDebugMessenger(vk::Instance instance) -> UniqueDebugMessenger;
 
 } // namespace etna
