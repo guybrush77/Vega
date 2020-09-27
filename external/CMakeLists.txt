@@ -39,6 +39,21 @@ set_target_properties(doctest_with_main PROPERTIES FOLDER "external")
 
 
 #------------------------------------------------------------------------------------
+# Fetch fmt
+#------------------------------------------------------------------------------------
+
+FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY  https://github.com/fmtlib/fmt
+    GIT_TAG         7.0.3
+)
+
+FetchContent_MakeAvailable(fmt)
+
+set_target_properties(fmt PROPERTIES FOLDER "external")
+
+
+#------------------------------------------------------------------------------------
 # Fetch glfw
 #------------------------------------------------------------------------------------
 
@@ -61,6 +76,8 @@ set_target_properties(uninstall PROPERTIES FOLDER "external/glfw")
 #------------------------------------------------------------------------------------
 # Fetch spdlog
 #------------------------------------------------------------------------------------
+
+set(SPDLOG_FMT_EXTERNAL ON)
 
 FetchContent_Declare(
     spdlog
