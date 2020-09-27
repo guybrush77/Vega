@@ -6,6 +6,21 @@ set(FETCHCONTENT_QUIET OFF)
 
 
 #------------------------------------------------------------------------------------
+# Fetch cxxopt
+#------------------------------------------------------------------------------------
+
+set(CXXOPTS_BUILD_EXAMPLES OFF)
+
+FetchContent_Declare(
+    cxxopt
+    GIT_REPOSITORY  https://github.com/jarro2783/cxxopts
+    GIT_TAG         v2.2.1
+)
+
+FetchContent_MakeAvailable(cxxopt)
+
+
+#------------------------------------------------------------------------------------
 # Fetch doctest
 #------------------------------------------------------------------------------------
 
