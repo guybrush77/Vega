@@ -66,9 +66,6 @@ static void WriteFile(
 
     for (std::size_t i = 0, column = 1; i != data.size(); ++i) {
         const unsigned char byte = data[i];
-        if (byte == 0x0d) {
-            continue;
-        }
         buffer += format("{:#04x}", byte);
         const bool should_break = column == max_columns;
         if (i + 1 < data.size()) {

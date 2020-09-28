@@ -8,6 +8,7 @@ target_sources(vega PRIVATE ${source_files})
 target_link_libraries(
     vega
     PRIVATE etna
+    PRIVATE shaders
     PRIVATE spdlog
 )
 

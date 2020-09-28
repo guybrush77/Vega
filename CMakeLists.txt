@@ -4,6 +4,8 @@ project(Vega LANGUAGES CXX)
 
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/tools/cmake")
+
 add_subdirectory(external)
 add_subdirectory(src)
 add_subdirectory(tests)
