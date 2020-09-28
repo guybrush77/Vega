@@ -10,6 +10,7 @@ set(FETCHCONTENT_QUIET OFF)
 #------------------------------------------------------------------------------------
 
 set(CXXOPTS_BUILD_EXAMPLES OFF)
+set(CXXOPTS_BUILD_TESTS OFF)
 
 FetchContent_Declare(
     cxxopt

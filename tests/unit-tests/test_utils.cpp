@@ -1,4 +1,5 @@
 #include "utils/casts.hpp"
+#include "utils/resource.hpp"
 
 #include <doctest/doctest.h>
 
@@ -32,4 +33,15 @@ TEST_CASE("testing narrow_cast function")
     CHECK_THROWS(narrow_cast<int>(3.14));
 
     CHECK_THROWS(narrow_cast<float>(1'000'000'001));
+}
+
+TEST_CASE("testing resource manager")
+{
+    const char* data = "Lorem ipsum dolor sit amet.\x0a";
+    const void* temp = data;
+    const auto  view = data_view(static_cast<const unsigned char*>(temp), strlen(data));
+
+    const auto resource = ResourceManager::Instance().GetResource("test-resource");
+
+    CHECK(view == resource);
 }
