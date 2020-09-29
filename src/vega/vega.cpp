@@ -1,5 +1,6 @@
 #include "etna/device.hpp"
 #include "etna/instance.hpp"
+#include "etna/shader.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -22,6 +23,7 @@ int main()
     auto instance = etna::CreateUniqueInstance(extensions, layers);
     auto debug    = etna::CreateUniqueDebugMessenger(instance.get());
     auto device   = etna::CreateUniqueDevice(instance.get());
+    auto shader   = etna::CreateUniqueShaderModule(device.get(), "shader.vert");
 
     return 0;
 }

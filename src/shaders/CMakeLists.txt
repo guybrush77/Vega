@@ -4,7 +4,7 @@ file(GLOB_RECURSE glsl_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.vert *.frag)
 
 compile_shaders("${glsl_files}" resource_files)
 
-add_library(shaders)
+add_library(shaders OBJECT)
 
 target_sources(shaders PRIVATE ${glsl_files} ${resource_files})
 

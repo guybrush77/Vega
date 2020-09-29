@@ -78,10 +78,9 @@ static void WriteFile(
     buffer += "public:\n";
     buffer += classname;
     buffer += "()\n{\n";
-    buffer += "  auto& manager = ResourceManager::Instance();\n";
-    buffer += "  manager.AddResource(\"";
+    buffer += "  AddResource(\"";
     buffer += resource_name;
-    buffer += "\", data_view(data, sizeof(data)));\n";
+    buffer += "\", data, sizeof(data));\n";
     buffer += "}\n};\n\n";
 
     buffer += format("static {0} {1};\n", classname, varname);
