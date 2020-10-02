@@ -89,3 +89,20 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(spdlog)
 
 set_target_properties(spdlog PROPERTIES FOLDER "external")
+
+
+#------------------------------------------------------------------------------------
+# Fetch vma
+#------------------------------------------------------------------------------------
+
+FetchContent_Declare(
+    vma
+    GIT_REPOSITORY  https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+    GIT_TAG         v2.3.0
+)
+
+FetchContent_MakeAvailable(vma)
+FetchContent_GetProperties(vma)
+
+add_library(vma INTERFACE)
+target_include_directories(vma INTERFACE "${vma_SOURCE_DIR}/src")
