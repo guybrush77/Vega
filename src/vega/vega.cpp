@@ -6,8 +6,6 @@
 
 #include <spdlog/spdlog.h>
 
-#include "C:/Program Files/RenderDoc/renderdoc_app.h"
-
 int main()
 {
 #ifdef NDEBUG
@@ -16,17 +14,7 @@ int main()
     const bool enable_validation = true;
 #endif
 
-    LoadLibrary("C:\\Program Files\\RenderDoc\\renderdoc.dll");
-
     using namespace vk;
-
-    RENDERDOC_API_1_4_0* rdoc_api = NULL;
-
-    if (HMODULE mod = GetModuleHandleA("C:\\Program Files\\RenderDoc\\renderdoc.dll")) {
-        pRENDERDOC_GetAPI RENDERDOC_GetAPI = (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
-        int               ret              = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void**)&rdoc_api);
-        assert(ret == 1);
-    }
 
     std::vector<const char*> extensions;
     std::vector<const char*> layers;
@@ -44,9 +32,6 @@ int main()
     auto instance  = instance_owner.get();
     auto device    = device_owner.get();
     auto allocator = allocator_owner.get();
-
-    if (rdoc_api)
-        rdoc_api->StartFrameCapture(NULL, NULL);
 
     etna::UniqueImage2D image_owner;
     {
@@ -135,9 +120,6 @@ int main()
     graphics_queue.submit(submit_info, fence.get());
 
     device.waitForFences(fence.get(), true, UINT64_MAX);
-
-    if (rdoc_api)
-        rdoc_api->EndFrameCapture(NULL, NULL);
 
     return 0;
 }
