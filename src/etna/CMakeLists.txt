@@ -13,6 +13,7 @@ target_link_libraries(
     etna
     PRIVATE spdlog
     PRIVATE utils
+    PRIVATE vma
     PUBLIC  Vulkan::Vulkan)
 
 # IDE specific
