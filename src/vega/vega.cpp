@@ -1,10 +1,12 @@
+#include "etna/command.hpp"
 #include "etna/device.hpp"
-#include "etna/image.hpp"
+//#include "etna/image.hpp"
 #include "etna/instance.hpp"
 #include "etna/pipeline.hpp"
 #include "etna/shader.hpp"
 
-#include <spdlog/spdlog.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h" // TODO: Remove
 
 int main()
 {
@@ -14,7 +16,7 @@ int main()
     const bool enable_validation = true;
 #endif
 
-    using namespace vk;
+    using namespace etna;
 
     std::vector<const char*> extensions;
     std::vector<const char*> layers;
@@ -24,102 +26,145 @@ int main()
         layers.push_back("VK_LAYER_KHRONOS_validation");
     }
 
-    auto instance_owner  = etna::CreateUniqueInstance(extensions, layers);
-    auto debug_owner     = etna::CreateUniqueDebugMessenger(instance_owner.get());
-    auto device_owner    = etna::CreateUniqueDevice(instance_owner.get());
-    auto allocator_owner = etna::CreateUniqueAllocator(device_owner.get());
+    auto instance_owner = CreateInstance("Vega", Version{ 0, 1, 0 }, extensions, layers);
+    auto device_owner   = instance_owner->CreateDevice();
+    auto instance       = instance_owner.get();
+    auto device         = device_owner.get();
 
-    auto instance  = instance_owner.get();
-    auto device    = device_owner.get();
-    auto allocator = allocator_owner.get();
-
-    etna::UniqueImage2D image_owner;
-    {
-        auto format = Format::eR8G8B8A8Srgb;
-        auto size   = Extent2D{ 256, 256 };
-        auto usage  = ImageUsageFlagBits::eColorAttachment | ImageUsageFlagBits::eTransferSrc;
-        auto memory = etna::MemoryUsage::eGpuOnly;
-
-        image_owner = etna::CreateUniqueImage2D(allocator, format, size, usage, memory);
-    }
+    auto image_owner = device.CreateImage(
+        Format::R8G8B8A8Srgb,
+        Extent2D{ 256, 256 },
+        ImageUsage::ColorAttachment | ImageUsage::TransferSrc,
+        MemoryUsage::GpuOnly,
+        ImageTiling::Optimal);
     auto image = image_owner.get();
+
+    auto image_view_owner = device.CreateImageView(image);
+    auto image_view       = image_view_owner.get();
 
     UniqueRenderPass renderpass_owner;
     {
-        etna::RenderPassBuilder builder;
+        auto builder = RenderPassBuilder();
 
         auto format         = image.Format();
-        auto clear_on_load  = AttachmentLoadOp::eClear;
-        auto write_on_store = AttachmentStoreOp::eStore;
-        auto initial_layout = ImageLayout::eUndefined;
-        auto final_layout   = ImageLayout::ePresentSrcKHR;
+        auto clear_on_load  = AttachmentLoadOp::Clear;
+        auto write_on_store = AttachmentStoreOp::Store;
+        auto initial_layout = ImageLayout::Undefined;
+        auto final_layout   = ImageLayout::TransferSrcOptimal;
 
         auto attachment_id = builder.AddAttachment(format, clear_on_load, write_on_store, initial_layout, final_layout);
-        auto reference_id  = builder.AddReference(attachment_id, ImageLayout::eColorAttachmentOptimal);
+        auto reference_id  = builder.AddReference(attachment_id, ImageLayout::ColorAttachmentOptimal);
 
-        builder.AddSubpass({ reference_id });
+        builder.AddSubpass(reference_id);
 
-        renderpass_owner = device.createRenderPassUnique(builder.create_info);
+        renderpass_owner = device.CreateRenderPass(builder.create_info);
     }
     auto renderpass = renderpass_owner.get();
 
-    auto layout_owner = etna::CreateUniquePipelineLayout(device);
+    VkPipelineLayoutCreateInfo temp{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO }; // TODO: fixme
+
+    auto layout_owner = device.CreatePipelineLayout(temp);
     auto layout       = layout_owner.get();
 
     UniquePipeline pipeline_owner;
     {
-        auto builder         = etna::PipelineBuilder(layout, renderpass);
-        auto vertex_shader   = etna::CreateUniqueShaderModule(device, "shader.vert");
-        auto fragment_shader = etna::CreateUniqueShaderModule(device, "shader.frag");
+        auto builder         = PipelineBuilder(layout, renderpass);
+        auto vertex_shader   = device.CreateShaderModule("shader.vert");
+        auto fragment_shader = device.CreateShaderModule("shader.frag");
+        auto [width, height] = image.Extent();
+        auto viewport        = Viewport{ 0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1 };
 
-        builder.AddShaderStage(vertex_shader.get(), ShaderStageFlagBits::eVertex);
-        builder.AddShaderStage(fragment_shader.get(), ShaderStageFlagBits::eFragment);
+        builder.AddShaderStage(vertex_shader.get(), ShaderStage::Vertex);
+        builder.AddShaderStage(fragment_shader.get(), ShaderStage::Fragment);
 
-        builder.AddViewport(image.Viewport());
+        builder.AddViewport(viewport);
         builder.AddScissor(image.Rect2D());
 
         builder.AddColorBlendAttachmentBaseState();
 
-        pipeline_owner = device.createGraphicsPipelineUnique(nullptr, builder.create_info);
+        pipeline_owner = device.CreateGraphicsPipeline(builder.create_info);
     }
     auto pipeline = pipeline_owner.get();
 
-    auto image_view_owner = etna::CreateUniqueImageView(device, image);
-    auto image_view       = image_view_owner.get();
-
-    auto framebuffer_owner = etna::CreateUniqueFrameBuffer(device, renderpass, image.Extent(), { image_view });
+    auto framebuffer_owner = device.CreateFramebuffer(renderpass, image_view, image.Extent());
     auto framebuffer       = framebuffer_owner.get();
 
-    auto graphics_queue_family_index = etna::GetGraphicsQueueFamilyIndex(device);
-    auto graphics_queue              = device.getQueue(graphics_queue_family_index, 0);
+    auto graphics_queue = device.GetQueue(QueueFamily::Graphics);
 
-    auto command_pool_owner = device.createCommandPoolUnique({ {}, graphics_queue_family_index });
+    auto command_pool_owner = device.CreateCommandPool(QueueFamily::Graphics);
     auto command_pool       = command_pool_owner.get();
 
-    auto command_buffer_owner = etna::AllocateUniqueCommandBuffer(device, command_pool);
-    auto command_buffer       = command_buffer_owner.get();
-
-    auto command_buffer_begin_info = vk::CommandBufferBeginInfo{};
-    auto renderpass_begin_info     = GetRenderPassBeginInfo(renderpass, image.Rect2D(), framebuffer, image);
-
-    command_buffer.begin(command_buffer_begin_info);
-    command_buffer.beginRenderPass(renderpass_begin_info, SubpassContents::eInline);
-    command_buffer.bindPipeline(PipelineBindPoint::eGraphics, pipeline);
-    command_buffer.draw(3, 1, 0, 0);
-    command_buffer.endRenderPass();
-    command_buffer.end();
-
-    SubmitInfo submit_info;
+    // Render image
     {
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers    = &command_buffer;
+        auto cmd_buffer_owner = command_pool.AllocateCommandBuffer();
+        auto cmd_buffer       = cmd_buffer_owner.get();
+
+        cmd_buffer.Begin();
+        cmd_buffer.BeginRenderPass(framebuffer, SubpassContents::Inline);
+        cmd_buffer.BindPipeline(PipelineBindPoint::Graphics, pipeline);
+        cmd_buffer.Draw(3, 1, 0, 0);
+        cmd_buffer.EndRenderPass();
+        cmd_buffer.End();
+
+        graphics_queue.Submit(cmd_buffer);
+
+        device.WaitIdle();
     }
 
-    auto fence = device.createFenceUnique({});
+    auto dst_image_owner = device.CreateImage(
+        image.Format(),
+        image.Extent(),
+        ImageUsage::TransferDst,
+        MemoryUsage::CpuOnly,
+        ImageTiling::Linear);
+    auto dst_image = dst_image_owner.get();
 
-    graphics_queue.submit(submit_info, fence.get());
+    // Transfer image to CPU
+    {
+        auto cmd_buffer_owner = command_pool.AllocateCommandBuffer();
+        auto cmd_buffer       = cmd_buffer_owner.get();
 
-    device.waitForFences(fence.get(), true, UINT64_MAX);
+        cmd_buffer.Begin();
+        cmd_buffer.PipelineBarrier(
+            dst_image,
+            PipelineStage::Transfer,
+            PipelineStage::Transfer,
+            Access{},
+            Access::TransferWrite,
+            ImageLayout::Undefined,
+            ImageLayout::TransferDstOptimal,
+            ImageAspect::Color);
+        cmd_buffer.CopyImage(
+            image,
+            ImageLayout::TransferSrcOptimal,
+            dst_image,
+            ImageLayout::TransferDstOptimal,
+            ImageAspect::Color);
+        cmd_buffer.PipelineBarrier(
+            dst_image,
+            PipelineStage::Transfer,
+            PipelineStage::Transfer,
+            Access::TransferWrite,
+            Access::MemoryRead,
+            ImageLayout::TransferDstOptimal,
+            ImageLayout::General,
+            ImageAspect::Color);
+        cmd_buffer.End();
+
+        graphics_queue.Submit(cmd_buffer);
+
+        device.WaitIdle();
+    }
+
+    void* data = dst_image.MapMemory();
+
+    auto width  = dst_image.Extent().width;
+    auto height = dst_image.Extent().height;
+    auto stride = 4 * width;
+
+    stbi_write_png("out.png", width, height, 4, data, stride);
+
+    dst_image.UnmapMemory();
 
     return 0;
 }

@@ -1,28 +1,45 @@
 #include "etna/shader.hpp"
 
-#include "utils/resource.hpp"
-
 #include <spdlog/spdlog.h>
 
 #define COMPONENT "Etna: "
 
+namespace {
+
+struct EtnaShaderModule_T final {
+    VkShaderModule shader_module;
+    VkDevice       device;
+};
+
+} // namespace
+
 namespace etna {
 
-vk::UniqueShaderModule CreateUniqueShaderModule(vk::Device device, const char* shader_name)
+ShaderModule::operator VkShaderModule() const noexcept
 {
-    auto [shader_data, shader_size] = GetResource(shader_name);
+    return m_state ? m_state->shader_module : VkShaderModule{};
+}
 
-    vk::ShaderModuleCreateInfo create_info;
-    {
-        create_info.codeSize = shader_size;
-        create_info.pCode    = reinterpret_cast<const std::uint32_t*>(shader_data);
-    }
+UniqueShaderModule ShaderModule::Create(VkDevice device, const VkShaderModuleCreateInfo& create_info)
+{
+    VkShaderModule shader_module{};
+    vkCreateShaderModule(device, &create_info, nullptr, &shader_module);
 
-    auto shader_module = device.createShaderModuleUnique(create_info);
+    spdlog::info(COMPONENT "Created VkShaderModule {}", fmt::ptr(shader_module));
 
-    spdlog::info(COMPONENT "Created VkShaderModule {}", shader_module.get());
+    return UniqueShaderModule(new EtnaShaderModule_T{ shader_module, device });
+}
 
-    return shader_module;
+void ShaderModule::Destroy() noexcept
+{
+    assert(m_state);
+    vkDestroyShaderModule(m_state->device, m_state->shader_module, nullptr);
+
+    spdlog::info(COMPONENT "Destroyed VkShaderModule {}", fmt::ptr(m_state->shader_module));
+
+    delete m_state;
+
+    m_state = nullptr;
 }
 
 } // namespace etna

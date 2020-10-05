@@ -1,79 +1,110 @@
 #pragma once
 
-#include <forward_list>
-#include <span>
-#include <vulkan/vulkan.hpp>
+#include "etna/renderpass.hpp"
+#include "etna/shader.hpp"
+
+ETNA_DEFINE_HANDLE(EtnaPipeline)
+ETNA_DEFINE_HANDLE(EtnaPipelineLayout)
 
 namespace etna {
 
-auto CreateUniquePipelineLayout(vk::Device device) -> vk::UniquePipelineLayout;
+class PipelineLayout;
+using UniquePipelineLayout = UniqueHandle<PipelineLayout>;
 
-auto GetRenderPassBeginInfo(
-    vk::RenderPass  renderpass,
-    vk::Rect2D      render_area,
-    vk::Framebuffer framebuffer,
-    vk::Image       image) -> vk::RenderPassBeginInfo;
+class PipelineLayout {
+  public:
+    PipelineLayout() noexcept {}
+    PipelineLayout(std::nullptr_t) noexcept {}
 
-using AttachmentID = std::uint32_t;
-using ReferenceID  = std::size_t;
+    operator VkPipelineLayout() const noexcept;
 
-struct RenderPassBuilder final {
-    AttachmentID AddAttachment(
-        vk::Format            format,
-        vk::AttachmentLoadOp  load_op,
-        vk::AttachmentStoreOp store_op,
-        vk::ImageLayout       initial_layout,
-        vk::ImageLayout       final_layout);
+    explicit operator bool() const noexcept { return m_state != nullptr; }
 
-    ReferenceID AddReference(AttachmentID attachment_id, vk::ImageLayout image_layout);
-
-    void AddSubpass(std::span<const ReferenceID> reference_ids);
-
-    void AddSubpass(std::initializer_list<ReferenceID> reference_ids);
-
-    vk::RenderPassCreateInfo create_info;
+    bool operator==(const PipelineLayout& rhs) const noexcept { return m_state == rhs.m_state; }
+    bool operator!=(const PipelineLayout& rhs) const noexcept { return m_state != rhs.m_state; }
 
   private:
-    std::vector<vk::AttachmentDescription>                  m_attachment_descriptions;
-    std::vector<vk::AttachmentReference>                    m_references;
-    std::forward_list<std::vector<vk::AttachmentReference>> m_subpass_references;
-    std::vector<vk::SubpassDescription>                     m_subpass_descriptions;
+    template <typename>
+    friend class UniqueHandle;
+
+    friend class Device;
+
+    PipelineLayout(EtnaPipelineLayout state) : m_state(state) {}
+
+    static auto Create(VkDevice device, const VkPipelineLayoutCreateInfo& create_info) -> UniquePipelineLayout;
+
+    void Destroy() noexcept;
+
+    EtnaPipelineLayout m_state{};
 };
 
 struct PipelineBuilder final {
     PipelineBuilder();
-    PipelineBuilder(vk::PipelineLayout layout, vk::RenderPass renderpass) noexcept;
+    PipelineBuilder(PipelineLayout layout, RenderPass renderpass) noexcept;
 
-    void AddShaderStage(vk::ShaderModule module, vk::ShaderStageFlagBits stage, const char* entry_function = "main");
+    void AddShaderStage(
+        ShaderModule        shader_module,
+        ShaderStageMask shader_stage_mask,
+        const char*         entry_function = "main");
 
-    void AddViewport(vk::Viewport viewport);
+    void AddViewport(Viewport viewport);
 
-    void AddScissor(vk::Rect2D scissor);
+    void AddScissor(Rect2D scissor);
 
-    void AddColorBlendAttachmentState(const vk::PipelineColorBlendAttachmentState& state);
+    // void AddColorBlendAttachmentState();// TODO
 
     void AddColorBlendAttachmentBaseState();
 
-    void AddDynamicState(vk::DynamicState dynamic_state);
+    void AddDynamicState(DynamicState dynamic_state);
 
-    vk::GraphicsPipelineCreateInfo create_info;
+    VkGraphicsPipelineCreateInfo create_info{};
 
   private:
-    std::vector<vk::PipelineShaderStageCreateInfo> m_shader_stages;
-    vk::PipelineVertexInputStateCreateInfo         m_vertex_input_state;
-    vk::PipelineInputAssemblyStateCreateInfo       m_input_assembly_state;
-    vk::PipelineTessellationStateCreateInfo        m_tessellation_state;
-    vk::PipelineViewportStateCreateInfo            m_viewport_state;
-    vk::PipelineRasterizationStateCreateInfo       m_rasterization_state;
-    vk::PipelineMultisampleStateCreateInfo         m_multisample_state;
-    vk::PipelineDepthStencilStateCreateInfo        m_depth_stencil_state;
-    vk::PipelineColorBlendStateCreateInfo          m_color_blend_state;
-    vk::PipelineDynamicStateCreateInfo             m_dynamic_state;
+    std::vector<VkPipelineShaderStageCreateInfo> m_shader_stages;
+    VkPipelineVertexInputStateCreateInfo         m_vertex_input_state;
+    VkPipelineInputAssemblyStateCreateInfo       m_input_assembly_state;
+    VkPipelineTessellationStateCreateInfo        m_tessellation_state;
+    VkPipelineViewportStateCreateInfo            m_viewport_state;
+    VkPipelineRasterizationStateCreateInfo       m_rasterization_state;
+    VkPipelineMultisampleStateCreateInfo         m_multisample_state;
+    VkPipelineDepthStencilStateCreateInfo        m_depth_stencil_state;
+    VkPipelineColorBlendStateCreateInfo          m_color_blend_state;
+    VkPipelineDynamicStateCreateInfo             m_dynamic_state;
 
-    std::vector<vk::Viewport>                          m_viewports;
-    std::vector<vk::Rect2D>                            m_scissors;
-    std::vector<vk::PipelineColorBlendAttachmentState> m_color_blend_attachments;
-    std::vector<vk::DynamicState>                      m_dynamic_states;
+    std::vector<VkViewport>                          m_viewports;
+    std::vector<VkRect2D>                            m_scissors;
+    std::vector<VkPipelineColorBlendAttachmentState> m_color_blend_attachments;
+    std::vector<VkDynamicState>                      m_dynamic_states;
+};
+
+class Pipeline;
+using UniquePipeline = UniqueHandle<Pipeline>;
+
+class Pipeline {
+  public:
+    Pipeline() noexcept {}
+    Pipeline(std::nullptr_t) noexcept {}
+
+    operator VkPipeline() const noexcept;
+
+    explicit operator bool() const noexcept { return m_state != nullptr; }
+
+    bool operator==(const Pipeline& rhs) const noexcept { return m_state == rhs.m_state; }
+    bool operator!=(const Pipeline& rhs) const noexcept { return m_state != rhs.m_state; }
+
+  private:
+    template <typename>
+    friend class UniqueHandle;
+
+    friend class Device;
+
+    Pipeline(EtnaPipeline state) : m_state(state) {}
+
+    static auto Create(VkDevice device, const VkGraphicsPipelineCreateInfo& create_info) -> UniquePipeline;
+
+    void Destroy() noexcept;
+
+    EtnaPipeline m_state{};
 };
 
 } // namespace etna

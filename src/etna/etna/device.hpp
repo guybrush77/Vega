@@ -1,20 +1,70 @@
 #pragma once
 
-#include "allocator.hpp"
+#include "command.hpp"
+#include "queue.hpp"
+#include "renderpass.hpp"
+#include "shader.hpp"
 
-#include <vulkan/vulkan.hpp>
+ETNA_DEFINE_HANDLE(EtnaDevice)
 
 namespace etna {
 
-auto GetGraphicsQueueFamilyIndex(vk::Device device) -> uint32_t;
+class Device;
+class Instance;
 
-auto AllocateUniqueCommandBuffer(vk::Device             device,
-                                 vk::CommandPool        command_pool,
-                                 vk::CommandBufferLevel command_buffer_level = vk::CommandBufferLevel::ePrimary)
-    -> vk::UniqueCommandBuffer;
+using UniqueDevice = UniqueHandle<Device>;
 
-auto CreateUniqueDevice(vk::Instance instance) -> vk::UniqueDevice;
+class Device {
+  public:
+    Device() noexcept {}
+    Device(std::nullptr_t) noexcept {}
 
-auto CreateUniqueAllocator(vk::Device device) -> etna::UniqueAllocator;
+    explicit operator bool() const noexcept { return m_state != nullptr; }
+
+    bool operator==(const Device& rhs) const noexcept { return m_state == rhs.m_state; }
+    bool operator!=(const Device& rhs) const noexcept { return m_state != rhs.m_state; }
+
+    auto CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask command_pool_create_mask = {})
+        -> UniqueCommandPool;
+
+    auto CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent) -> UniqueFramebuffer;
+
+    auto CreateGraphicsPipeline(const VkGraphicsPipelineCreateInfo& create_info) -> UniquePipeline;
+
+    auto CreatePipelineLayout(const VkPipelineLayoutCreateInfo& create_info) -> UniquePipelineLayout;
+
+    auto CreateRenderPass(const VkRenderPassCreateInfo& create_info) -> UniqueRenderPass;
+
+    auto CreateShaderModule(const char* shader_name) -> UniqueShaderModule;
+
+    auto CreateImage(
+        Format             format,
+        Extent2D           extent,
+        ImageUsageMask image_usage_mask,
+        MemoryUsage        memory_usage,
+        ImageTiling        image_tiling) -> UniqueImage2D;
+
+    auto CreateImageView(Image2D image) -> UniqueImageView2D;
+
+    auto GetQueue(QueueFamily queue_family) const noexcept -> Queue;
+
+    void WaitIdle();
+
+  private:
+    template <typename>
+    friend class UniqueHandle;
+
+    friend class Instance;
+
+    Device(EtnaDevice device) : m_state(device) {}
+
+    static auto Create(VkInstance instance) -> UniqueDevice;
+
+    void Destroy() noexcept;
+
+    operator EtnaDevice() const noexcept { return m_state; }
+
+    EtnaDevice m_state{};
+};
 
 } // namespace etna

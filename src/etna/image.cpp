@@ -8,171 +8,215 @@
 
 #define COMPONENT "Etna: "
 
+namespace {
+
 struct EtnaImage2D_T final {
     VkImage           image;
     VkFormat          format;
-    uint32_t          width;
-    uint32_t          height;
+    VkExtent2D        extent;
     VkImageUsageFlags usage;
     VmaAllocator      allocator;
     VmaAllocation     allocation;
 };
 
+struct EtnaImageView2D_T final {
+    VkImageView image_view;
+    VkDevice    device;
+};
+
+struct EtnaFramebuffer_T final {
+    VkFramebuffer framebuffer;
+    VkDevice      device;
+    VkRenderPass  renderpass;
+    VkExtent2D    extent;
+};
+
+} // namespace
+
 namespace etna {
 
-Image2D::operator vk::Image() const noexcept
+Image2D::operator VkImage() const noexcept
 {
-    assert(m_image);
-    return m_image->image;
+    assert(m_state);
+    return m_state->image;
 }
 
-vk::ImageUsageFlags Image2D::UsageFlags() const noexcept
+ImageUsageMask Image2D::UsageMask() const noexcept
 {
-    assert(m_image);
-    return static_cast<vk::ImageUsageFlags>(m_image->usage);
+    assert(m_state);
+    return static_cast<ImageUsage>(m_state->usage);
 }
 
-vk::Format Image2D::Format() const noexcept
+Format Image2D::Format() const noexcept
 {
-    assert(m_image);
-    return static_cast<vk::Format>(m_image->format);
+    assert(m_state);
+    return static_cast<etna::Format>(m_state->format);
 }
 
-vk::Extent2D Image2D::Extent() const noexcept
+Extent2D Image2D::Extent() const noexcept
 {
-    assert(m_image);
-    return vk::Extent2D(m_image->width, m_image->height);
+    assert(m_state);
+    return { m_state->extent.width, m_state->extent.height };
 }
 
-vk::Viewport Image2D::Viewport() const noexcept
+Rect2D Image2D::Rect2D() const noexcept
 {
-    assert(m_image);
-    return vk::Viewport(0, 0, narrow_cast<float>(m_image->width), narrow_cast<float>(m_image->height), 0, 1);
+    assert(m_state);
+    auto [width, height] = m_state->extent;
+    return etna::Rect2D{ { 0, 0 }, { width, height } };
 }
 
-vk::Rect2D Image2D::Rect2D() const noexcept
+void* Image2D::MapMemory()
 {
-    assert(m_image);
-    return vk::Rect2D({ 0, 0 }, { m_image->width, m_image->height });
-}
+    assert(m_state);
 
-void Image2D::destroy(EtnaImage2D image)
-{
-    vmaDestroyImage(image->allocator, image->image, image->allocation);
-    delete image;
-}
-
-etna::UniqueImage2D CreateUniqueImage2D(
-    etna::Allocator     allocator,
-    vk::Format          format,
-    vk::Extent2D        extent,
-    vk::ImageUsageFlags usage,
-    etna::MemoryUsage   memory_usage,
-    vk::ImageTiling     tiling)
-{
-    const VkFormat          vk_format = static_cast<VkFormat>(format);
-    const VkImageUsageFlags vk_usage  = static_cast<VkImageUsageFlags>(usage);
-
-    VkImageCreateInfo create_info{};
-    {
-        create_info.sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        create_info.imageType   = VK_IMAGE_TYPE_2D;
-        create_info.format      = vk_format;
-        create_info.extent      = { extent.width, extent.height, 1 };
-        create_info.mipLevels   = 1;
-        create_info.arrayLayers = 1;
-        create_info.samples     = VK_SAMPLE_COUNT_1_BIT;
-        create_info.tiling      = static_cast<VkImageTiling>(tiling);
-        create_info.usage       = static_cast<VkImageUsageFlags>(usage);
+    void* data = nullptr;
+    if (VK_SUCCESS != vmaMapMemory(m_state->allocator, m_state->allocation, &data)) {
+        throw_runtime_error(COMPONENT "Function vmaMapMemory failed");
     }
 
+    return data;
+}
+
+void Image2D::UnmapMemory()
+{
+    assert(m_state);
+
+    vmaUnmapMemory(m_state->allocator, m_state->allocation);
+}
+
+UniqueImage2D Image2D::Create(VmaAllocator allocator, const VkImageCreateInfo& create_info, MemoryUsage memory_usage)
+{
     VmaAllocationCreateInfo allocation_info{};
     switch (memory_usage) {
-    case etna::MemoryUsage::eGpuOnly:
+    case MemoryUsage::GpuOnly:
         allocation_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
         break;
-    case etna::MemoryUsage::eCpuOnly:
+    case MemoryUsage::CpuOnly:
         allocation_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
         break;
-    case etna::MemoryUsage::eCpuToGpu:
+    case MemoryUsage::CpuToGpu:
         allocation_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
         break;
-    case etna::MemoryUsage::eGpuToCpu:
+    case MemoryUsage::GpuToCpu:
         allocation_info.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
         break;
-    case etna::MemoryUsage::eCpuCopy:
+    case MemoryUsage::CpuCopy:
         allocation_info.usage = VMA_MEMORY_USAGE_CPU_COPY;
         break;
-    case etna::MemoryUsage::eGpuLazilyAllocated:
+    case MemoryUsage::GpuLazilyAllocated:
         allocation_info.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
         break;
     default:
         allocation_info.usage = VMA_MEMORY_USAGE_UNKNOWN;
     };
 
-    VkImage       vk_image;
-    VmaAllocation vk_allocation;
-    if (VK_SUCCESS != vmaCreateImage(allocator, &create_info, &allocation_info, &vk_image, &vk_allocation, nullptr)) {
+    VkImage       image;
+    VmaAllocation allocation;
+    if (VK_SUCCESS != vmaCreateImage(allocator, &create_info, &allocation_info, &image, &allocation, nullptr)) {
         throw_runtime_error("vmaCreateImage failed");
     }
 
-    return vk::UniqueHandle<etna::Image2D, vk::DispatchLoaderStatic>(
-        new EtnaImage2D_T{ vk_image, vk_format, extent.width, extent.height, vk_usage, allocator, vk_allocation });
+    spdlog::info(COMPONENT "Created VkImage {}", fmt::ptr(image));
+
+    return UniqueImage2D(new EtnaImage2D_T{ image,
+                                            create_info.format,
+                                            VkExtent2D{ create_info.extent.width, create_info.extent.height },
+                                            create_info.usage,
+                                            allocator,
+                                            allocation });
 }
 
-vk::UniqueImageView CreateUniqueImageView(vk::Device device, etna::Image2D image)
+void Image2D::Destroy() noexcept
 {
-    vk::ImageAspectFlags aspect_flags;
+    assert(m_state);
 
-    if (image.UsageFlags() & vk::ImageUsageFlagBits::eColorAttachment) {
-        aspect_flags = vk::ImageAspectFlagBits::eColor;
-    }
+    vmaDestroyImage(m_state->allocator, m_state->image, m_state->allocation);
 
-    vk::ImageViewCreateInfo create_info;
-    {
-        create_info.image                           = image;
-        create_info.viewType                        = vk::ImageViewType::e2D;
-        create_info.format                          = image.Format();
-        create_info.subresourceRange.aspectMask     = aspect_flags;
-        create_info.subresourceRange.baseMipLevel   = 0;
-        create_info.subresourceRange.levelCount     = 1;
-        create_info.subresourceRange.baseArrayLayer = 0;
-        create_info.subresourceRange.layerCount     = 1;
-    }
+    spdlog::info(COMPONENT "Destroyed VkImage {}", fmt::ptr(m_state->image));
 
-    auto image_view = device.createImageViewUnique(create_info);
+    delete m_state;
 
-    return image_view;
+    m_state = nullptr;
 }
 
-vk::UniqueFramebuffer CreateUniqueFrameBuffer(
-    vk::Device                     device,
-    vk::RenderPass                 renderpass,
-    vk::Extent2D                   extent,
-    std::span<const vk::ImageView> attachments)
+ImageView2D::operator VkImageView() const noexcept
 {
-    vk::FramebufferCreateInfo create_info;
-    {
-        create_info.renderPass      = renderpass;
-        create_info.attachmentCount = narrow_cast<uint32_t>(attachments.size());
-        create_info.pAttachments    = attachments.data();
-        create_info.width           = extent.width;
-        create_info.height          = extent.height;
-        create_info.layers          = 1;
-    }
-    auto framebuffer = device.createFramebufferUnique(create_info);
-
-    return framebuffer;
+    assert(m_state);
+    return m_state->image_view;
 }
 
-vk::UniqueFramebuffer CreateUniqueFrameBuffer(
-    vk::Device                           device,
-    vk::RenderPass                       renderpass,
-    vk::Extent2D                         extent,
-    std::initializer_list<vk::ImageView> attachments)
+UniqueImageView2D ImageView2D::Create(VkDevice device, const VkImageViewCreateInfo& create_info)
 {
-    auto s = std::span(attachments.begin(), attachments.size());
-    return CreateUniqueFrameBuffer(device, renderpass, extent, s);
+    VkImageView image_view{};
+
+    if (auto result = vkCreateImageView(device, &create_info, nullptr, &image_view); result != VK_SUCCESS) {
+        throw_runtime_error(fmt::format("vkCreateImageView error: {}", result).c_str());
+    }
+
+    spdlog::info(COMPONENT "Created VkImageView {}", fmt::ptr(image_view));
+
+    return UniqueImageView2D(new EtnaImageView2D_T{ image_view, device });
+}
+
+void ImageView2D::Destroy() noexcept
+{
+    assert(m_state);
+
+    vkDestroyImageView(m_state->device, m_state->image_view, nullptr);
+
+    spdlog::info(COMPONENT "Destroyed VkImageView {}", fmt::ptr(m_state->image_view));
+
+    delete m_state;
+
+    m_state = nullptr;
+}
+
+Framebuffer::operator VkFramebuffer() const noexcept
+{
+    assert(m_state);
+    return m_state->framebuffer;
+}
+
+Extent2D Framebuffer::Extent2D() const noexcept
+{
+    assert(m_state);
+    return { m_state->extent.width, m_state->extent.height };
+}
+
+VkRenderPass Framebuffer::RenderPass() const noexcept
+{
+    assert(m_state);
+    return m_state->renderpass;
+}
+
+UniqueFramebuffer Framebuffer::Create(VkDevice device, const VkFramebufferCreateInfo& create_info)
+{
+    VkFramebuffer framebuffer{};
+
+    if (auto result = vkCreateFramebuffer(device, &create_info, nullptr, &framebuffer); result != VK_SUCCESS) {
+        throw_runtime_error(fmt::format("vkCreateFramebuffer error: {}", result).c_str());
+    }
+
+    spdlog::info(COMPONENT "Created VkFramebuffer {}", fmt::ptr(framebuffer));
+
+    return UniqueFramebuffer(new EtnaFramebuffer_T{ framebuffer,
+                                                    device,
+                                                    create_info.renderPass,
+                                                    { create_info.width, create_info.height } });
+}
+
+void Framebuffer::Destroy() noexcept
+{
+    assert(m_state);
+
+    vkDestroyFramebuffer(m_state->device, m_state->framebuffer, nullptr);
+
+    spdlog::info(COMPONENT "Destroyed VkFramebuffer {}", fmt::ptr(m_state->framebuffer));
+
+    delete m_state;
+
+    m_state = nullptr;
 }
 
 } // namespace etna
