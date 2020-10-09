@@ -170,7 +170,7 @@ void PipelineBuilder::AddShaderStage(
         .sType               = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .pNext               = nullptr,
         .flags               = {},
-        .stage               = static_cast<VkShaderStageFlagBits>(shader_stage_mask.GetVkFlags()),
+        .stage               = static_cast<VkShaderStageFlagBits>(GetVkFlags(shader_stage_mask)),
         .module              = shader_module,
         .pName               = entry_function,
         .pSpecializationInfo = nullptr

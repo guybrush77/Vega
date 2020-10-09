@@ -19,7 +19,7 @@ struct composable_flags : std::false_type {};
 template <typename>
 class Mask;
 
-enum class QueueFamily { Graphics };
+enum class QueueFamily { Graphics, Transfer, Compute };
 
 enum class MemoryUsage { Unknown, GpuOnly, CpuOnly, CpuToGpu, GpuToCpu, CpuCopy, GpuLazilyAllocated };
 
@@ -585,6 +585,12 @@ class Mask final {
 
     mask_type m_value{};
 };
+
+template <typename T>
+inline auto GetVkFlags(Mask<T> mask) noexcept
+{
+    return mask.GetVkFlags();
+}
 
 template <typename T>
 requires composable_flags<T>::value inline constexpr auto operator|(T lhs, T rhs) noexcept

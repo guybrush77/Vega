@@ -84,7 +84,7 @@ void CommandBuffer::Begin(CommandBufferUsageMask command_buffer_usage_mask)
 
         .sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext            = nullptr,
-        .flags            = command_buffer_usage_mask.GetVkFlags(),
+        .flags            = GetVkFlags(command_buffer_usage_mask),
         .pInheritanceInfo = nullptr
     };
 
@@ -155,7 +155,7 @@ void CommandBuffer::PipelineBarrier(
 
     VkImageSubresourceRange subresource_range = {
 
-        .aspectMask     = aspect_mask.GetVkFlags(),
+        .aspectMask     = GetVkFlags(aspect_mask),
         .baseMipLevel   = 0,
         .levelCount     = 1,
         .baseArrayLayer = 0,
@@ -166,8 +166,8 @@ void CommandBuffer::PipelineBarrier(
 
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .pNext               = nullptr,
-        .srcAccessMask       = src_access_mask.GetVkFlags(),
-        .dstAccessMask       = dst_access_mask.GetVkFlags(),
+        .srcAccessMask       = GetVkFlags(src_access_mask),
+        .dstAccessMask       = GetVkFlags(dst_access_mask),
         .oldLayout           = GetVkFlags(old_layout),
         .newLayout           = GetVkFlags(new_layout),
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -178,8 +178,8 @@ void CommandBuffer::PipelineBarrier(
 
     vkCmdPipelineBarrier(
         m_state->command_buffer,
-        src_stage_mask.GetVkFlags(),
-        dst_stage_mask.GetVkFlags(),
+        GetVkFlags(src_stage_mask),
+        GetVkFlags(dst_stage_mask),
         {},
         0,
         nullptr,
@@ -202,9 +202,9 @@ void CommandBuffer::CopyImage(
 
     VkImageCopy image_copy = {
 
-        .srcSubresource = { aspect_mask.GetVkFlags(), 0, 0, 1 },
+        .srcSubresource = { GetVkFlags(aspect_mask), 0, 0, 1 },
         .srcOffset      = 0,
-        .dstSubresource = { aspect_mask.GetVkFlags(), 0, 0, 1 },
+        .dstSubresource = { GetVkFlags(aspect_mask), 0, 0, 1 },
         .dstOffset      = { 0, 0, 0 },
         .extent         = { width, height, 1 }
     };

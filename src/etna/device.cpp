@@ -154,7 +154,7 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
 
 static auto GetDeviceQueueCreateInfos(const QueueIndices& queue_indices)
 {
-    static float queue_priority = 1.0f;
+    static const float queue_priority = 1.0f;
 
     VkDeviceQueueCreateInfo graphics_queue_create_info = {
 
@@ -166,7 +166,27 @@ static auto GetDeviceQueueCreateInfos(const QueueIndices& queue_indices)
         .pQueuePriorities = &queue_priority
     };
 
-    std::array create_infos = { graphics_queue_create_info };
+    VkDeviceQueueCreateInfo transfer_queue_create_info = {
+
+        .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext            = nullptr,
+        .flags            = {},
+        .queueFamilyIndex = queue_indices.transfer.family_index,
+        .queueCount       = 1,
+        .pQueuePriorities = &queue_priority
+    };
+
+    VkDeviceQueueCreateInfo compute_queue_create_info = {
+
+        .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext            = nullptr,
+        .flags            = {},
+        .queueFamilyIndex = queue_indices.compute.family_index,
+        .queueCount       = 1,
+        .pQueuePriorities = &queue_priority
+    };
+
+    std::array create_infos = { graphics_queue_create_info, transfer_queue_create_info, compute_queue_create_info };
     return create_infos;
 }
 
@@ -203,17 +223,12 @@ auto Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask c
 {
     assert(m_state);
 
-    uint32_t queue_family_index{};
-    if (queue_family == QueueFamily::Graphics) {
-        queue_family_index = m_state->indices.graphics.family_index;
-    }
-
     auto create_info = VkCommandPoolCreateInfo{
 
         .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .pNext            = nullptr,
-        .flags            = command_pool_create_mask.GetVkFlags(),
-        .queueFamilyIndex = queue_family_index
+        .flags            = GetVkFlags(command_pool_create_mask),
+        .queueFamilyIndex = GetQueueFamilyIndex(queue_family)
     };
 
     return CommandPool::Create(m_state->device, create_info);
@@ -271,7 +286,7 @@ auto Device::CreateImage(
         .arrayLayers = 1,
         .samples     = VK_SAMPLE_COUNT_1_BIT,
         .tiling      = GetVkFlags(image_tiling),
-        .usage       = image_usage_mask.GetVkFlags()
+        .usage       = GetVkFlags(image_usage_mask)
     };
 
     return Image2D::Create(m_state->allocator, create_info, memory_usage);
@@ -306,20 +321,9 @@ auto Device::GetQueue(QueueFamily queue_family) const noexcept -> Queue
 {
     assert(m_state);
 
-    uint32_t queue_family_index = 0;
-
-    switch (queue_family) {
-    case QueueFamily::Graphics:
-        queue_family_index = m_state->indices.graphics.family_index;
-        break;
-    default:
-        throw_runtime_error("Device::GetQueue bad argument: queue family unrecognized");
-        break;
-    }
-
     VkQueue vk_queue{};
 
-    vkGetDeviceQueue(m_state->device, queue_family_index, 0, &vk_queue);
+    vkGetDeviceQueue(m_state->device, GetQueueFamilyIndex(queue_family), 0, &vk_queue);
 
     return Queue(vk_queue);
 }
@@ -396,6 +400,30 @@ void Device::Destroy() noexcept
 
     delete m_state;
     m_state = nullptr;
+}
+
+uint32_t Device::GetQueueFamilyIndex(QueueFamily queue_family) const noexcept
+{
+    assert(m_state);
+
+    uint32_t family_index{};
+
+    switch (queue_family) {
+    case QueueFamily::Graphics:
+        family_index = m_state->indices.graphics.family_index;
+        break;
+    case QueueFamily::Compute:
+        family_index = m_state->indices.compute.family_index;
+        break;
+    case QueueFamily::Transfer:
+        family_index = m_state->indices.transfer.family_index;
+        break;
+    default:
+        throw_runtime_error("Device::GetQueueFamilyIndex bad argument: queue family unrecognized");
+        break;
+    }
+
+    return family_index;
 }
 
 } // namespace etna

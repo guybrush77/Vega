@@ -62,6 +62,8 @@ class Device {
 
     void Destroy() noexcept;
 
+    uint32_t GetQueueFamilyIndex(QueueFamily queue_family) const noexcept;
+
     operator EtnaDevice() const noexcept { return m_state; }
 
     EtnaDevice m_state{};
