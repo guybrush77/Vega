@@ -17,13 +17,14 @@ namespace {
 
 struct QueueInfo final {
     uint32_t family_index = 0;
+    uint32_t queue_flags  = 0;
     uint32_t queue_count  = 0;
 };
 
 struct QueueIndices final {
-    std::optional<QueueInfo> graphics;
-    std::optional<QueueInfo> compute;
-    std::optional<QueueInfo> transfer;
+    QueueInfo graphics;
+    QueueInfo compute;
+    QueueInfo transfer;
 };
 
 struct EtnaDevice_T final {
@@ -57,48 +58,110 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
         throw_runtime_error("Failed to detect GPU device queues!");
     }
 
-    std::vector<VkQueueFamilyProperties> available_families(count);
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, available_families.data());
+    std::vector<VkQueueFamilyProperties> properties(count);
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, properties.data());
 
-    QueueIndices queue_indices;
+    const auto mask = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
 
-    for (std::size_t i = 0; i != available_families.size(); ++i) {
-        uint32_t family_index = narrow_cast<uint32_t>(i);
-        uint32_t queue_count  = available_families[i].queueCount;
-        if (false == queue_indices.graphics.has_value()) {
-            if (available_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                queue_indices.graphics = { family_index, queue_count };
+    std::optional<QueueInfo> graphics;
+
+    std::optional<QueueInfo> compute;
+    std::optional<QueueInfo> dedicated_compute;
+    std::optional<QueueInfo> graphics_compute;
+    std::optional<QueueInfo> mixed_compute;
+
+    std::optional<QueueInfo> transfer;
+    std::optional<QueueInfo> dedicated_transfer;
+    std::optional<QueueInfo> graphics_transfer;
+    std::optional<QueueInfo> mixed_transfer;
+
+    for (std::size_t i = 0; i != properties.size(); ++i) {
+        const auto family_index = narrow_cast<uint32_t>(i);
+        const auto queue_flags  = properties[i].queueFlags;
+        const auto queue_count  = properties[i].queueCount;
+        const auto masked_flags = queue_flags & mask;
+        const auto queue_info   = QueueInfo{ family_index, queue_flags, queue_count };
+
+        if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
+            if (!graphics.has_value() || queue_count > graphics->queue_count) {
+                graphics = queue_info;
             }
         }
-        if (false == queue_indices.compute.has_value()) {
-            if (available_families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
-                queue_indices.compute = { family_index, queue_count };
+
+        if (masked_flags == VK_QUEUE_COMPUTE_BIT) {
+            if (!dedicated_compute.has_value() || queue_count > dedicated_compute->queue_count) {
+                dedicated_compute = queue_info;
+            }
+        } else if (masked_flags & VK_QUEUE_COMPUTE_BIT) {
+            if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
+                if (!graphics_compute.has_value() || queue_count > graphics_compute->queue_count) {
+                    graphics_compute = queue_info;
+                }
+            } else {
+                if (!mixed_compute.has_value() || queue_count > mixed_compute->queue_count) {
+                    mixed_compute = queue_info;
+                }
             }
         }
-        if (false == queue_indices.transfer.has_value()) {
-            if (available_families[i].queueFlags & VK_QUEUE_TRANSFER_BIT) {
-                queue_indices.transfer = { family_index, queue_count };
+
+        if (masked_flags == VK_QUEUE_TRANSFER_BIT) {
+            if (!dedicated_transfer.has_value() || queue_count > dedicated_transfer->queue_count) {
+                dedicated_transfer = queue_info;
+            }
+        } else if (masked_flags & VK_QUEUE_TRANSFER_BIT) {
+            if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
+                if (!graphics_transfer.has_value() || queue_count > graphics_transfer->queue_count) {
+                    graphics_transfer = queue_info;
+                }
+            } else {
+                if (!mixed_transfer.has_value() || queue_count > mixed_transfer->queue_count) {
+                    mixed_transfer = queue_info;
+                }
             }
         }
     }
 
-    return queue_indices;
+    if (false == graphics.has_value()) {
+        throw_runtime_error("Failed to detect GPU graphics queue!");
+    }
+
+    if (dedicated_compute.has_value()) {
+        compute = dedicated_compute;
+    } else if (mixed_compute.has_value()) {
+        compute = mixed_compute;
+    } else if (graphics_compute.has_value()) {
+        compute = graphics_compute;
+    }
+
+    if (false == compute.has_value()) {
+        throw_runtime_error("Failed to detect GPU compute queue!");
+    }
+
+    if (dedicated_transfer.has_value()) {
+        transfer = dedicated_transfer;
+    } else if (mixed_transfer.has_value()) {
+        transfer = mixed_transfer;
+    } else if (graphics_transfer.has_value()) {
+        transfer = graphics_transfer;
+    }
+
+    if (false == transfer.has_value()) {
+        throw_runtime_error("Failed to detect GPU transfer queue!");
+    }
+
+    return { graphics.value(), compute.value(), transfer.value() };
 }
 
 static auto GetDeviceQueueCreateInfos(const QueueIndices& queue_indices)
 {
     static float queue_priority = 1.0f;
 
-    if (false == queue_indices.graphics.has_value()) {
-        throw_runtime_error("Failed to detect GPU graphics queue!");
-    }
-
     VkDeviceQueueCreateInfo graphics_queue_create_info = {
 
         .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .pNext            = nullptr,
         .flags            = {},
-        .queueFamilyIndex = queue_indices.graphics->family_index,
+        .queueFamilyIndex = queue_indices.graphics.family_index,
         .queueCount       = 1,
         .pQueuePriorities = &queue_priority
     };
@@ -142,7 +205,7 @@ auto Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask c
 
     uint32_t queue_family_index{};
     if (queue_family == QueueFamily::Graphics) {
-        queue_family_index = m_state->indices.graphics->family_index;
+        queue_family_index = m_state->indices.graphics.family_index;
     }
 
     auto create_info = VkCommandPoolCreateInfo{
@@ -190,11 +253,11 @@ auto Device::CreatePipelineLayout(const VkPipelineLayoutCreateInfo& create_info)
 }
 
 auto Device::CreateImage(
-    Format             format,
-    Extent2D           extent,
+    Format         format,
+    Extent2D       extent,
     ImageUsageMask image_usage_mask,
-    MemoryUsage        memory_usage,
-    ImageTiling        image_tiling) -> UniqueImage2D
+    MemoryUsage    memory_usage,
+    ImageTiling    image_tiling) -> UniqueImage2D
 {
     assert(m_state);
 
@@ -247,7 +310,7 @@ auto Device::GetQueue(QueueFamily queue_family) const noexcept -> Queue
 
     switch (queue_family) {
     case QueueFamily::Graphics:
-        queue_family_index = m_state->indices.graphics->family_index;
+        queue_family_index = m_state->indices.graphics.family_index;
         break;
     default:
         throw_runtime_error("Device::GetQueue bad argument: queue family unrecognized");
