@@ -88,28 +88,8 @@ void Image2D::UnmapMemory()
 UniqueImage2D Image2D::Create(VmaAllocator allocator, const VkImageCreateInfo& create_info, MemoryUsage memory_usage)
 {
     VmaAllocationCreateInfo allocation_info{};
-    switch (memory_usage) {
-    case MemoryUsage::GpuOnly:
-        allocation_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-        break;
-    case MemoryUsage::CpuOnly:
-        allocation_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-        break;
-    case MemoryUsage::CpuToGpu:
-        allocation_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-        break;
-    case MemoryUsage::GpuToCpu:
-        allocation_info.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
-        break;
-    case MemoryUsage::CpuCopy:
-        allocation_info.usage = VMA_MEMORY_USAGE_CPU_COPY;
-        break;
-    case MemoryUsage::GpuLazilyAllocated:
-        allocation_info.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
-        break;
-    default:
-        allocation_info.usage = VMA_MEMORY_USAGE_UNKNOWN;
-    };
+
+    allocation_info.usage = static_cast<VmaMemoryUsage>(memory_usage);
 
     VkImage       image;
     VmaAllocation allocation;
@@ -119,12 +99,11 @@ UniqueImage2D Image2D::Create(VmaAllocator allocator, const VkImageCreateInfo& c
 
     spdlog::info(COMPONENT "Created VkImage {}", fmt::ptr(image));
 
-    return UniqueImage2D(new EtnaImage2D_T{ image,
-                                            create_info.format,
-                                            VkExtent2D{ create_info.extent.width, create_info.extent.height },
-                                            create_info.usage,
-                                            allocator,
-                                            allocation });
+    auto format = create_info.format;
+    auto extent = VkExtent2D{ create_info.extent.width, create_info.extent.height };
+    auto usage  = create_info.usage;
+
+    return UniqueImage2D(new EtnaImage2D_T{ image, format, extent, usage, allocator, allocation });
 }
 
 void Image2D::Destroy() noexcept
@@ -200,10 +179,10 @@ UniqueFramebuffer Framebuffer::Create(VkDevice device, const VkFramebufferCreate
 
     spdlog::info(COMPONENT "Created VkFramebuffer {}", fmt::ptr(framebuffer));
 
-    return UniqueFramebuffer(new EtnaFramebuffer_T{ framebuffer,
-                                                    device,
-                                                    create_info.renderPass,
-                                                    { create_info.width, create_info.height } });
+    auto renderpass = create_info.renderPass;
+    auto extent     = VkExtent2D{ create_info.width, create_info.height };
+
+    return UniqueFramebuffer(new EtnaFramebuffer_T{ framebuffer, device, renderpass, extent });
 }
 
 void Framebuffer::Destroy() noexcept

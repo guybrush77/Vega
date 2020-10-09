@@ -29,7 +29,7 @@ CommandPool::operator VkCommandPool() const noexcept
     return m_state ? m_state->command_pool : VkCommandPool{};
 }
 
-auto CommandPool::AllocateCommandBuffer(CommandBufferLevel level) -> UniqueCommandBuffer
+UniqueCommandBuffer CommandPool::AllocateCommandBuffer(CommandBufferLevel level)
 {
     assert(m_state);
 

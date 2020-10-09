@@ -23,7 +23,7 @@ RenderPass::operator VkRenderPass() const noexcept
     return m_state ? m_state->renderpass : VkRenderPass{};
 }
 
-auto RenderPass::Create(VkDevice device, const VkRenderPassCreateInfo& create_info) -> UniqueRenderPass
+UniqueRenderPass RenderPass::Create(VkDevice device, const VkRenderPassCreateInfo& create_info)
 {
     VkRenderPass renderpass{};
 

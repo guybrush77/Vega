@@ -411,6 +411,31 @@ struct composable_flags<ImageUsage> : std::true_type {};
 
 using ImageUsageMask = Mask<ImageUsage>;
 
+enum class BufferUsage : VkBufferUsageFlags {
+    TransferSrc                       = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    TransferDst                       = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+    UniformTexelBuffer                = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT,
+    StorageTexelBuffer                = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT,
+    UniformBuffer                     = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+    StorageBuffer                     = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+    IndexBuffer                       = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+    VertexBuffer                      = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    IndirectBuffer                    = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+    ShaderDeviceAddress               = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+    TransformFeedbackBufferEXT        = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT,
+    TransformFeedbackCounterBufferEXT = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT,
+    ConditionalRenderingEXT           = VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT,
+    RayTracingKHR                     = VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR,
+    RayTracingNV                      = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
+    ShaderDeviceAddressEXT            = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT,
+    ShaderDeviceAddressKHR            = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR
+};
+
+template <>
+struct composable_flags<BufferUsage> : std::true_type {};
+
+using BufferUsageMask = Mask<BufferUsage>;
+
 enum class CommandBufferUsage : VkCommandBufferUsageFlags {
     OneTimeSubmit      = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     RenderPassContinue = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,

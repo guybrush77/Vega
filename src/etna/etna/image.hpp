@@ -2,8 +2,7 @@
 
 #include "renderpass.hpp"
 
-#include <span>
-
+VK_DEFINE_HANDLE(VmaAllocator)
 VK_DEFINE_HANDLE(VmaAllocator)
 
 ETNA_DEFINE_HANDLE(EtnaImage2D)

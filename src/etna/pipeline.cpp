@@ -246,7 +246,7 @@ PipelineLayout::operator VkPipelineLayout() const noexcept
     return m_state->pipeline_layout;
 }
 
-auto PipelineLayout::Create(VkDevice device, const VkPipelineLayoutCreateInfo& create_info) -> UniquePipelineLayout
+UniquePipelineLayout PipelineLayout::Create(VkDevice device, const VkPipelineLayoutCreateInfo& create_info)
 {
     VkPipelineLayout pipeline_layout{};
 

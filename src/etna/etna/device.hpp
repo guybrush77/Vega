@@ -1,5 +1,6 @@
 #pragma once
 
+#include "buffer.hpp"
 #include "command.hpp"
 #include "queue.hpp"
 #include "renderpass.hpp"
@@ -37,12 +38,14 @@ class Device {
 
     auto CreateShaderModule(const char* shader_name) -> UniqueShaderModule;
 
+    auto CreateBuffer(std::size_t size, BufferUsageMask buffer_usage_mask, MemoryUsage memory_usage) -> UniqueBuffer;
+
     auto CreateImage(
-        Format             format,
-        Extent2D           extent,
+        Format         format,
+        Extent2D       extent,
         ImageUsageMask image_usage_mask,
-        MemoryUsage        memory_usage,
-        ImageTiling        image_tiling) -> UniqueImage2D;
+        MemoryUsage    memory_usage,
+        ImageTiling    image_tiling) -> UniqueImage2D;
 
     auto CreateImageView(Image2D image) -> UniqueImageView2D;
 

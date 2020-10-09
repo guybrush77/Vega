@@ -200,7 +200,7 @@ UniqueRenderPass Device::CreateRenderPass(const VkRenderPassCreateInfo& create_i
     return RenderPass::Create(m_state->device, create_info);
 }
 
-auto Device::CreateShaderModule(const char* shader_name) -> UniqueShaderModule
+UniqueShaderModule Device::CreateShaderModule(const char* shader_name)
 {
     assert(m_state);
 
@@ -218,8 +218,26 @@ auto Device::CreateShaderModule(const char* shader_name) -> UniqueShaderModule
     return ShaderModule::Create(m_state->device, create_info);
 }
 
-auto Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask command_pool_create_mask)
-    -> UniqueCommandPool
+UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsageMask buffer_usage_mask, MemoryUsage memory_usage)
+{
+    assert(m_state);
+
+    VkBufferCreateInfo create_info = {
+
+        .sType                 = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext                 = nullptr,
+        .flags                 = {},
+        .size                  = narrow_cast<VkDeviceSize>(size),
+        .usage                 = GetVkFlags(buffer_usage_mask),
+        .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices   = nullptr
+    };
+
+    return Buffer::Create(m_state->allocator, create_info, memory_usage);
+}
+
+UniqueCommandPool Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask command_pool_create_mask)
 {
     assert(m_state);
 
@@ -234,7 +252,7 @@ auto Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask c
     return CommandPool::Create(m_state->device, create_info);
 }
 
-auto Device::CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent) -> UniqueFramebuffer
+UniqueFramebuffer Device::CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent)
 {
     assert(m_state);
 
@@ -256,37 +274,43 @@ auto Device::CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Ex
     return Framebuffer::Create(m_state->device, create_info);
 }
 
-auto Device::CreateGraphicsPipeline(const VkGraphicsPipelineCreateInfo& create_info) -> UniquePipeline
+UniquePipeline Device::CreateGraphicsPipeline(const VkGraphicsPipelineCreateInfo& create_info)
 {
     assert(m_state);
     return Pipeline::Create(m_state->device, create_info);
 }
 
-auto Device::CreatePipelineLayout(const VkPipelineLayoutCreateInfo& create_info) -> UniquePipelineLayout
+UniquePipelineLayout Device::CreatePipelineLayout(const VkPipelineLayoutCreateInfo& create_info)
 {
     return PipelineLayout::Create(m_state->device, create_info);
 }
 
-auto Device::CreateImage(
+UniqueImage2D Device::CreateImage(
     Format         format,
     Extent2D       extent,
     ImageUsageMask image_usage_mask,
     MemoryUsage    memory_usage,
-    ImageTiling    image_tiling) -> UniqueImage2D
+    ImageTiling    image_tiling)
 {
     assert(m_state);
 
     VkImageCreateInfo create_info = {
 
-        .sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType   = VK_IMAGE_TYPE_2D,
-        .format      = GetVkFlags(format),
-        .extent      = { extent.width, extent.height, 1 },
-        .mipLevels   = 1,
-        .arrayLayers = 1,
-        .samples     = VK_SAMPLE_COUNT_1_BIT,
-        .tiling      = GetVkFlags(image_tiling),
-        .usage       = GetVkFlags(image_usage_mask)
+        .sType                 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext                 = nullptr,
+        .flags                 = {},
+        .imageType             = VK_IMAGE_TYPE_2D,
+        .format                = GetVkFlags(format),
+        .extent                = { extent.width, extent.height, 1 },
+        .mipLevels             = 1,
+        .arrayLayers           = 1,
+        .samples               = VK_SAMPLE_COUNT_1_BIT,
+        .tiling                = GetVkFlags(image_tiling),
+        .usage                 = GetVkFlags(image_usage_mask),
+        .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices   = nullptr,
+        .initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED
     };
 
     return Image2D::Create(m_state->allocator, create_info, memory_usage);
@@ -317,7 +341,7 @@ UniqueImageView2D Device::CreateImageView(Image2D image)
     return ImageView2D::Create(m_state->device, create_info);
 }
 
-auto Device::GetQueue(QueueFamily queue_family) const noexcept -> Queue
+Queue Device::GetQueue(QueueFamily queue_family) const noexcept
 {
     assert(m_state);
 
