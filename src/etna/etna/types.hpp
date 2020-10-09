@@ -11,7 +11,22 @@
 #define ETNA_GET_VK_FLAGS(type)                                                                                        \
     inline constexpr auto GetVkFlags(type val) noexcept { return static_cast<Vk##type>(val); }
 
+template <typename>
+struct etna_vertex_attribute_type_trait;
+
+#define DECLARE_VERTEX_ATTRIBUTE_TYPE(attribute_type, vulkan_type)                                                     \
+    template <>                                                                                                        \
+    struct etna_vertex_attribute_type_trait<attribute_type> {                                                          \
+        static constexpr etna::Format value = vulkan_type;                                                             \
+    };
+
+#define formatof(vertex_type, field)                                                                                   \
+    etna_vertex_attribute_type_trait<decltype(std::declval<vertex_type>().field)>::value
+
 namespace etna {
+
+using Location = uint32_t;
+using Binding  = uint32_t;
 
 template <typename>
 struct composable_flags : std::false_type {};
@@ -314,6 +329,10 @@ enum class Format {
 };
 
 ETNA_GET_VK_FLAGS(Format)
+
+enum class VertexInputRate { Vertex = VK_VERTEX_INPUT_RATE_VERTEX, Instance = VK_VERTEX_INPUT_RATE_INSTANCE };
+
+ETNA_GET_VK_FLAGS(VertexInputRate)
 
 enum class ImageLayout {
     Undefined                                = VK_IMAGE_LAYOUT_UNDEFINED,

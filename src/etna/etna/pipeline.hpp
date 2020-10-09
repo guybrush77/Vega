@@ -8,6 +8,23 @@ ETNA_DEFINE_HANDLE(EtnaPipelineLayout)
 
 namespace etna {
 
+struct VertexInputBuilder final {
+    VertexInputBuilder();
+
+    VkPipelineVertexInputStateCreateInfo create_info{};
+
+    void AddInputBindingDescription(
+        Binding         binding,
+        size_t          stride,
+        VertexInputRate vertex_input_rate = VertexInputRate::Vertex);
+
+    void AddInputAttributeDescription(Location location, Binding binding, Format format, size_t offset);
+
+  private:
+    std::vector<VkVertexInputBindingDescription>   m_binding_descriptions;
+    std::vector<VkVertexInputAttributeDescription> m_attribute_descriptions;
+};
+
 class PipelineLayout;
 using UniquePipelineLayout = UniqueHandle<PipelineLayout>;
 
@@ -42,10 +59,8 @@ struct PipelineBuilder final {
     PipelineBuilder();
     PipelineBuilder(PipelineLayout layout, RenderPass renderpass) noexcept;
 
-    void AddShaderStage(
-        ShaderModule        shader_module,
-        ShaderStageMask shader_stage_mask,
-        const char*         entry_function = "main");
+    void
+    AddShaderStage(ShaderModule shader_module, ShaderStageMask shader_stage_mask, const char* entry_function = "main");
 
     void AddViewport(Viewport viewport);
 
