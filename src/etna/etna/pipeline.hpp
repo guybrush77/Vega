@@ -8,23 +8,6 @@ ETNA_DEFINE_HANDLE(EtnaPipelineLayout)
 
 namespace etna {
 
-struct VertexInputBuilder final {
-    VertexInputBuilder();
-
-    VkPipelineVertexInputStateCreateInfo create_info{};
-
-    void AddInputBindingDescription(
-        Binding         binding,
-        size_t          stride,
-        VertexInputRate vertex_input_rate = VertexInputRate::Vertex);
-
-    void AddInputAttributeDescription(Location location, Binding binding, Format format, size_t offset);
-
-  private:
-    std::vector<VkVertexInputBindingDescription>   m_binding_descriptions;
-    std::vector<VkVertexInputAttributeDescription> m_attribute_descriptions;
-};
-
 class PipelineLayout;
 using UniquePipelineLayout = UniqueHandle<PipelineLayout>;
 
@@ -62,6 +45,13 @@ struct PipelineBuilder final {
     void
     AddShaderStage(ShaderModule shader_module, ShaderStageMask shader_stage_mask, const char* entry_function = "main");
 
+    void AddVertexInputBindingDescription(
+        Binding         binding,
+        size_t          stride,
+        VertexInputRate vertex_input_rate = VertexInputRate::Vertex);
+
+    void AddVertexInputAttributeDescription(Location location, Binding binding, Format format, size_t offset);
+
     void AddViewport(Viewport viewport);
 
     void AddScissor(Rect2D scissor);
@@ -86,6 +76,8 @@ struct PipelineBuilder final {
     VkPipelineColorBlendStateCreateInfo          m_color_blend_state;
     VkPipelineDynamicStateCreateInfo             m_dynamic_state;
 
+    std::vector<VkVertexInputBindingDescription>     m_binding_descriptions;
+    std::vector<VkVertexInputAttributeDescription>   m_attribute_descriptions;
     std::vector<VkViewport>                          m_viewports;
     std::vector<VkRect2D>                            m_scissors;
     std::vector<VkPipelineColorBlendAttachmentState> m_color_blend_attachments;

@@ -182,6 +182,29 @@ void PipelineBuilder::AddShaderStage(
     create_info.stageCount = narrow_cast<std::uint32_t>(m_shader_stages.size());
 }
 
+void PipelineBuilder::AddVertexInputBindingDescription(
+    Binding         binding,
+    size_t          stride,
+    VertexInputRate vertex_input_rate)
+{
+    m_binding_descriptions.push_back({ binding, narrow_cast<uint32_t>(stride), GetVkFlags(vertex_input_rate) });
+
+    m_vertex_input_state.vertexBindingDescriptionCount = narrow_cast<uint32_t>(m_binding_descriptions.size());
+    m_vertex_input_state.pVertexBindingDescriptions = m_binding_descriptions.data();
+}
+
+void PipelineBuilder::AddVertexInputAttributeDescription(
+    Location location,
+    Binding  binding,
+    Format   format,
+    size_t   offset)
+{
+    m_attribute_descriptions.push_back({ location, binding, GetVkFlags(format), narrow_cast<uint32_t>(offset) });
+
+    m_vertex_input_state.vertexAttributeDescriptionCount = narrow_cast<uint32_t>(m_attribute_descriptions.size());
+    m_vertex_input_state.pVertexAttributeDescriptions    = m_attribute_descriptions.data();
+}
+
 void PipelineBuilder::AddViewport(Viewport viewport)
 {
     m_viewports.push_back(viewport);
@@ -301,36 +324,6 @@ void Pipeline::Destroy() noexcept
     delete m_state;
 
     m_state = nullptr;
-}
-
-VertexInputBuilder::VertexInputBuilder()
-{
-    create_info = VkPipelineVertexInputStateCreateInfo{
-
-        .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .pNext                           = nullptr,
-        .flags                           = {},
-        .vertexBindingDescriptionCount   = 0,
-        .pVertexBindingDescriptions      = nullptr,
-        .vertexAttributeDescriptionCount = 0,
-        .pVertexAttributeDescriptions    = nullptr
-    };
-}
-
-void VertexInputBuilder::AddInputBindingDescription(Binding binding, size_t stride, VertexInputRate vertex_input_rate)
-{
-    m_binding_descriptions.push_back({ binding, narrow_cast<uint32_t>(stride), GetVkFlags(vertex_input_rate) });
-
-    create_info.vertexBindingDescriptionCount = narrow_cast<uint32_t>(m_binding_descriptions.size());
-    create_info.pVertexBindingDescriptions    = m_binding_descriptions.data();
-}
-
-void VertexInputBuilder::AddInputAttributeDescription(Location location, Binding binding, Format format, size_t offset)
-{
-    m_attribute_descriptions.push_back({ location, binding, GetVkFlags(format), narrow_cast<uint32_t>(offset) });
-
-    create_info.vertexAttributeDescriptionCount = narrow_cast<uint32_t>(m_attribute_descriptions.size());
-    create_info.pVertexAttributeDescriptions    = m_attribute_descriptions.data();
 }
 
 } // namespace etna
