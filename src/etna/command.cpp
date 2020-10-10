@@ -1,6 +1,7 @@
 #include "etna/command.hpp"
 #include "etna/image.hpp"
 
+#include "utils/casts.hpp"
 #include "utils/throw_exception.hpp"
 
 #include <spdlog/spdlog.h>
@@ -135,21 +136,36 @@ void CommandBuffer::BindPipeline(PipelineBindPoint pipeline_bind_point, Pipeline
     vkCmdBindPipeline(m_state->command_buffer, GetVkFlags(pipeline_bind_point), pipeline);
 }
 
-void CommandBuffer::Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
+void CommandBuffer::BindVertexBuffers(Buffer buffer)
 {
     assert(m_state);
-    vkCmdDraw(m_state->command_buffer, vertex_count, instance_count, first_vertex, first_instance);
+
+    VkBuffer     vk_buffer = buffer;
+    VkDeviceSize vk_offset = 0;
+
+    vkCmdBindVertexBuffers(m_state->command_buffer, 0, 1, &vk_buffer, &vk_offset);
+}
+
+void CommandBuffer::Draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance)
+{
+    assert(m_state);
+
+    auto vk_vertex_count   = narrow_cast<uint32_t>(vertex_count);
+    auto vk_instance_count = narrow_cast<uint32_t>(instance_count);
+    auto vk_first_vertex   = narrow_cast<uint32_t>(first_vertex);
+    auto vk_first_instance = narrow_cast<uint32_t>(first_instance);
+    vkCmdDraw(m_state->command_buffer, vk_vertex_count, vk_instance_count, vk_first_vertex, vk_first_instance);
 }
 
 void CommandBuffer::PipelineBarrier(
-    Image2D               image,
+    Image2D           image,
     PipelineStageMask src_stage_mask,
     PipelineStageMask dst_stage_mask,
-    AccessMask            src_access_mask,
-    AccessMask            dst_access_mask,
-    ImageLayout           old_layout,
-    ImageLayout           new_layout,
-    ImageAspectMask       aspect_mask)
+    AccessMask        src_access_mask,
+    AccessMask        dst_access_mask,
+    ImageLayout       old_layout,
+    ImageLayout       new_layout,
+    ImageAspectMask   aspect_mask)
 {
     assert(m_state);
 
@@ -217,6 +233,20 @@ void CommandBuffer::CopyImage(
         GetVkFlags(dst_image_layout),
         1,
         &image_copy);
+}
+
+void CommandBuffer::CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size)
+{
+    assert(m_state);
+
+    VkBufferCopy buffer_copy = {
+
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size      = narrow_cast<VkDeviceSize>(size)
+    };
+
+    vkCmdCopyBuffer(m_state->command_buffer, src_buffer, dst_buffer, 1, &buffer_copy);
 }
 
 UniqueCommandBuffer CommandBuffer::Create(VkDevice device, const VkCommandBufferAllocateInfo& alloc_info)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "etna/buffer.hpp"
 #include "etna/image.hpp"
 #include "etna/pipeline.hpp"
 
@@ -59,21 +60,28 @@ class CommandBuffer {
     bool operator!=(const CommandBuffer& rhs) const noexcept { return m_state != rhs.m_state; }
 
     void Begin(CommandBufferUsageMask command_buffer_usage_mask = {});
+
     void BeginRenderPass(Framebuffer framebuffer, SubpassContents subpass_contents);
+
     void EndRenderPass();
+
     void End();
+
     void BindPipeline(PipelineBindPoint pipeline_bind_point, Pipeline pipeline);
-    void Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
+
+    void BindVertexBuffers(Buffer buffer);
+
+    void Draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
 
     void PipelineBarrier(
-        Image2D               image,
+        Image2D           image,
         PipelineStageMask src_stage_mask,
         PipelineStageMask dst_stage_mask,
-        AccessMask            src_access_mask,
-        AccessMask            dst_access_mask,
-        ImageLayout           old_layout,
-        ImageLayout           new_layout,
-        ImageAspectMask       aspect_mask);
+        AccessMask        src_access_mask,
+        AccessMask        dst_access_mask,
+        ImageLayout       old_layout,
+        ImageLayout       new_layout,
+        ImageAspectMask   aspect_mask);
 
     void CopyImage(
         Image2D         src_image,
@@ -81,6 +89,8 @@ class CommandBuffer {
         Image2D         dst_image,
         ImageLayout     dst_image_layout,
         ImageAspectMask aspect_mask);
+
+    void CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size);
 
   private:
     template <typename>

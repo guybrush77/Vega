@@ -25,6 +25,25 @@ Buffer::operator VkBuffer() const noexcept
     return m_state->buffer;
 }
 
+void* Buffer::MapMemory()
+{
+    assert(m_state);
+
+    void* data = nullptr;
+    if (VK_SUCCESS != vmaMapMemory(m_state->allocator, m_state->allocation, &data)) {
+        throw_runtime_error(COMPONENT "Function vmaMapMemory failed");
+    }
+
+    return data;
+}
+
+void Buffer::UnmapMemory()
+{
+    assert(m_state);
+
+    vmaUnmapMemory(m_state->allocator, m_state->allocation);
+}
+
 UniqueBuffer Buffer::Create(VmaAllocator allocator, const VkBufferCreateInfo& create_info, MemoryUsage memory_usage)
 {
     VmaAllocationCreateInfo allocation_info{};
@@ -40,6 +59,19 @@ UniqueBuffer Buffer::Create(VmaAllocator allocator, const VkBufferCreateInfo& cr
     spdlog::info(COMPONENT "Created VkBuffer {}", fmt::ptr(buffer));
 
     return UniqueBuffer(new EtnaBuffer_T{ buffer, allocator, allocation });
+}
+
+void Buffer::Destroy() noexcept
+{
+    assert(m_state);
+
+    vmaDestroyBuffer(m_state->allocator, m_state->buffer, m_state->allocation);
+
+    spdlog::info(COMPONENT "Destroyed VkBuffer {}", fmt::ptr(m_state->buffer));
+
+    delete m_state;
+
+    m_state = nullptr;
 }
 
 } // namespace etna
