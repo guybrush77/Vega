@@ -37,8 +37,7 @@ namespace etna {
 
 Image2D::operator VkImage() const noexcept
 {
-    assert(m_state);
-    return m_state->image;
+    return m_state ? m_state->image : VkImage{};
 }
 
 ImageUsageMask Image2D::UsageMask() const noexcept
@@ -121,8 +120,7 @@ void Image2D::Destroy() noexcept
 
 ImageView2D::operator VkImageView() const noexcept
 {
-    assert(m_state);
-    return m_state->image_view;
+    return m_state ? m_state->image_view : VkImageView{};
 }
 
 UniqueImageView2D ImageView2D::Create(VkDevice device, const VkImageViewCreateInfo& create_info)
@@ -153,8 +151,7 @@ void ImageView2D::Destroy() noexcept
 
 Framebuffer::operator VkFramebuffer() const noexcept
 {
-    assert(m_state);
-    return m_state->framebuffer;
+    return m_state ? m_state->framebuffer : VkFramebuffer{};
 }
 
 Extent2D Framebuffer::Extent2D() const noexcept

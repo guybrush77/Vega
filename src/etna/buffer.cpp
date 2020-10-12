@@ -21,8 +21,7 @@ namespace etna {
 
 Buffer::operator VkBuffer() const noexcept
 {
-    assert(m_state);
-    return m_state->buffer;
+    return m_state ? m_state->buffer : VkBuffer{};
 }
 
 void* Buffer::MapMemory()

@@ -20,6 +20,8 @@ class Device {
     Device() noexcept {}
     Device(std::nullptr_t) noexcept {}
 
+    operator VkDevice() const noexcept;
+
     explicit operator bool() const noexcept { return m_state != nullptr; }
 
     bool operator==(const Device& rhs) const noexcept { return m_state == rhs.m_state; }

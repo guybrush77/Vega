@@ -190,7 +190,7 @@ void PipelineBuilder::AddVertexInputBindingDescription(
     m_binding_descriptions.push_back({ binding, narrow_cast<uint32_t>(stride), GetVkFlags(vertex_input_rate) });
 
     m_vertex_input_state.vertexBindingDescriptionCount = narrow_cast<uint32_t>(m_binding_descriptions.size());
-    m_vertex_input_state.pVertexBindingDescriptions = m_binding_descriptions.data();
+    m_vertex_input_state.pVertexBindingDescriptions    = m_binding_descriptions.data();
 }
 
 void PipelineBuilder::AddVertexInputAttributeDescription(
@@ -265,8 +265,7 @@ void PipelineBuilder::AddDynamicState(DynamicState dynamic_state)
 
 PipelineLayout::operator VkPipelineLayout() const noexcept
 {
-    assert(m_state);
-    return m_state->pipeline_layout;
+    return m_state ? m_state->pipeline_layout : VkPipelineLayout{};
 }
 
 UniquePipelineLayout PipelineLayout::Create(VkDevice device, const VkPipelineLayoutCreateInfo& create_info)

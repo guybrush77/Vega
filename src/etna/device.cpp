@@ -237,6 +237,11 @@ UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsageMask buffer_usage
     return Buffer::Create(m_state->allocator, create_info, memory_usage);
 }
 
+Device::operator VkDevice() const noexcept
+{
+    return m_state ? m_state->device : VkDevice{};
+}
+
 UniqueCommandPool Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask command_pool_create_mask)
 {
     assert(m_state);
