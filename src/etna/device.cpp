@@ -1,7 +1,15 @@
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
+#include "etna/buffer.hpp"
+#include "etna/command.hpp"
+#include "etna/descriptor.hpp"
 #include "etna/device.hpp"
+#include "etna/image.hpp"
+#include "etna/pipeline.hpp"
+#include "etna/queue.hpp"
+#include "etna/renderpass.hpp"
+#include "etna/shader.hpp"
 
 #include "utils/casts.hpp"
 #include "utils/resource.hpp"
@@ -200,6 +208,32 @@ UniqueRenderPass Device::CreateRenderPass(const VkRenderPassCreateInfo& create_i
     return RenderPass::Create(m_state->device, create_info);
 }
 
+UniqueDescriptorSetLayout Device::CreateDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& create_info)
+{
+    assert(m_state);
+
+    return DescriptorSetLayout::Create(m_state->device, create_info);
+}
+
+UniqueDescriptorPool Device::CreateDescriptorPool(DescriptorType descriptor_type, uint32_t size, uint32_t max_sets)
+{
+    assert(m_state);
+
+    VkDescriptorPoolSize vk_pool_size = DescriptorPoolSize{ descriptor_type, size };
+
+    VkDescriptorPoolCreateInfo create_info = {
+
+        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext         = nullptr,
+        .flags         = {},
+        .maxSets       = max_sets == 0 ? vk_pool_size.descriptorCount : max_sets,
+        .poolSizeCount = 1,
+        .pPoolSizes    = &vk_pool_size
+    };
+
+    return DescriptorPool::Create(m_state->device, create_info);
+}
+
 UniqueShaderModule Device::CreateShaderModule(const char* shader_name)
 {
     assert(m_state);
@@ -355,6 +389,15 @@ Queue Device::GetQueue(QueueFamily queue_family) const noexcept
     vkGetDeviceQueue(m_state->device, GetQueueFamilyIndex(queue_family), 0, &vk_queue);
 
     return Queue(vk_queue);
+}
+
+void Device::UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set)
+{
+    assert(m_state);
+
+    VkWriteDescriptorSet vk_write_descriptor_set = write_descriptor_set;
+
+    vkUpdateDescriptorSets(m_state->device, 1, &vk_write_descriptor_set, 0, nullptr);
 }
 
 void Device::WaitIdle()

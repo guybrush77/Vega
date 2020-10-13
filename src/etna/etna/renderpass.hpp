@@ -10,10 +10,6 @@ ETNA_DEFINE_HANDLE(EtnaRenderPass)
 
 namespace etna {
 
-class RenderPass;
-
-using UniqueRenderPass = UniqueHandle<RenderPass>;
-
 class RenderPass {
   public:
     RenderPass() noexcept {}
@@ -46,6 +42,8 @@ using ReferenceID  = std::size_t;
 
 struct RenderPassBuilder final {
     RenderPassBuilder() noexcept;
+
+    constexpr operator VkRenderPassCreateInfo() const noexcept { return create_info; }
 
     AttachmentID AddAttachment(
         Format            format,

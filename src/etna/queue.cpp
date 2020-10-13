@@ -1,4 +1,5 @@
-#include "etna\queue.hpp"
+#include "etna/queue.hpp"
+#include "etna/command.hpp"
 
 #include <cassert>
 

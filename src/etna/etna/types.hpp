@@ -383,6 +383,24 @@ enum class DynamicState {
 };
 ETNA_GET_VK_FLAGS(DynamicState)
 
+enum class DescriptorType {
+    Sampler                  = VK_DESCRIPTOR_TYPE_SAMPLER,
+    CombinedImageSampler     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    SampledImage             = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+    StorageImage             = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+    UniformTexelBuffer       = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+    StorageTexelBuffer       = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
+    UniformBuffer            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    StorageBuffer            = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    UniformBufferDynamic     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+    StorageBufferDynamic     = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+    InputAttachment          = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+    InlineUniformBlockEXT    = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,
+    AccelerationStructureKHR = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+    AccelerationStructureNV  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
+};
+ETNA_GET_VK_FLAGS(DescriptorType)
+
 enum class ImageTiling {
     Optimal              = VK_IMAGE_TILING_OPTIMAL,
     Linear               = VK_IMAGE_TILING_LINEAR,
@@ -675,6 +693,13 @@ struct Viewport final {
     constexpr operator VkViewport() const noexcept { return { x, y, width, height, min_depth, max_depth }; }
 };
 
+struct DescriptorPoolSize final {
+    DescriptorType type;
+    uint32_t       size;
+
+    constexpr operator VkDescriptorPoolSize() const noexcept { return { GetVkFlags(type), size }; }
+};
+
 template <typename T>
 class UniqueHandle {
   public:
@@ -732,5 +757,36 @@ class UniqueHandle {
   private:
     T m_value{};
 };
+
+class Buffer;
+class CommandBuffer;
+class CommandPool;
+class DescriptorPool;
+class DescriptorSet;
+class DescriptorSetLayout;
+class Device;
+class Framebuffer;
+class Image2D;
+class ImageView2D;
+class Pipeline;
+class PipelineLayout;
+class Queue;
+class RenderPass;
+class ShaderModule;
+class WriteDescriptorSet;
+
+using UniqueBuffer              = UniqueHandle<Buffer>;
+using UniqueCommandBuffer       = UniqueHandle<CommandBuffer>;
+using UniqueCommandPool         = UniqueHandle<CommandPool>;
+using UniqueDescriptorPool      = UniqueHandle<DescriptorPool>;
+using UniqueDescriptorSetLayout = UniqueHandle<DescriptorSetLayout>;
+using UniqueDevice              = UniqueHandle<Device>;
+using UniqueFramebuffer         = UniqueHandle<Framebuffer>;
+using UniqueImage2D             = UniqueHandle<Image2D>;
+using UniqueImageView2D         = UniqueHandle<ImageView2D>;
+using UniquePipeline            = UniqueHandle<Pipeline>;
+using UniquePipelineLayout      = UniqueHandle<PipelineLayout>;
+using UniqueRenderPass          = UniqueHandle<RenderPass>;
+using UniqueShaderModule        = UniqueHandle<ShaderModule>;
 
 } // namespace etna

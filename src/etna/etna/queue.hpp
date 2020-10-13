@@ -1,7 +1,5 @@
 #pragma once
 
-#include "command.hpp"
-
 #include "types.hpp"
 
 namespace etna {

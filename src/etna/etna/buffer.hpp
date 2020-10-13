@@ -8,9 +8,6 @@ ETNA_DEFINE_HANDLE(EtnaBuffer)
 
 namespace etna {
 
-class Buffer;
-using UniqueBuffer = UniqueHandle<Buffer>;
-
 class Buffer {
   public:
     Buffer() noexcept {}
@@ -41,7 +38,7 @@ class Buffer {
 
     void Destroy() noexcept;
 
-    EtnaBuffer m_state = nullptr;
+    EtnaBuffer m_state{};
 };
 
 } // namespace etna

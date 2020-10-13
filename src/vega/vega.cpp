@@ -1,17 +1,27 @@
+#include "etna/buffer.hpp"
 #include "etna/command.hpp"
+#include "etna/descriptor.hpp"
 #include "etna/device.hpp"
+#include "etna/image.hpp"
 #include "etna/instance.hpp"
 #include "etna/pipeline.hpp"
+#include "etna/queue.hpp"
 #include "etna/shader.hpp"
+#include "etna/renderpass.hpp"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h" // TODO: Remove
 
 #include <array>
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 #include <vector>
 
 DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
+
+struct Move {
+    glm::vec4 value;
+};
 
 struct Vertex {
     glm::vec3 position;
@@ -20,9 +30,9 @@ struct Vertex {
 
 std::array vertices = {
 
-    Vertex{ { 0.0f, -0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
-    Vertex{ { 0.5f, 0.5f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-    Vertex{ { -0.5f, 0.5f, 1.0f }, { 0.0f, 0.0f, 1.0f } }
+    Vertex{ { -1.0f, -1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+    Vertex{ { 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+    Vertex{ { 1.0f, -1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } }
 };
 
 int main()
@@ -47,7 +57,7 @@ int main()
     auto device   = instance->CreateDevice();
 
     // Copy vertices to GPU
-    UniqueBuffer buffer;
+    UniqueBuffer vertex_buffer;
     {
         auto src_size   = sizeof(vertices);
         auto src_usage  = BufferUsage::TransferSrc;
@@ -61,13 +71,13 @@ int main()
         auto dst_size   = src_size;
         auto dst_usage  = BufferUsage::VertexBuffer | BufferUsage::TransferDst;
         auto dst_memory = MemoryUsage::GpuOnly;
-        buffer          = device->CreateBuffer(dst_size, dst_usage, dst_memory);
+        vertex_buffer   = device->CreateBuffer(dst_size, dst_usage, dst_memory);
 
         auto cmd_pool   = device->CreateCommandPool(QueueFamily::Transfer, CommandPoolCreate::Transient);
         auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
 
         cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
-        cmd_buffer->CopyBuffer(*src_buffer, *buffer, src_size);
+        cmd_buffer->CopyBuffer(*src_buffer, *vertex_buffer, src_size);
         cmd_buffer->End();
 
         device->GetQueue(QueueFamily::Transfer).Submit(*cmd_buffer);
@@ -101,16 +111,28 @@ int main()
 
         builder.AddSubpass(reference_id);
 
-        renderpass = device->CreateRenderPass(builder.create_info);
+        renderpass = device->CreateRenderPass(builder);
     }
 
     // Create render target framebuffer
     auto image_view  = device->CreateImageView(*image);
     auto framebuffer = device->CreateFramebuffer(*renderpass, *image_view, image->Extent());
 
+    // Create descriptor set layouts
+    UniqueDescriptorSetLayout descriptor_set_layout;
+    {
+        DescriptorSetLayoutBuilder builder;
+        builder.AddDescriptorSetLayoutBinding(Binding{ 0 }, DescriptorType::UniformBuffer, 1, ShaderStage::Vertex);
+        descriptor_set_layout = device->CreateDescriptorSetLayout(builder);
+    }
+
     // Create pipeline layout
-    VkPipelineLayoutCreateInfo temp{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO }; // TODO: fixme
-    auto                       layout = device->CreatePipelineLayout(temp);
+    UniquePipelineLayout layout;
+    {
+        PipelineLayoutBuilder builder;
+        builder.AddDescriptorSetLayout(*descriptor_set_layout);
+        layout = device->CreatePipelineLayout(builder);
+    }
 
     // Create pipeline
     UniquePipeline pipeline;
@@ -143,7 +165,24 @@ int main()
 
         builder.AddColorBlendAttachmentBaseState();
 
-        pipeline = device->CreateGraphicsPipeline(builder.create_info);
+        pipeline = device->CreateGraphicsPipeline(builder);
+    }
+
+    // Create and initialzie descriptor sets
+    auto descriptor_pool = device->CreateDescriptorPool(DescriptorType::UniformBuffer, 1);
+
+    auto descriptor_set = descriptor_pool->AllocateDescriptorSet(*descriptor_set_layout);
+
+    auto uniform_buffer = device->CreateBuffer(sizeof(Move), BufferUsage::UniformBuffer, MemoryUsage::CpuToGpu);
+    {
+        auto  move = Move{ { 0.2f, 0.0f, 0.0f, 0.0f } };
+        void* data = uniform_buffer->MapMemory();
+        memcpy(data, &move.value[0], sizeof(move));
+        uniform_buffer->UnmapMemory();
+
+        WriteDescriptorSet write_descriptor(descriptor_set, Binding{ 0 }, DescriptorType::UniformBuffer);
+        write_descriptor.AddBuffer(*uniform_buffer);
+        device->UpdateDescriptorSet(write_descriptor);
     }
 
     // Render image
@@ -154,7 +193,8 @@ int main()
         cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
         cmd_buffer->BeginRenderPass(*framebuffer, SubpassContents::Inline);
         cmd_buffer->BindPipeline(PipelineBindPoint::Graphics, *pipeline);
-        cmd_buffer->BindVertexBuffers(*buffer);
+        cmd_buffer->BindVertexBuffers(*vertex_buffer);
+        cmd_buffer->BindDescriptorSet(PipelineBindPoint::Graphics, *layout, descriptor_set);
         cmd_buffer->Draw(vertices.size(), 1, 0, 0);
         cmd_buffer->EndRenderPass();
         cmd_buffer->End();

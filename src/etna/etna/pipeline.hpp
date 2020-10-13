@@ -1,15 +1,13 @@
 #pragma once
 
-#include "etna/renderpass.hpp"
-#include "etna/shader.hpp"
+#include "types.hpp"
+
+#include <vector>
 
 ETNA_DEFINE_HANDLE(EtnaPipeline)
 ETNA_DEFINE_HANDLE(EtnaPipelineLayout)
 
 namespace etna {
-
-class PipelineLayout;
-using UniquePipelineLayout = UniqueHandle<PipelineLayout>;
 
 class PipelineLayout {
   public:
@@ -41,6 +39,8 @@ class PipelineLayout {
 struct PipelineBuilder final {
     PipelineBuilder();
     PipelineBuilder(PipelineLayout layout, RenderPass renderpass) noexcept;
+
+    constexpr operator VkGraphicsPipelineCreateInfo() const noexcept { return create_info; }
 
     void
     AddShaderStage(ShaderModule shader_module, ShaderStageMask shader_stage_mask, const char* entry_function = "main");
@@ -83,9 +83,6 @@ struct PipelineBuilder final {
     std::vector<VkPipelineColorBlendAttachmentState> m_color_blend_attachments;
     std::vector<VkDynamicState>                      m_dynamic_states;
 };
-
-class Pipeline;
-using UniquePipeline = UniqueHandle<Pipeline>;
 
 class Pipeline {
   public:

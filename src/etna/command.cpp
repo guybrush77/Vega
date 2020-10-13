@@ -1,5 +1,8 @@
 #include "etna/command.hpp"
+#include "etna/buffer.hpp"
+#include "etna/descriptor.hpp"
 #include "etna/image.hpp"
+#include "etna/pipeline.hpp"
 
 #include "utils/casts.hpp"
 #include "utils/throw_exception.hpp"
@@ -101,8 +104,13 @@ void CommandBuffer::BeginRenderPass(Framebuffer framebuffer, SubpassContents sub
     VkOffset2D offset = { 0, 0 };
     VkExtent2D extent = framebuffer.Extent2D();
 
-    VkClearColorValue color       = { 0, 0, 0, 0 };
-    VkClearValue      clear_value = { color };
+    VkClearColorValue color;
+    color.uint32[0] = 0;
+    color.uint32[1] = 0;
+    color.uint32[2] = 0;
+    color.uint32[3] = 0;
+
+    VkClearValue clear_value = { color };
 
     VkRenderPassBeginInfo begin_info = {
 
@@ -144,6 +152,26 @@ void CommandBuffer::BindVertexBuffers(Buffer buffer)
     VkDeviceSize vk_offset = 0;
 
     vkCmdBindVertexBuffers(m_state->command_buffer, 0, 1, &vk_buffer, &vk_offset);
+}
+
+void CommandBuffer::BindDescriptorSet(
+    PipelineBindPoint pipeline_bind_point,
+    PipelineLayout    pipeline_layout,
+    DescriptorSet     descriptor_set)
+{
+    assert(m_state);
+
+    VkDescriptorSet vk_descriptor_set = descriptor_set;
+
+    vkCmdBindDescriptorSets(
+        m_state->command_buffer,
+        GetVkFlags(pipeline_bind_point),
+        pipeline_layout,
+        0,
+        1,
+        &vk_descriptor_set,
+        0,
+        nullptr);
 }
 
 void CommandBuffer::Draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance)
@@ -219,7 +247,7 @@ void CommandBuffer::CopyImage(
     VkImageCopy image_copy = {
 
         .srcSubresource = { GetVkFlags(aspect_mask), 0, 0, 1 },
-        .srcOffset      = 0,
+        .srcOffset      = { 0, 0, 0 },
         .dstSubresource = { GetVkFlags(aspect_mask), 0, 0, 1 },
         .dstOffset      = { 0, 0, 0 },
         .extent         = { width, height, 1 }

@@ -1,4 +1,6 @@
 #include "etna/pipeline.hpp"
+#include "etna/renderpass.hpp"
+#include "etna/shader.hpp"
 
 #include "utils/casts.hpp"
 
@@ -103,8 +105,8 @@ PipelineBuilder::PipelineBuilder()
         .depthCompareOp        = VK_COMPARE_OP_NEVER,
         .depthBoundsTestEnable = false,
         .stencilTestEnable     = false,
-        .front                 = VK_STENCIL_OP_KEEP,
-        .back                  = VK_STENCIL_OP_KEEP,
+        .front                 = {},
+        .back                  = {},
         .minDepthBounds        = 0.0f,
         .maxDepthBounds        = 0.0f
     };

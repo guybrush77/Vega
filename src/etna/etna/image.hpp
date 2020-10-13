@@ -1,6 +1,6 @@
 #pragma once
 
-#include "renderpass.hpp"
+#include "types.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocator)
 VK_DEFINE_HANDLE(VmaAllocator)
@@ -10,9 +10,6 @@ ETNA_DEFINE_HANDLE(EtnaImageView2D)
 ETNA_DEFINE_HANDLE(EtnaFramebuffer)
 
 namespace etna {
-
-class Image2D;
-using UniqueImage2D = UniqueHandle<Image2D>;
 
 class Image2D {
   public:
@@ -52,9 +49,6 @@ class Image2D {
     EtnaImage2D m_state = nullptr;
 };
 
-class ImageView2D;
-using UniqueImageView2D = UniqueHandle<ImageView2D>;
-
 class ImageView2D {
   public:
     ImageView2D() noexcept {}
@@ -83,9 +77,6 @@ class ImageView2D {
 
     EtnaImageView2D m_state = nullptr;
 };
-
-class Framebuffer;
-using UniqueFramebuffer = UniqueHandle<Framebuffer>;
 
 class Framebuffer {
   public:

@@ -6,9 +6,6 @@ ETNA_DEFINE_HANDLE(EtnaShaderModule)
 
 namespace etna {
 
-class ShaderModule;
-using UniqueShaderModule = UniqueHandle<ShaderModule>;
-
 class ShaderModule {
   public:
     ShaderModule() noexcept {}

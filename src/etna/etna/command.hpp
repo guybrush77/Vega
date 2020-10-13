@@ -1,20 +1,11 @@
 #pragma once
 
-#include "etna/buffer.hpp"
-#include "etna/image.hpp"
-#include "etna/pipeline.hpp"
+#include "types.hpp"
 
 ETNA_DEFINE_HANDLE(EtnaCommandPool)
 ETNA_DEFINE_HANDLE(EtnaCommandBuffer)
 
 namespace etna {
-
-class CommandPool;
-class CommandBuffer;
-class Device;
-
-using UniqueCommandPool   = UniqueHandle<CommandPool>;
-using UniqueCommandBuffer = UniqueHandle<CommandBuffer>;
 
 class CommandPool {
   public:
@@ -70,6 +61,11 @@ class CommandBuffer {
     void BindPipeline(PipelineBindPoint pipeline_bind_point, Pipeline pipeline);
 
     void BindVertexBuffers(Buffer buffer);
+
+    void BindDescriptorSet(
+        PipelineBindPoint pipeline_bind_point,
+        PipelineLayout    pipeline_layout,
+        DescriptorSet     descriptor_set);
 
     void Draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
 

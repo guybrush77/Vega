@@ -1,19 +1,10 @@
 #pragma once
 
-#include "buffer.hpp"
-#include "command.hpp"
-#include "queue.hpp"
-#include "renderpass.hpp"
-#include "shader.hpp"
+#include "types.hpp"
 
 ETNA_DEFINE_HANDLE(EtnaDevice)
 
 namespace etna {
-
-class Device;
-class Instance;
-
-using UniqueDevice = UniqueHandle<Device>;
 
 class Device {
   public:
@@ -38,6 +29,11 @@ class Device {
 
     auto CreateRenderPass(const VkRenderPassCreateInfo& create_info) -> UniqueRenderPass;
 
+    auto CreateDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& create_info) -> UniqueDescriptorSetLayout;
+
+    auto CreateDescriptorPool(DescriptorType descriptor_type, uint32_t size, uint32_t max_sets = 0)
+        -> UniqueDescriptorPool;
+
     auto CreateShaderModule(const char* shader_name) -> UniqueShaderModule;
 
     auto CreateBuffer(std::size_t size, BufferUsageMask buffer_usage_mask, MemoryUsage memory_usage) -> UniqueBuffer;
@@ -52,6 +48,8 @@ class Device {
     auto CreateImageView(Image2D image) -> UniqueImageView2D;
 
     auto GetQueue(QueueFamily queue_family) const noexcept -> Queue;
+
+    void UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set);
 
     void WaitIdle();
 
