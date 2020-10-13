@@ -4,9 +4,6 @@
 #include "etna/image.hpp"
 #include "etna/pipeline.hpp"
 
-#include "utils/casts.hpp"
-#include "utils/throw_exception.hpp"
-
 #include <spdlog/spdlog.h>
 
 #define COMPONENT "Etna: "

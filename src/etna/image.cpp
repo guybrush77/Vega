@@ -1,8 +1,5 @@
 #include "etna/image.hpp"
 
-#include "utils/casts.hpp"
-#include "utils/throw_exception.hpp"
-
 #include <spdlog/spdlog.h>
 #include <vk_mem_alloc.h>
 

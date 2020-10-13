@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.hpp"
+#include "core.hpp"
 
 ETNA_DEFINE_HANDLE(EtnaCommandPool)
 ETNA_DEFINE_HANDLE(EtnaCommandBuffer)

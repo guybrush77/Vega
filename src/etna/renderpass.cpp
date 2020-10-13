@@ -1,8 +1,5 @@
 #include "etna/renderpass.hpp"
 
-#include "utils/casts.hpp"
-#include "utils/throw_exception.hpp"
-
 #include <spdlog/spdlog.h>
 
 #define COMPONENT "Etna: "

@@ -1,9 +1,6 @@
 #include "etna/instance.hpp"
 #include "etna/device.hpp"
 
-#include "utils/casts.hpp"
-#include "utils/throw_exception.hpp"
-
 #include <algorithm>
 #include <spdlog/spdlog.h>
 

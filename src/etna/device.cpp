@@ -11,9 +11,7 @@
 #include "etna/renderpass.hpp"
 #include "etna/shader.hpp"
 
-#include "utils/casts.hpp"
 #include "utils/resource.hpp"
-#include "utils/throw_exception.hpp"
 
 #include <array>
 #include <optional>
@@ -47,7 +45,7 @@ static VkPhysicalDevice GetGpu(VkInstance instance)
     vkEnumeratePhysicalDevices(instance, &count, nullptr);
 
     if (count == 0) {
-        throw_runtime_error("Failed to detect GPU!");
+        etna::throw_runtime_error("Failed to detect GPU!");
     }
 
     std::vector<VkPhysicalDevice> gpus(count);
@@ -59,6 +57,8 @@ static VkPhysicalDevice GetGpu(VkInstance instance)
 
 static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
 {
+    using etna::throw_runtime_error;
+
     uint32_t count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, nullptr);
 
@@ -84,7 +84,7 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
     std::optional<QueueInfo> mixed_transfer;
 
     for (std::size_t i = 0; i != properties.size(); ++i) {
-        const auto family_index = narrow_cast<uint32_t>(i);
+        const auto family_index = etna::narrow_cast<uint32_t>(i);
         const auto queue_flags  = properties[i].queueFlags;
         const auto queue_count  = properties[i].queueCount;
         const auto masked_flags = queue_flags & mask;

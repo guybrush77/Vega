@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.hpp"
+#include "core.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocator)
 

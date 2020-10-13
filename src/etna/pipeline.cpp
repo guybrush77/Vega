@@ -2,8 +2,6 @@
 #include "etna/renderpass.hpp"
 #include "etna/shader.hpp"
 
-#include "utils/casts.hpp"
-
 #include <spdlog/spdlog.h>
 
 #define COMPONENT "Etna: "

@@ -21,6 +21,7 @@ target_sources(unit-tests PRIVATE ${source_files} ${test.resource.out})
 
 target_link_libraries(
     unit-tests
+    PRIVATE etna
     PRIVATE utils
     PRIVATE doctest
 )

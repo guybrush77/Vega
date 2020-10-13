@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.hpp"
+#include "core.hpp"
 
 ETNA_DEFINE_HANDLE(EtnaShaderModule)
 

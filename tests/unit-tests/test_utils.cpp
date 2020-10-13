@@ -1,10 +1,11 @@
-#include "utils/casts.hpp"
+#include "etna/core.hpp"
 #include "utils/resource.hpp"
 
 #include <doctest/doctest.h>
 #include <string_view>
 
 using data_view = std::basic_string_view<unsigned char>;
+using etna::narrow_cast;
 
 TEST_CASE("testing narrow_cast function")
 {

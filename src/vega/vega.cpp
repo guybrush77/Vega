@@ -168,7 +168,7 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder);
     }
 
-    // Create and initialzie descriptor sets
+    // Create and initialize descriptor sets
     auto descriptor_pool = device->CreateDescriptorPool(DescriptorType::UniformBuffer, 1);
 
     auto descriptor_set = descriptor_pool->AllocateDescriptorSet(*descriptor_set_layout);

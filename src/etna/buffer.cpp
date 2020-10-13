@@ -1,7 +1,5 @@
 #include "etna/buffer.hpp"
 
-#include "utils/throw_exception.hpp"
-
 #include <spdlog/spdlog.h>
 #include <vk_mem_alloc.h>
 
