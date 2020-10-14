@@ -1,5 +1,5 @@
-#include "etna/instance.hpp"
-#include "etna/device.hpp"
+#include "instance.hpp"
+#include "device.hpp"
 
 #include <algorithm>
 #include <spdlog/spdlog.h>

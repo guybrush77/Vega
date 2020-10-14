@@ -1,4 +1,4 @@
-#include "etna/renderpass.hpp"
+#include "renderpass.hpp"
 
 #include <spdlog/spdlog.h>
 

@@ -1,8 +1,8 @@
-#include "etna/command.hpp"
-#include "etna/buffer.hpp"
-#include "etna/descriptor.hpp"
-#include "etna/image.hpp"
-#include "etna/pipeline.hpp"
+#include "command.hpp"
+#include "buffer.hpp"
+#include "descriptor.hpp"
+#include "image.hpp"
+#include "pipeline.hpp"
 
 #include <spdlog/spdlog.h>
 

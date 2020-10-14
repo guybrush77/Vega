@@ -1,15 +1,15 @@
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
-#include "etna/buffer.hpp"
-#include "etna/command.hpp"
-#include "etna/descriptor.hpp"
-#include "etna/device.hpp"
-#include "etna/image.hpp"
-#include "etna/pipeline.hpp"
-#include "etna/queue.hpp"
-#include "etna/renderpass.hpp"
-#include "etna/shader.hpp"
+#include "buffer.hpp"
+#include "command.hpp"
+#include "descriptor.hpp"
+#include "device.hpp"
+#include "image.hpp"
+#include "pipeline.hpp"
+#include "queue.hpp"
+#include "renderpass.hpp"
+#include "shader.hpp"
 
 #include "utils/resource.hpp"
 

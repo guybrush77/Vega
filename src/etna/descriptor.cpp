@@ -1,5 +1,5 @@
-#include "etna/descriptor.hpp"
-#include "etna/buffer.hpp"
+#include "descriptor.hpp"
+#include "buffer.hpp"
 
 #include <spdlog/spdlog.h>
 

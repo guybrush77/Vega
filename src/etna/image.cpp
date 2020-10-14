@@ -1,4 +1,4 @@
-#include "etna/image.hpp"
+#include "image.hpp"
 
 #include <spdlog/spdlog.h>
 #include <vk_mem_alloc.h>

@@ -1,6 +1,6 @@
-#include "etna/pipeline.hpp"
-#include "etna/renderpass.hpp"
-#include "etna/shader.hpp"
+#include "pipeline.hpp"
+#include "renderpass.hpp"
+#include "shader.hpp"
 
 #include <spdlog/spdlog.h>
 

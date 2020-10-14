@@ -7,7 +7,7 @@ add_library(etna STATIC)
 file(GLOB_RECURSE source_files *.hpp *.cpp)
 target_sources(etna PRIVATE ${source_files})
 
-target_include_directories(etna PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(etna PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 target_link_libraries(
     etna

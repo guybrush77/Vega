@@ -1,13 +1,4 @@
-#include "etna/buffer.hpp"
-#include "etna/command.hpp"
-#include "etna/descriptor.hpp"
-#include "etna/device.hpp"
-#include "etna/image.hpp"
-#include "etna/instance.hpp"
-#include "etna/pipeline.hpp"
-#include "etna/queue.hpp"
-#include "etna/shader.hpp"
-#include "etna/renderpass.hpp"
+#include "etna.hpp"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h" // TODO: Remove

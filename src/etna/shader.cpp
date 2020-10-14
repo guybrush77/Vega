@@ -1,4 +1,4 @@
-#include "etna/shader.hpp"
+#include "shader.hpp"
 
 #include <spdlog/spdlog.h>
 
