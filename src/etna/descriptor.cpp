@@ -68,17 +68,17 @@ DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder() noexcept
 }
 
 void DescriptorSetLayoutBuilder::AddDescriptorSetLayoutBinding(
-    Binding         binding,
-    DescriptorType  descriptor_type,
-    uint32_t        descriptor_count,
-    ShaderStageMask shader_stage_mask)
+    Binding        binding,
+    DescriptorType descriptor_type,
+    uint32_t       descriptor_count,
+    ShaderStage    shader_stage_flags)
 {
     VkDescriptorSetLayoutBinding descriptor_set_layout_binding = {
 
         .binding            = binding,
-        .descriptorType     = GetVkFlags(descriptor_type),
+        .descriptorType     = GetVk(descriptor_type),
         .descriptorCount    = descriptor_count,
-        .stageFlags         = GetVkFlags(shader_stage_mask),
+        .stageFlags         = GetVk(shader_stage_flags),
         .pImmutableSamplers = nullptr
     };
 
@@ -153,7 +153,7 @@ WriteDescriptorSet::WriteDescriptorSet(
         .dstBinding       = binding,
         .dstArrayElement  = 0,
         .descriptorCount  = 0,
-        .descriptorType   = GetVkFlags(descriptor_type),
+        .descriptorType   = GetVk(descriptor_type),
         .pImageInfo       = nullptr,
         .pBufferInfo      = nullptr,
         .pTexelBufferView = nullptr

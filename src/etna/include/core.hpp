@@ -8,8 +8,14 @@
     using handle = struct handle##_T*;                                                                                 \
     }
 
-#define ETNA_GET_VK_FLAGS(type)                                                                                        \
-    inline constexpr auto GetVkFlags(type val) noexcept { return static_cast<Vk##type>(val); }
+#define ETNA_DEFINE_VK_ENUM(type)                                                                                      \
+    inline constexpr auto GetVk(type val) noexcept { return static_cast<Vk##type>(val); }
+
+#define ETNA_DEFINE_VK_FLAGS(type)                                                                                     \
+    inline constexpr auto GetVk(type val) noexcept { return static_cast<Vk##type##Flags>(val); }                       \
+    template <>                                                                                                        \
+    struct composable_flags<##type##> : std::true_type {};                                                             \
+    using type##Mask = Mask<##type##>;
 
 template <typename>
 struct etna_vertex_attribute_type_trait;
@@ -44,11 +50,11 @@ enum class AttachmentLoadOp {
     DontCare = VK_ATTACHMENT_LOAD_OP_DONT_CARE
 };
 
-ETNA_GET_VK_FLAGS(AttachmentLoadOp)
+ETNA_DEFINE_VK_ENUM(AttachmentLoadOp)
 
 enum class AttachmentStoreOp { Store = VK_ATTACHMENT_STORE_OP_STORE, DontCare = VK_ATTACHMENT_STORE_OP_DONT_CARE };
 
-ETNA_GET_VK_FLAGS(AttachmentStoreOp)
+ETNA_DEFINE_VK_ENUM(AttachmentStoreOp)
 
 enum class Format {
     Undefined                               = VK_FORMAT_UNDEFINED,
@@ -328,11 +334,11 @@ enum class Format {
     G16B16R163Plane444UnormKHR              = VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM_KHR
 };
 
-ETNA_GET_VK_FLAGS(Format)
+ETNA_DEFINE_VK_ENUM(Format)
 
 enum class VertexInputRate { Vertex = VK_VERTEX_INPUT_RATE_VERTEX, Instance = VK_VERTEX_INPUT_RATE_INSTANCE };
 
-ETNA_GET_VK_FLAGS(VertexInputRate)
+ETNA_DEFINE_VK_ENUM(VertexInputRate)
 
 enum class ImageLayout {
     Undefined                                = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -361,7 +367,8 @@ enum class ImageLayout {
     StencilAttachmentOptimalKHR              = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR,
     StencilReadOnlyOptimalKHR                = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR
 };
-ETNA_GET_VK_FLAGS(ImageLayout)
+
+ETNA_DEFINE_VK_ENUM(ImageLayout)
 
 enum class DynamicState {
     Viewport                     = VK_DYNAMIC_STATE_VIEWPORT,
@@ -381,7 +388,8 @@ enum class DynamicState {
     ExclusiveScissorNV           = VK_DYNAMIC_STATE_EXCLUSIVE_SCISSOR_NV,
     LineStippleEXT               = VK_DYNAMIC_STATE_LINE_STIPPLE_EXT
 };
-ETNA_GET_VK_FLAGS(DynamicState)
+
+ETNA_DEFINE_VK_ENUM(DynamicState)
 
 enum class DescriptorType {
     Sampler                  = VK_DESCRIPTOR_TYPE_SAMPLER,
@@ -399,7 +407,8 @@ enum class DescriptorType {
     AccelerationStructureKHR = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
     AccelerationStructureNV  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
 };
-ETNA_GET_VK_FLAGS(DescriptorType)
+
+ETNA_DEFINE_VK_ENUM(DescriptorType)
 
 enum class ImageTiling {
     Optimal              = VK_IMAGE_TILING_OPTIMAL,
@@ -407,20 +416,21 @@ enum class ImageTiling {
     DrmFormatModifierEXT = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT
 };
 
-ETNA_GET_VK_FLAGS(ImageTiling)
+ETNA_DEFINE_VK_ENUM(ImageTiling)
 
 enum class CommandBufferLevel {
     Primary   = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
     Secondary = VK_COMMAND_BUFFER_LEVEL_SECONDARY
 };
 
-ETNA_GET_VK_FLAGS(CommandBufferLevel)
+ETNA_DEFINE_VK_ENUM(CommandBufferLevel)
 
 enum class SubpassContents {
     Inline                  = VK_SUBPASS_CONTENTS_INLINE,
     SecondaryCommandBuffers = VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
 };
-ETNA_GET_VK_FLAGS(SubpassContents)
+
+ETNA_DEFINE_VK_ENUM(SubpassContents)
 
 enum class PipelineBindPoint {
     Graphics      = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -428,7 +438,8 @@ enum class PipelineBindPoint {
     RayTracingKHR = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
     RayTracingNV  = VK_PIPELINE_BIND_POINT_RAY_TRACING_NV
 };
-ETNA_GET_VK_FLAGS(PipelineBindPoint)
+
+ETNA_DEFINE_VK_ENUM(PipelineBindPoint)
 
 enum class ImageUsage : VkImageUsageFlags {
     TransferSrc            = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -443,10 +454,7 @@ enum class ImageUsage : VkImageUsageFlags {
     FragmentDensityMapEXT  = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT
 };
 
-template <>
-struct composable_flags<ImageUsage> : std::true_type {};
-
-using ImageUsageMask = Mask<ImageUsage>;
+ETNA_DEFINE_VK_FLAGS(ImageUsage)
 
 enum class BufferUsage : VkBufferUsageFlags {
     TransferSrc                       = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -468,10 +476,7 @@ enum class BufferUsage : VkBufferUsageFlags {
     ShaderDeviceAddressKHR            = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR
 };
 
-template <>
-struct composable_flags<BufferUsage> : std::true_type {};
-
-using BufferUsageMask = Mask<BufferUsage>;
+ETNA_DEFINE_VK_FLAGS(BufferUsage)
 
 enum class CommandBufferUsage : VkCommandBufferUsageFlags {
     OneTimeSubmit      = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -479,10 +484,7 @@ enum class CommandBufferUsage : VkCommandBufferUsageFlags {
     SimultaneousUse    = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
 };
 
-template <>
-struct composable_flags<CommandBufferUsage> : std::true_type {};
-
-using CommandBufferUsageMask = Mask<CommandBufferUsage>;
+ETNA_DEFINE_VK_FLAGS(CommandBufferUsage)
 
 enum class CommandPoolCreate : VkCommandPoolCreateFlags {
     Transient          = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
@@ -490,10 +492,7 @@ enum class CommandPoolCreate : VkCommandPoolCreateFlags {
     Protected          = VK_COMMAND_POOL_CREATE_PROTECTED_BIT
 };
 
-template <>
-struct composable_flags<CommandPoolCreate> : std::true_type {};
-
-using CommandPoolCreateMask = Mask<CommandPoolCreate>;
+ETNA_DEFINE_VK_FLAGS(CommandPoolCreate)
 
 enum class ShaderStage : VkShaderStageFlags {
     Vertex                 = VK_SHADER_STAGE_VERTEX_BIT,
@@ -520,10 +519,7 @@ enum class ShaderStage : VkShaderStageFlags {
     CallableNV             = VK_SHADER_STAGE_CALLABLE_BIT_NV
 };
 
-template <>
-struct composable_flags<ShaderStage> : std::true_type {};
-
-using ShaderStageMask = Mask<ShaderStage>;
+ETNA_DEFINE_VK_FLAGS(ShaderStage)
 
 enum class PipelineStage : VkPipelineStageFlags {
     TopOfPipe                     = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -556,10 +552,7 @@ enum class PipelineStage : VkPipelineStageFlags {
     AccelerationStructureBuildNV  = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV
 };
 
-template <>
-struct composable_flags<PipelineStage> : std::true_type {};
-
-using PipelineStageMask = Mask<PipelineStage>;
+ETNA_DEFINE_VK_FLAGS(PipelineStage)
 
 enum class Access : VkAccessFlags {
     IndirectCommandRead               = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
@@ -594,10 +587,7 @@ enum class Access : VkAccessFlags {
     AccelerationStructureWriteNV      = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV
 };
 
-template <>
-struct composable_flags<Access> : std::true_type {};
-
-using AccessMask = Mask<Access>;
+ETNA_DEFINE_VK_FLAGS(Access)
 
 enum class ImageAspect : VkImageAspectFlags {
     Color           = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -616,10 +606,7 @@ enum class ImageAspect : VkImageAspectFlags {
     Plane2KHR       = VK_IMAGE_ASPECT_PLANE_2_BIT_KHR
 };
 
-template <>
-struct composable_flags<ImageAspect> : std::true_type {};
-
-using ImageAspectMask = Mask<ImageAspect>;
+ETNA_DEFINE_VK_FLAGS(ImageAspect)
 
 template <typename T>
 class Mask final {
@@ -637,7 +624,9 @@ class Mask final {
     constexpr auto operator|(T rhs) const noexcept { return Mask<T>(m_value | static_cast<mask_type>(rhs)); }
     constexpr auto operator&(T rhs) const noexcept { return Mask<T>(m_value & static_cast<mask_type>(rhs)); }
 
-    constexpr auto GetVkFlags() const noexcept { return m_value; }
+    constexpr operator T() const noexcept { return static_cast<T>(m_value); }
+
+    constexpr auto GetVk() const noexcept { return m_value; }
 
   private:
     template <typename T>
@@ -649,9 +638,9 @@ class Mask final {
 };
 
 template <typename T>
-inline auto GetVkFlags(Mask<T> mask) noexcept
+inline auto GetVk(Mask<T> mask) noexcept
 {
-    return mask.GetVkFlags();
+    return mask.GetVk();
 }
 
 template <typename T>
@@ -697,7 +686,7 @@ struct DescriptorPoolSize final {
     DescriptorType type;
     uint32_t       size;
 
-    constexpr operator VkDescriptorPoolSize() const noexcept { return { GetVkFlags(type), size }; }
+    constexpr operator VkDescriptorPoolSize() const noexcept { return { GetVk(type), size }; }
 };
 
 template <typename T>

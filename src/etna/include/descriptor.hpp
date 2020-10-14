@@ -15,10 +15,10 @@ struct DescriptorSetLayoutBuilder final {
     constexpr operator VkDescriptorSetLayoutCreateInfo() const noexcept { return create_info; }
 
     void AddDescriptorSetLayoutBinding(
-        Binding         binding,
-        DescriptorType  descriptor_type,
-        uint32_t        descriptor_count,
-        ShaderStageMask shader_stage_mask);
+        Binding        binding,
+        DescriptorType descriptor_type,
+        uint32_t       descriptor_count,
+        ShaderStage    shader_stage_flags);
 
     VkDescriptorSetLayoutCreateInfo create_info{};
 

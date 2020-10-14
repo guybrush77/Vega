@@ -18,7 +18,7 @@ class Device {
     bool operator==(const Device& rhs) const noexcept { return m_state == rhs.m_state; }
     bool operator!=(const Device& rhs) const noexcept { return m_state != rhs.m_state; }
 
-    auto CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask command_pool_create_mask = {})
+    auto CreateCommandPool(QueueFamily queue_family, CommandPoolCreate command_pool_create_flags = {})
         -> UniqueCommandPool;
 
     auto CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent) -> UniqueFramebuffer;
@@ -36,14 +36,14 @@ class Device {
 
     auto CreateShaderModule(const char* shader_name) -> UniqueShaderModule;
 
-    auto CreateBuffer(std::size_t size, BufferUsageMask buffer_usage_mask, MemoryUsage memory_usage) -> UniqueBuffer;
+    auto CreateBuffer(std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage) -> UniqueBuffer;
 
     auto CreateImage(
-        Format         format,
-        Extent2D       extent,
-        ImageUsageMask image_usage_mask,
-        MemoryUsage    memory_usage,
-        ImageTiling    image_tiling) -> UniqueImage2D;
+        Format      format,
+        Extent2D    extent,
+        ImageUsage  image_usage_flags,
+        MemoryUsage memory_usage,
+        ImageTiling image_tiling) -> UniqueImage2D;
 
     auto CreateImageView(Image2D image) -> UniqueImageView2D;
 

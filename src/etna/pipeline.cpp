@@ -161,16 +161,16 @@ PipelineBuilder::PipelineBuilder(PipelineLayout layout, RenderPass renderpass) n
 }
 
 void PipelineBuilder::AddShaderStage(
-    ShaderModule    shader_module,
-    ShaderStageMask shader_stage_mask,
-    const char*     entry_function)
+    ShaderModule shader_module,
+    ShaderStage  shader_stage_flags,
+    const char*  entry_function)
 {
     VkPipelineShaderStageCreateInfo shader_stage_create_info = {
 
         .sType               = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .pNext               = nullptr,
         .flags               = {},
-        .stage               = static_cast<VkShaderStageFlagBits>(GetVkFlags(shader_stage_mask)),
+        .stage               = static_cast<VkShaderStageFlagBits>(GetVk(shader_stage_flags)),
         .module              = shader_module,
         .pName               = entry_function,
         .pSpecializationInfo = nullptr
@@ -187,7 +187,7 @@ void PipelineBuilder::AddVertexInputBindingDescription(
     size_t          stride,
     VertexInputRate vertex_input_rate)
 {
-    m_binding_descriptions.push_back({ binding, narrow_cast<uint32_t>(stride), GetVkFlags(vertex_input_rate) });
+    m_binding_descriptions.push_back({ binding, narrow_cast<uint32_t>(stride), GetVk(vertex_input_rate) });
 
     m_vertex_input_state.vertexBindingDescriptionCount = narrow_cast<uint32_t>(m_binding_descriptions.size());
     m_vertex_input_state.pVertexBindingDescriptions    = m_binding_descriptions.data();
@@ -199,7 +199,7 @@ void PipelineBuilder::AddVertexInputAttributeDescription(
     Format   format,
     size_t   offset)
 {
-    m_attribute_descriptions.push_back({ location, binding, GetVkFlags(format), narrow_cast<uint32_t>(offset) });
+    m_attribute_descriptions.push_back({ location, binding, GetVk(format), narrow_cast<uint32_t>(offset) });
 
     m_vertex_input_state.vertexAttributeDescriptionCount = narrow_cast<uint32_t>(m_attribute_descriptions.size());
     m_vertex_input_state.pVertexAttributeDescriptions    = m_attribute_descriptions.data();
@@ -257,7 +257,7 @@ void PipelineBuilder::AddColorBlendAttachmentBaseState()
 
 void PipelineBuilder::AddDynamicState(DynamicState dynamic_state)
 {
-    m_dynamic_states.push_back(GetVkFlags(dynamic_state));
+    m_dynamic_states.push_back(GetVk(dynamic_state));
 
     m_dynamic_state.pDynamicStates    = m_dynamic_states.data();
     m_dynamic_state.dynamicStateCount = narrow_cast<std::uint32_t>(m_dynamic_states.size());

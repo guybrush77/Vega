@@ -39,7 +39,7 @@ UniqueCommandBuffer CommandPool::AllocateCommandBuffer(CommandBufferLevel level)
         .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext              = nullptr,
         .commandPool        = m_state->command_pool,
-        .level              = GetVkFlags(level),
+        .level              = GetVk(level),
         .commandBufferCount = 1
     };
 
@@ -77,7 +77,7 @@ CommandBuffer::operator VkCommandBuffer() const noexcept
     return m_state ? m_state->command_buffer : VkCommandBuffer{};
 }
 
-void CommandBuffer::Begin(CommandBufferUsageMask command_buffer_usage_mask)
+void CommandBuffer::Begin(CommandBufferUsage command_buffer_usage_flags)
 {
     assert(m_state);
 
@@ -85,7 +85,7 @@ void CommandBuffer::Begin(CommandBufferUsageMask command_buffer_usage_mask)
 
         .sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext            = nullptr,
-        .flags            = GetVkFlags(command_buffer_usage_mask),
+        .flags            = GetVk(command_buffer_usage_flags),
         .pInheritanceInfo = nullptr
     };
 
@@ -120,7 +120,7 @@ void CommandBuffer::BeginRenderPass(Framebuffer framebuffer, SubpassContents sub
         .pClearValues    = &clear_value
     };
 
-    vkCmdBeginRenderPass(m_state->command_buffer, &begin_info, GetVkFlags(subpass_contents));
+    vkCmdBeginRenderPass(m_state->command_buffer, &begin_info, GetVk(subpass_contents));
 }
 
 void CommandBuffer::EndRenderPass()
@@ -138,7 +138,7 @@ void CommandBuffer::End()
 void CommandBuffer::BindPipeline(PipelineBindPoint pipeline_bind_point, Pipeline pipeline)
 {
     assert(m_state);
-    vkCmdBindPipeline(m_state->command_buffer, GetVkFlags(pipeline_bind_point), pipeline);
+    vkCmdBindPipeline(m_state->command_buffer, GetVk(pipeline_bind_point), pipeline);
 }
 
 void CommandBuffer::BindVertexBuffers(Buffer buffer)
@@ -162,7 +162,7 @@ void CommandBuffer::BindDescriptorSet(
 
     vkCmdBindDescriptorSets(
         m_state->command_buffer,
-        GetVkFlags(pipeline_bind_point),
+        GetVk(pipeline_bind_point),
         pipeline_layout,
         0,
         1,
@@ -183,20 +183,20 @@ void CommandBuffer::Draw(size_t vertex_count, size_t instance_count, size_t firs
 }
 
 void CommandBuffer::PipelineBarrier(
-    Image2D           image,
-    PipelineStageMask src_stage_mask,
-    PipelineStageMask dst_stage_mask,
-    AccessMask        src_access_mask,
-    AccessMask        dst_access_mask,
-    ImageLayout       old_layout,
-    ImageLayout       new_layout,
-    ImageAspectMask   aspect_mask)
+    Image2D       image,
+    PipelineStage src_stage_flags,
+    PipelineStage dst_stage_flags,
+    Access        src_access_flags,
+    Access        dst_access_flags,
+    ImageLayout   old_layout,
+    ImageLayout   new_layout,
+    ImageAspect   aspect_flags)
 {
     assert(m_state);
 
     VkImageSubresourceRange subresource_range = {
 
-        .aspectMask     = GetVkFlags(aspect_mask),
+        .aspectMask     = GetVk(aspect_flags),
         .baseMipLevel   = 0,
         .levelCount     = 1,
         .baseArrayLayer = 0,
@@ -207,10 +207,10 @@ void CommandBuffer::PipelineBarrier(
 
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .pNext               = nullptr,
-        .srcAccessMask       = GetVkFlags(src_access_mask),
-        .dstAccessMask       = GetVkFlags(dst_access_mask),
-        .oldLayout           = GetVkFlags(old_layout),
-        .newLayout           = GetVkFlags(new_layout),
+        .srcAccessMask       = GetVk(src_access_flags),
+        .dstAccessMask       = GetVk(dst_access_flags),
+        .oldLayout           = GetVk(old_layout),
+        .newLayout           = GetVk(new_layout),
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = image,
@@ -219,8 +219,8 @@ void CommandBuffer::PipelineBarrier(
 
     vkCmdPipelineBarrier(
         m_state->command_buffer,
-        GetVkFlags(src_stage_mask),
-        GetVkFlags(dst_stage_mask),
+        GetVk(src_stage_flags),
+        GetVk(dst_stage_flags),
         {},
         0,
         nullptr,
@@ -231,11 +231,11 @@ void CommandBuffer::PipelineBarrier(
 }
 
 void CommandBuffer::CopyImage(
-    Image2D         src_image,
-    ImageLayout     src_image_layout,
-    Image2D         dst_image,
-    ImageLayout     dst_image_layout,
-    ImageAspectMask aspect_mask)
+    Image2D     src_image,
+    ImageLayout src_image_layout,
+    Image2D     dst_image,
+    ImageLayout dst_image_layout,
+    ImageAspect image_aspect_flags)
 {
     assert(m_state);
 
@@ -243,9 +243,9 @@ void CommandBuffer::CopyImage(
 
     VkImageCopy image_copy = {
 
-        .srcSubresource = { GetVkFlags(aspect_mask), 0, 0, 1 },
+        .srcSubresource = { GetVk(image_aspect_flags), 0, 0, 1 },
         .srcOffset      = { 0, 0, 0 },
-        .dstSubresource = { GetVkFlags(aspect_mask), 0, 0, 1 },
+        .dstSubresource = { GetVk(image_aspect_flags), 0, 0, 1 },
         .dstOffset      = { 0, 0, 0 },
         .extent         = { width, height, 1 }
     };
@@ -253,9 +253,9 @@ void CommandBuffer::CopyImage(
     vkCmdCopyImage(
         m_state->command_buffer,
         src_image,
-        GetVkFlags(src_image_layout),
+        GetVk(src_image_layout),
         dst_image,
-        GetVkFlags(dst_image_layout),
+        GetVk(dst_image_layout),
         1,
         &image_copy);
 }

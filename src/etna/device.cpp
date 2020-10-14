@@ -252,7 +252,7 @@ UniqueShaderModule Device::CreateShaderModule(const char* shader_name)
     return ShaderModule::Create(m_state->device, create_info);
 }
 
-UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsageMask buffer_usage_mask, MemoryUsage memory_usage)
+UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage)
 {
     assert(m_state);
 
@@ -262,7 +262,7 @@ UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsageMask buffer_usage
         .pNext                 = nullptr,
         .flags                 = {},
         .size                  = narrow_cast<VkDeviceSize>(size),
-        .usage                 = GetVkFlags(buffer_usage_mask),
+        .usage                 = GetVk(buffer_usage_flags),
         .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices   = nullptr
@@ -276,7 +276,7 @@ Device::operator VkDevice() const noexcept
     return m_state ? m_state->device : VkDevice{};
 }
 
-UniqueCommandPool Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreateMask command_pool_create_mask)
+UniqueCommandPool Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreate command_pool_create_flags)
 {
     assert(m_state);
 
@@ -284,7 +284,7 @@ UniqueCommandPool Device::CreateCommandPool(QueueFamily queue_family, CommandPoo
 
         .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .pNext            = nullptr,
-        .flags            = GetVkFlags(command_pool_create_mask),
+        .flags            = GetVk(command_pool_create_flags),
         .queueFamilyIndex = GetQueueFamilyIndex(queue_family)
     };
 
@@ -325,11 +325,11 @@ UniquePipelineLayout Device::CreatePipelineLayout(const VkPipelineLayoutCreateIn
 }
 
 UniqueImage2D Device::CreateImage(
-    Format         format,
-    Extent2D       extent,
-    ImageUsageMask image_usage_mask,
-    MemoryUsage    memory_usage,
-    ImageTiling    image_tiling)
+    Format      format,
+    Extent2D    extent,
+    ImageUsage  image_usage_flags,
+    MemoryUsage memory_usage,
+    ImageTiling image_tiling)
 {
     assert(m_state);
 
@@ -339,13 +339,13 @@ UniqueImage2D Device::CreateImage(
         .pNext                 = nullptr,
         .flags                 = {},
         .imageType             = VK_IMAGE_TYPE_2D,
-        .format                = GetVkFlags(format),
+        .format                = GetVk(format),
         .extent                = { extent.width, extent.height, 1 },
         .mipLevels             = 1,
         .arrayLayers           = 1,
         .samples               = VK_SAMPLE_COUNT_1_BIT,
-        .tiling                = GetVkFlags(image_tiling),
-        .usage                 = GetVkFlags(image_usage_mask),
+        .tiling                = GetVk(image_tiling),
+        .usage                 = GetVk(image_usage_flags),
         .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices   = nullptr,
@@ -372,7 +372,7 @@ UniqueImageView2D Device::CreateImageView(Image2D image)
         .flags            = {},
         .image            = image,
         .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-        .format           = GetVkFlags(image.Format()),
+        .format           = GetVk(image.Format()),
         .components       = {},
         .subresourceRange = { aspect_mask, 0, 1, 0, 1 }
     };

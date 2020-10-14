@@ -50,7 +50,7 @@ class CommandBuffer {
     bool operator==(const CommandBuffer& rhs) const noexcept { return m_state == rhs.m_state; }
     bool operator!=(const CommandBuffer& rhs) const noexcept { return m_state != rhs.m_state; }
 
-    void Begin(CommandBufferUsageMask command_buffer_usage_mask = {});
+    void Begin(CommandBufferUsage command_buffer_usage_flags = {});
 
     void BeginRenderPass(Framebuffer framebuffer, SubpassContents subpass_contents);
 
@@ -70,21 +70,21 @@ class CommandBuffer {
     void Draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
 
     void PipelineBarrier(
-        Image2D           image,
-        PipelineStageMask src_stage_mask,
-        PipelineStageMask dst_stage_mask,
-        AccessMask        src_access_mask,
-        AccessMask        dst_access_mask,
-        ImageLayout       old_layout,
-        ImageLayout       new_layout,
-        ImageAspectMask   aspect_mask);
+        Image2D       image,
+        PipelineStage src_stage_flags,
+        PipelineStage dst_stage_flags,
+        Access        src_access_flags,
+        Access        dst_access_flags,
+        ImageLayout   old_layout,
+        ImageLayout   new_layout,
+        ImageAspect   aspect_flags);
 
     void CopyImage(
-        Image2D         src_image,
-        ImageLayout     src_image_layout,
-        Image2D         dst_image,
-        ImageLayout     dst_image_layout,
-        ImageAspectMask aspect_mask);
+        Image2D     src_image,
+        ImageLayout src_image_layout,
+        Image2D     dst_image,
+        ImageLayout dst_image_layout,
+        ImageAspect image_aspect_flags);
 
     void CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size);
 

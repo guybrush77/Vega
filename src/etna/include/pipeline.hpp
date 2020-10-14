@@ -43,7 +43,7 @@ struct PipelineBuilder final {
     constexpr operator VkGraphicsPipelineCreateInfo() const noexcept { return create_info; }
 
     void
-    AddShaderStage(ShaderModule shader_module, ShaderStageMask shader_stage_mask, const char* entry_function = "main");
+    AddShaderStage(ShaderModule shader_module, ShaderStage shader_stage_flags, const char* entry_function = "main");
 
     void AddVertexInputBindingDescription(
         Binding         binding,

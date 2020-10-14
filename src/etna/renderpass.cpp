@@ -72,14 +72,14 @@ AttachmentID RenderPassBuilder::AddAttachment(
     VkAttachmentDescription description = {
 
         .flags          = {},
-        .format         = GetVkFlags(format),
+        .format         = GetVk(format),
         .samples        = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp         = GetVkFlags(load_op),
-        .storeOp        = GetVkFlags(store_op),
+        .loadOp         = GetVk(load_op),
+        .storeOp        = GetVk(store_op),
         .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout  = GetVkFlags(initial_layout),
-        .finalLayout    = GetVkFlags(final_layout)
+        .initialLayout  = GetVk(initial_layout),
+        .finalLayout    = GetVk(final_layout)
     };
 
     m_attachment_descriptions.push_back(description);
@@ -92,7 +92,7 @@ AttachmentID RenderPassBuilder::AddAttachment(
 
 ReferenceID RenderPassBuilder::AddReference(AttachmentID attachment_id, ImageLayout image_layout)
 {
-    m_references.push_back({ attachment_id, GetVkFlags(image_layout) });
+    m_references.push_back({ attachment_id, GetVk(image_layout) });
     return m_references.size() - 1;
 }
 
