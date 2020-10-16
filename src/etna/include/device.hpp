@@ -22,6 +22,8 @@ class Device {
         -> UniqueCommandPool;
 
     auto CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent) -> UniqueFramebuffer;
+    auto CreateFramebuffer(RenderPass renderpass, std::initializer_list<const ImageView2D> image_views, Extent2D extent)
+        -> UniqueFramebuffer;
 
     auto CreateGraphicsPipeline(const VkGraphicsPipelineCreateInfo& create_info) -> UniquePipeline;
 
@@ -45,7 +47,7 @@ class Device {
         MemoryUsage memory_usage,
         ImageTiling image_tiling) -> UniqueImage2D;
 
-    auto CreateImageView(Image2D image) -> UniqueImageView2D;
+    auto CreateImageView(Image2D image, ImageAspect image_aspect_flags) -> UniqueImageView2D;
 
     auto GetQueue(QueueFamily queue_family) const noexcept -> Queue;
 

@@ -52,7 +52,10 @@ class CommandBuffer {
 
     void Begin(CommandBufferUsage command_buffer_usage_flags = {});
 
-    void BeginRenderPass(Framebuffer framebuffer, SubpassContents subpass_contents);
+    void BeginRenderPass(
+        Framebuffer                             framebuffer,
+        std::initializer_list<const ClearValue> clear_values,
+        SubpassContents                         subpass_contents);
 
     void EndRenderPass();
 
@@ -62,12 +65,21 @@ class CommandBuffer {
 
     void BindVertexBuffers(Buffer buffer);
 
+    void BindIndexBuffer(Buffer buffer, IndexType index_type, size_t offset = 0);
+
     void BindDescriptorSet(
         PipelineBindPoint pipeline_bind_point,
         PipelineLayout    pipeline_layout,
         DescriptorSet     descriptor_set);
 
-    void Draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
+    void Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex = 0, uint32_t first_instance = 0);
+
+    void DrawIndexed(
+        uint32_t index_count,
+        uint32_t instance_count,
+        uint32_t first_index    = 0,
+        int32_t  vertex_offset  = 0,
+        uint32_t first_instance = 0);
 
     void PipelineBarrier(
         Image2D       image,

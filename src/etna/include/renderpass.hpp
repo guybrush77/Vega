@@ -2,7 +2,7 @@
 
 #include "core.hpp"
 
-#include <forward_list>
+#include <deque>
 #include <span>
 #include <vector>
 
@@ -10,10 +10,42 @@ ETNA_DEFINE_HANDLE(EtnaRenderPass)
 
 namespace etna {
 
+struct SubpassBuilder;
+
+struct RenderPassBuilder final {
+    RenderPassBuilder() noexcept;
+
+    constexpr operator VkRenderPassCreateInfo() const noexcept { return create_info; }
+
+    SubpassBuilder CreateSubpassBuilder() const;
+
+    AttachmentID AddAttachment(
+        Format            format,
+        AttachmentLoadOp  load_op,
+        AttachmentStoreOp store_op,
+        ImageLayout       initial_layout,
+        ImageLayout       final_layout);
+
+    ReferenceID AddReference(AttachmentID attachment_id, ImageLayout image_layout);
+
+    void AddSubpass(VkSubpassDescription subpass_description);
+
+    VkRenderPassCreateInfo create_info{};
+
+  private:
+    friend struct SubpassBuilder;
+
+    std::vector<VkAttachmentDescription> m_attachment_descriptions;
+    std::deque<VkAttachmentReference>    m_references;
+    std::vector<VkSubpassDescription>    m_subpass_descriptions;
+};
+
 class RenderPass {
   public:
     RenderPass() noexcept {}
     RenderPass(std::nullptr_t) noexcept {}
+
+    RenderPassBuilder CreateRenderPassBuilder() const { return RenderPassBuilder{}; }
 
     operator VkRenderPass() const noexcept;
 
@@ -37,36 +69,23 @@ class RenderPass {
     EtnaRenderPass m_state{};
 };
 
-using AttachmentID = std::uint32_t;
-using ReferenceID  = std::size_t;
+struct SubpassBuilder final {
+    void AddColorAttachment(ReferenceID reference_id);
+    void SetDepthStencilAttachment(ReferenceID reference_id);
 
-struct RenderPassBuilder final {
-    RenderPassBuilder() noexcept;
+    constexpr operator VkSubpassDescription() const noexcept { return subpass_description; }
 
-    constexpr operator VkRenderPassCreateInfo() const noexcept { return create_info; }
-
-    AttachmentID AddAttachment(
-        Format            format,
-        AttachmentLoadOp  load_op,
-        AttachmentStoreOp store_op,
-        ImageLayout       initial_layout,
-        ImageLayout       final_layout);
-
-    ReferenceID AddReference(AttachmentID attachment_id, ImageLayout image_layout);
-
-    void AddSubpass(ReferenceID reference_id);
-
-    void AddSubpass(std::span<const ReferenceID> reference_ids);
-
-    void AddSubpass(std::initializer_list<ReferenceID> reference_ids);
-
-    VkRenderPassCreateInfo create_info{};
+    VkSubpassDescription subpass_description{};
 
   private:
-    std::vector<VkAttachmentDescription>                  m_attachment_descriptions;
-    std::vector<VkAttachmentReference>                    m_references;
-    std::forward_list<std::vector<VkAttachmentReference>> m_subpass_references;
-    std::vector<VkSubpassDescription>                     m_subpass_descriptions;
+    friend struct RenderPassBuilder;
+
+    SubpassBuilder(const RenderPassBuilder* renderpass_builder) noexcept;
+
+    std::vector<VkAttachmentReference> m_color_attachment_references;
+    VkAttachmentReference              depth_stencil_attachment_reference;
+
+    const RenderPassBuilder* m_renderpass_builder{};
 };
 
 } // namespace etna

@@ -11,7 +11,6 @@ struct EtnaImage2D_T final {
     VkImage           image;
     VkFormat          format;
     VkExtent2D        extent;
-    VkImageUsageFlags usage;
     VmaAllocator      allocator;
     VmaAllocation     allocation;
 };
@@ -37,29 +36,16 @@ Image2D::operator VkImage() const noexcept
     return m_state ? m_state->image : VkImage{};
 }
 
-ImageUsageMask Image2D::UsageMask() const noexcept
-{
-    assert(m_state);
-    return static_cast<ImageUsage>(m_state->usage);
-}
-
 Format Image2D::Format() const noexcept
 {
     assert(m_state);
     return static_cast<etna::Format>(m_state->format);
 }
 
-Extent2D Image2D::Extent() const noexcept
+Extent2D Image2D::Extent2D() const noexcept
 {
     assert(m_state);
     return { m_state->extent.width, m_state->extent.height };
-}
-
-Rect2D Image2D::Rect2D() const noexcept
-{
-    assert(m_state);
-    auto [width, height] = m_state->extent;
-    return etna::Rect2D{ { 0, 0 }, { width, height } };
 }
 
 void* Image2D::MapMemory()
@@ -97,9 +83,8 @@ UniqueImage2D Image2D::Create(VmaAllocator allocator, const VkImageCreateInfo& c
 
     auto format = create_info.format;
     auto extent = VkExtent2D{ create_info.extent.width, create_info.extent.height };
-    auto usage  = create_info.usage;
 
-    return UniqueImage2D(new EtnaImage2D_T{ image, format, extent, usage, allocator, allocation });
+    return UniqueImage2D(new EtnaImage2D_T{ image, format, extent, allocator, allocation });
 }
 
 void Image2D::Destroy() noexcept

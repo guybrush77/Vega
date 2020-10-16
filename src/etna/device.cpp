@@ -313,6 +313,31 @@ UniqueFramebuffer Device::CreateFramebuffer(RenderPass renderpass, ImageView2D i
     return Framebuffer::Create(m_state->device, create_info);
 }
 
+auto Device::CreateFramebuffer(
+    RenderPass                               renderpass,
+    std::initializer_list<const ImageView2D> image_views,
+    Extent2D                                 extent) -> UniqueFramebuffer
+{
+    assert(m_state);
+
+    auto vk_image_views = std::vector<VkImageView>(image_views.begin(), image_views.end());
+
+    VkFramebufferCreateInfo create_info = {
+
+        .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .pNext           = nullptr,
+        .flags           = {},
+        .renderPass      = renderpass,
+        .attachmentCount = narrow_cast<uint32_t>(vk_image_views.size()),
+        .pAttachments    = vk_image_views.data(),
+        .width           = extent.width,
+        .height          = extent.height,
+        .layers          = 1
+    };
+
+    return Framebuffer::Create(m_state->device, create_info);
+}
+
 UniquePipeline Device::CreateGraphicsPipeline(const VkGraphicsPipelineCreateInfo& create_info)
 {
     assert(m_state);
@@ -355,15 +380,11 @@ UniqueImage2D Device::CreateImage(
     return Image2D::Create(m_state->allocator, create_info, memory_usage);
 }
 
-UniqueImageView2D Device::CreateImageView(Image2D image)
+UniqueImageView2D Device::CreateImageView(Image2D image, ImageAspect image_aspect_flags)
 {
     assert(m_state);
 
-    VkImageAspectFlags aspect_mask{};
-
-    if (image.UsageMask() & ImageUsage::ColorAttachment) {
-        aspect_mask |= VK_IMAGE_ASPECT_COLOR_BIT;
-    }
+    auto vk_aspect_flags = GetVk(image_aspect_flags);
 
     auto create_info = VkImageViewCreateInfo{
 
@@ -374,7 +395,7 @@ UniqueImageView2D Device::CreateImageView(Image2D image)
         .viewType         = VK_IMAGE_VIEW_TYPE_2D,
         .format           = GetVk(image.Format()),
         .components       = {},
-        .subresourceRange = { aspect_mask, 0, 1, 0, 1 }
+        .subresourceRange = { vk_aspect_flags, 0, 1, 0, 1 }
     };
 
     return ImageView2D::Create(m_state->device, create_info);

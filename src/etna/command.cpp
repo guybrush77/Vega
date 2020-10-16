@@ -94,20 +94,16 @@ void CommandBuffer::Begin(CommandBufferUsage command_buffer_usage_flags)
     }
 }
 
-void CommandBuffer::BeginRenderPass(Framebuffer framebuffer, SubpassContents subpass_contents)
+void CommandBuffer::BeginRenderPass(
+    Framebuffer                             framebuffer,
+    std::initializer_list<const ClearValue> clear_values,
+    SubpassContents                         subpass_contents)
 {
     assert(m_state);
 
-    VkOffset2D offset = { 0, 0 };
-    VkExtent2D extent = framebuffer.Extent2D();
+    std::vector<VkClearValue> vk_clear_values(clear_values.begin(), clear_values.end());
 
-    VkClearColorValue color;
-    color.uint32[0] = 0;
-    color.uint32[1] = 0;
-    color.uint32[2] = 0;
-    color.uint32[3] = 0;
-
-    VkClearValue clear_value = { color };
+    auto vk_render_area = VkRect2D{ VkOffset2D{ 0, 0 }, framebuffer.Extent2D() };
 
     VkRenderPassBeginInfo begin_info = {
 
@@ -115,9 +111,9 @@ void CommandBuffer::BeginRenderPass(Framebuffer framebuffer, SubpassContents sub
         .pNext           = nullptr,
         .renderPass      = framebuffer.RenderPass(),
         .framebuffer     = framebuffer,
-        .renderArea      = VkRect2D{ offset, extent },
-        .clearValueCount = 1,
-        .pClearValues    = &clear_value
+        .renderArea      = vk_render_area,
+        .clearValueCount = narrow_cast<uint32_t>(vk_clear_values.size()),
+        .pClearValues    = vk_clear_values.data()
     };
 
     vkCmdBeginRenderPass(m_state->command_buffer, &begin_info, GetVk(subpass_contents));
@@ -151,6 +147,16 @@ void CommandBuffer::BindVertexBuffers(Buffer buffer)
     vkCmdBindVertexBuffers(m_state->command_buffer, 0, 1, &vk_buffer, &vk_offset);
 }
 
+void CommandBuffer::BindIndexBuffer(Buffer buffer, IndexType index_type, size_t offset)
+{
+    assert(m_state);
+
+    VkBuffer     vk_buffer = buffer;
+    VkDeviceSize vk_offset = narrow_cast<VkDeviceSize>(offset);
+
+    vkCmdBindIndexBuffer(m_state->command_buffer, vk_buffer, vk_offset, GetVk(index_type));
+}
+
 void CommandBuffer::BindDescriptorSet(
     PipelineBindPoint pipeline_bind_point,
     PipelineLayout    pipeline_layout,
@@ -171,15 +177,23 @@ void CommandBuffer::BindDescriptorSet(
         nullptr);
 }
 
-void CommandBuffer::Draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance)
+void CommandBuffer::Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
 {
     assert(m_state);
 
-    auto vk_vertex_count   = narrow_cast<uint32_t>(vertex_count);
-    auto vk_instance_count = narrow_cast<uint32_t>(instance_count);
-    auto vk_first_vertex   = narrow_cast<uint32_t>(first_vertex);
-    auto vk_first_instance = narrow_cast<uint32_t>(first_instance);
-    vkCmdDraw(m_state->command_buffer, vk_vertex_count, vk_instance_count, vk_first_vertex, vk_first_instance);
+    vkCmdDraw(m_state->command_buffer, vertex_count, instance_count, first_vertex, first_instance);
+}
+
+void CommandBuffer::DrawIndexed(
+    uint32_t index_count,
+    uint32_t instance_count,
+    uint32_t first_index,
+    int32_t  vertex_offset,
+    uint32_t first_instance)
+{
+    assert(m_state);
+
+    vkCmdDrawIndexed(m_state->command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
 void CommandBuffer::PipelineBarrier(
@@ -239,7 +253,7 @@ void CommandBuffer::CopyImage(
 {
     assert(m_state);
 
-    auto [width, height] = src_image.Extent();
+    auto [width, height] = src_image.Extent2D();
 
     VkImageCopy image_copy = {
 

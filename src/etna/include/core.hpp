@@ -340,6 +340,16 @@ enum class VertexInputRate { Vertex = VK_VERTEX_INPUT_RATE_VERTEX, Instance = VK
 
 ETNA_DEFINE_VK_ENUM(VertexInputRate)
 
+enum class IndexType {
+    Uint16   = VK_INDEX_TYPE_UINT16,
+    Uint32   = VK_INDEX_TYPE_UINT32,
+    NoneKHR  = VK_INDEX_TYPE_NONE_KHR,
+    Uint8EXT = VK_INDEX_TYPE_UINT8_EXT,
+    NoneNV   = VK_INDEX_TYPE_NONE_NV
+};
+
+ETNA_DEFINE_VK_ENUM(IndexType)
+
 enum class ImageLayout {
     Undefined                                = VK_IMAGE_LAYOUT_UNDEFINED,
     General                                  = VK_IMAGE_LAYOUT_GENERAL,
@@ -390,6 +400,19 @@ enum class DynamicState {
 };
 
 ETNA_DEFINE_VK_ENUM(DynamicState)
+
+enum class CompareOp {
+    Never          = VK_COMPARE_OP_NEVER,
+    Less           = VK_COMPARE_OP_LESS,
+    Equal          = VK_COMPARE_OP_EQUAL,
+    LessOrEqual    = VK_COMPARE_OP_LESS_OR_EQUAL,
+    Greater        = VK_COMPARE_OP_GREATER,
+    NotEqual       = VK_COMPARE_OP_NOT_EQUAL,
+    GreaterOrEqual = VK_COMPARE_OP_GREATER_OR_EQUAL,
+    Always         = VK_COMPARE_OP_ALWAYS
+};
+
+ETNA_DEFINE_VK_ENUM(CompareOp)
 
 enum class DescriptorType {
     Sampler                  = VK_DESCRIPTOR_TYPE_SAMPLER,
@@ -689,6 +712,60 @@ struct DescriptorPoolSize final {
     constexpr operator VkDescriptorPoolSize() const noexcept { return { GetVk(type), size }; }
 };
 
+struct ClearColor final {
+    constexpr ClearColor(float r, float g, float b, float a = 1.0f) noexcept
+    {
+        value.float32[0] = r;
+        value.float32[1] = g;
+        value.float32[2] = b;
+        value.float32[3] = a;
+    }
+
+    static const ClearColor Black;
+    static const ClearColor Transparent;
+    static const ClearColor White;
+
+    VkClearColorValue value{};
+};
+
+inline const ClearColor ClearColor::Black       = ClearColor(0, 0, 0);
+inline const ClearColor ClearColor::Transparent = ClearColor(0, 0, 0, 0);
+inline const ClearColor ClearColor::White       = ClearColor(1, 1, 1);
+
+struct ClearDepthStencil final {
+    constexpr ClearDepthStencil(float depth, uint32_t stencil) : value{ depth, stencil } {}
+
+    static const ClearDepthStencil Default;
+
+    VkClearDepthStencilValue value{};
+};
+
+inline const ClearDepthStencil ClearDepthStencil::Default = ClearDepthStencil(1.0f, 0);
+
+struct ClearValue final {
+    constexpr ClearValue(ClearColor color) noexcept : color(color), depth_stencil(0, 0), is_color(true) {}
+
+    constexpr ClearValue(ClearDepthStencil depth_stencil) noexcept
+        : color(0, 0, 0), depth_stencil(depth_stencil), is_color(false)
+    {}
+
+    constexpr operator VkClearValue() const noexcept
+    {
+        VkClearValue clear_value;
+        if (is_color) {
+            clear_value.color = color.value;
+        } else {
+            clear_value.depthStencil = depth_stencil.value;
+        }
+        return clear_value;
+    }
+
+  private:
+    ClearColor        color;
+    ClearDepthStencil depth_stencil;
+    bool              is_color;
+};
+
 template <typename T>
 class UniqueHandle {
   public:
@@ -767,6 +844,17 @@ constexpr DstT narrow_cast(SrcT src)
 
     return dst;
 }
+
+struct AttachmentID final {
+    constexpr AttachmentID(uint32_t val) noexcept : value(val) {}
+    constexpr AttachmentID(size_t val) : value(narrow_cast<uint32_t>(val)) {}
+    uint32_t value;
+};
+
+struct ReferenceID final {
+    constexpr ReferenceID(size_t val) noexcept : value(val) {}
+    size_t value;
+};
 
 class Buffer;
 class CommandBuffer;

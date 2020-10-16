@@ -23,10 +23,8 @@ class Image2D {
     bool operator==(const Image2D& rhs) const noexcept { return m_state == rhs.m_state; }
     bool operator!=(const Image2D& rhs) const noexcept { return m_state != rhs.m_state; }
 
-    auto UsageMask() const noexcept -> ImageUsageMask;
     auto Format() const noexcept -> Format;
-    auto Extent() const noexcept -> Extent2D;
-    auto Rect2D() const noexcept -> Rect2D;
+    auto Extent2D() const noexcept -> Extent2D;
 
     void* MapMemory();
     void  UnmapMemory();

@@ -95,7 +95,7 @@ PipelineBuilder::PipelineBuilder()
 
     m_depth_stencil_state = VkPipelineDepthStencilStateCreateInfo{
 
-        .sType                 = {},
+        .sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .pNext                 = nullptr,
         .flags                 = {},
         .depthTestEnable       = false,
@@ -261,6 +261,13 @@ void PipelineBuilder::AddDynamicState(DynamicState dynamic_state)
 
     m_dynamic_state.pDynamicStates    = m_dynamic_states.data();
     m_dynamic_state.dynamicStateCount = narrow_cast<std::uint32_t>(m_dynamic_states.size());
+}
+
+void PipelineBuilder::SetDepthState(bool depth_test_enable, bool depth_write_enable, CompareOp compare_op) noexcept
+{
+    m_depth_stencil_state.depthTestEnable  = depth_test_enable;
+    m_depth_stencil_state.depthWriteEnable = depth_write_enable;
+    m_depth_stencil_state.depthCompareOp   = GetVk(compare_op);
 }
 
 PipelineLayout::operator VkPipelineLayout() const noexcept
