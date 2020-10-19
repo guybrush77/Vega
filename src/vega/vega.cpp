@@ -6,6 +6,8 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
+#include "utils/resource.hpp"
+
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -258,11 +260,13 @@ int main()
     // Create pipeline
     UniquePipeline pipeline;
     {
-        auto builder         = PipelineBuilder(*layout, *renderpass);
-        auto vertex_shader   = device->CreateShaderModule("shader.vert");
-        auto fragment_shader = device->CreateShaderModule("shader.frag");
-        auto [width, height] = image->Extent2D();
-        auto viewport        = Viewport{ 0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1 };
+        auto builder            = PipelineBuilder(*layout, *renderpass);
+        auto [vs_data, vs_size] = GetResource("shader.vert");
+        auto [fs_data, fs_size] = GetResource("shader.frag");
+        auto vertex_shader      = device->CreateShaderModule(vs_data, vs_size);
+        auto fragment_shader    = device->CreateShaderModule(fs_data, fs_size);
+        auto [width, height]    = image->Extent2D();
+        auto viewport           = Viewport{ 0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1 };
 
         builder.AddShaderStage(*vertex_shader, ShaderStage::Vertex);
         builder.AddShaderStage(*fragment_shader, ShaderStage::Fragment);

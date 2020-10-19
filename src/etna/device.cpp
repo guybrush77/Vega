@@ -11,8 +11,6 @@
 #include "renderpass.hpp"
 #include "shader.hpp"
 
-#include "utils/resource.hpp"
-
 #include <algorithm>
 #include <optional>
 #include <spdlog/spdlog.h>
@@ -266,11 +264,9 @@ UniqueDescriptorPool Device::CreateDescriptorPool(DescriptorType descriptor_type
     return DescriptorPool::Create(m_state->device, create_info);
 }
 
-UniqueShaderModule Device::CreateShaderModule(const char* shader_name)
+UniqueShaderModule Device::CreateShaderModule(const unsigned char* shader_data, size_t shader_size)
 {
     assert(m_state);
-
-    auto [shader_data, shader_size] = GetResource(shader_name);
 
     VkShaderModuleCreateInfo create_info = {
 

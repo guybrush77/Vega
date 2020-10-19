@@ -11,6 +11,7 @@ target_link_libraries(
     PRIVATE glm
     PRIVATE shaders
     PRIVATE spdlog
+    PRIVATE utils
 )
 
 # IDE specific

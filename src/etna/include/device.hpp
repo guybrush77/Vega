@@ -36,7 +36,7 @@ class Device {
     auto CreateDescriptorPool(DescriptorType descriptor_type, uint32_t size, uint32_t max_sets = 0)
         -> UniqueDescriptorPool;
 
-    auto CreateShaderModule(const char* shader_name) -> UniqueShaderModule;
+    auto CreateShaderModule(const unsigned char* shader_data, size_t shader_size) -> UniqueShaderModule;
 
     auto CreateBuffer(std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage) -> UniqueBuffer;
 
