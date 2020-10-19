@@ -98,7 +98,7 @@ AttachmentID RenderPassBuilder::AddAttachment(
 ReferenceID RenderPassBuilder::AddReference(AttachmentID attachment_id, ImageLayout image_layout)
 {
     m_references.push_back({ attachment_id.value, GetVk(image_layout) });
-    return m_references.size() - 1;
+    return ReferenceID(m_references.size() - 1);
 }
 
 void RenderPassBuilder::AddSubpass(VkSubpassDescription subpass_description)

@@ -40,7 +40,7 @@ struct composable_flags : std::false_type {};
 template <typename>
 class Mask;
 
-enum class QueueFamily { Graphics, Transfer, Compute };
+enum class QueueFamily { Graphics, Presentation, Transfer, Compute };
 
 enum class MemoryUsage { Unknown, GpuOnly, CpuOnly, CpuToGpu, GpuToCpu, CpuCopy, GpuLazilyAllocated };
 
@@ -846,13 +846,13 @@ constexpr DstT narrow_cast(SrcT src)
 }
 
 struct AttachmentID final {
-    constexpr AttachmentID(uint32_t val) noexcept : value(val) {}
-    constexpr AttachmentID(size_t val) : value(narrow_cast<uint32_t>(val)) {}
+    explicit constexpr AttachmentID(uint32_t val) noexcept : value(val) {}
+    explicit constexpr AttachmentID(size_t val) : value(narrow_cast<uint32_t>(val)) {}
     uint32_t value;
 };
 
 struct ReferenceID final {
-    constexpr ReferenceID(size_t val) noexcept : value(val) {}
+    explicit constexpr ReferenceID(size_t val) noexcept : value(val) {}
     size_t value;
 };
 
@@ -866,11 +866,13 @@ class Device;
 class Framebuffer;
 class Image2D;
 class ImageView2D;
+class Instance;
 class Pipeline;
 class PipelineLayout;
 class Queue;
 class RenderPass;
 class ShaderModule;
+class SurfaceKHR;
 class WriteDescriptorSet;
 
 using UniqueBuffer              = UniqueHandle<Buffer>;
@@ -881,10 +883,12 @@ using UniqueDescriptorSetLayout = UniqueHandle<DescriptorSetLayout>;
 using UniqueDevice              = UniqueHandle<Device>;
 using UniqueFramebuffer         = UniqueHandle<Framebuffer>;
 using UniqueImage2D             = UniqueHandle<Image2D>;
+using UniqueInstance            = UniqueHandle<Instance>;
 using UniqueImageView2D         = UniqueHandle<ImageView2D>;
 using UniquePipeline            = UniqueHandle<Pipeline>;
 using UniquePipelineLayout      = UniqueHandle<PipelineLayout>;
 using UniqueRenderPass          = UniqueHandle<RenderPass>;
 using UniqueShaderModule        = UniqueHandle<ShaderModule>;
+using UniqueSurfaceKHR          = UniqueHandle<SurfaceKHR>;
 
 } // namespace etna

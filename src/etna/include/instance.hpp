@@ -39,6 +39,7 @@ class Instance {
     bool operator!=(const Instance& rhs) const noexcept { return m_state != rhs.m_state; }
 
     UniqueDevice CreateDevice();
+    UniqueDevice CreateDevice(SurfaceKHR surface);
 
   private:
     template <typename>

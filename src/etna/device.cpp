@@ -13,7 +13,7 @@
 
 #include "utils/resource.hpp"
 
-#include <array>
+#include <algorithm>
 #include <optional>
 #include <spdlog/spdlog.h>
 
@@ -29,6 +29,7 @@ struct QueueInfo final {
 
 struct QueueIndices final {
     QueueInfo graphics;
+    QueueInfo presentation;
     QueueInfo compute;
     QueueInfo transfer;
 };
@@ -55,7 +56,18 @@ static VkPhysicalDevice GetGpu(VkInstance instance)
     return gpus[0];
 }
 
-static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
+static bool IsPresentationSupported(VkPhysicalDevice gpu, uint32_t queue_family_index, VkSurfaceKHR surface)
+{
+    VkBool32 supported = false;
+
+    if (surface) {
+        vkGetPhysicalDeviceSurfaceSupportKHR(gpu, queue_family_index, surface, &supported);
+    }
+
+    return supported;
+}
+
+static QueueIndices GetQueueIndices(VkPhysicalDevice gpu, VkSurfaceKHR surface)
 {
     using etna::throw_runtime_error;
 
@@ -72,6 +84,9 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
     const auto mask = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
 
     std::optional<QueueInfo> graphics;
+
+    std::optional<QueueInfo> presentation;
+    std::optional<QueueInfo> graphics_presentation;
 
     std::optional<QueueInfo> compute;
     std::optional<QueueInfo> dedicated_compute;
@@ -93,6 +108,15 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
         if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
             if (!graphics.has_value() || queue_count > graphics->queue_count) {
                 graphics = queue_info;
+            }
+        }
+
+        if (IsPresentationSupported(gpu, family_index, surface)) {
+            presentation = queue_info;
+            if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
+                if (false == graphics_presentation.has_value()) {
+                    graphics_presentation = queue_info;
+                }
             }
         }
 
@@ -133,6 +157,17 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
         throw_runtime_error("Failed to detect GPU graphics queue!");
     }
 
+    if (surface) {
+        if (graphics_presentation.has_value()) {
+            presentation = graphics_presentation;
+        }
+        if (false == presentation.has_value()) {
+            throw_runtime_error("Failed to detect GPU presentation queue!");
+        }
+    } else {
+        presentation = QueueInfo{ VK_QUEUE_FAMILY_IGNORED, 0, 0 };
+    }
+
     if (dedicated_compute.has_value()) {
         compute = dedicated_compute;
     } else if (mixed_compute.has_value()) {
@@ -157,44 +192,41 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
         throw_runtime_error("Failed to detect GPU transfer queue!");
     }
 
-    return { graphics.value(), compute.value(), transfer.value() };
+    return { graphics.value(), presentation.value(), compute.value(), transfer.value() };
 }
 
 static auto GetDeviceQueueCreateInfos(const QueueIndices& queue_indices)
 {
     static const float queue_priority = 1.0f;
 
-    VkDeviceQueueCreateInfo graphics_queue_create_info = {
+    VkDeviceQueueCreateInfo prototype = {
 
         .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .pNext            = nullptr,
         .flags            = {},
-        .queueFamilyIndex = queue_indices.graphics.family_index,
+        .queueFamilyIndex = {},
         .queueCount       = 1,
         .pQueuePriorities = &queue_priority
     };
 
-    VkDeviceQueueCreateInfo transfer_queue_create_info = {
+    auto family_indices = std::vector{ queue_indices.graphics.family_index,
+                                       queue_indices.presentation.family_index,
+                                       queue_indices.transfer.family_index,
+                                       queue_indices.compute.family_index };
 
-        .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .pNext            = nullptr,
-        .flags            = {},
-        .queueFamilyIndex = queue_indices.transfer.family_index,
-        .queueCount       = 1,
-        .pQueuePriorities = &queue_priority
-    };
+    // Remove duplicates (TODO: use ranges)
+    family_indices.erase(
+        std::remove(family_indices.begin(), family_indices.end(), VK_QUEUE_FAMILY_IGNORED),
+        family_indices.end());
+    std::sort(family_indices.begin(), family_indices.end());
+    family_indices.erase(std::unique(family_indices.begin(), family_indices.end()), family_indices.end());
 
-    VkDeviceQueueCreateInfo compute_queue_create_info = {
+    std::vector<VkDeviceQueueCreateInfo> create_infos(family_indices.size(), prototype);
 
-        .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .pNext            = nullptr,
-        .flags            = {},
-        .queueFamilyIndex = queue_indices.compute.family_index,
-        .queueCount       = 1,
-        .pQueuePriorities = &queue_priority
-    };
+    for (size_t i = 0; i < family_indices.size(); ++i) {
+        create_infos[i].queueFamilyIndex = family_indices[i];
+    }
 
-    std::array create_infos = { graphics_queue_create_info, transfer_queue_create_info, compute_queue_create_info };
     return create_infos;
 }
 
@@ -427,10 +459,10 @@ void Device::WaitIdle()
     vkDeviceWaitIdle(m_state->device);
 }
 
-UniqueDevice Device::Create(VkInstance instance)
+UniqueDevice Device::Create(VkInstance instance, VkSurfaceKHR surface)
 {
     auto gpu                = GetGpu(instance);
-    auto queue_indices      = GetQueueIndices(gpu);
+    auto queue_indices      = GetQueueIndices(gpu, surface);
     auto queue_create_infos = GetDeviceQueueCreateInfos(queue_indices);
 
     VkDeviceCreateInfo device_create_info = {
@@ -504,6 +536,9 @@ uint32_t Device::GetQueueFamilyIndex(QueueFamily queue_family) const noexcept
     switch (queue_family) {
     case QueueFamily::Graphics:
         family_index = m_state->indices.graphics.family_index;
+        break;
+    case QueueFamily::Presentation:
+        family_index = m_state->indices.presentation.family_index;
         break;
     case QueueFamily::Compute:
         family_index = m_state->indices.compute.family_index;

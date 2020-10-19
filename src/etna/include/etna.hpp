@@ -10,3 +10,4 @@
 #include "queue.hpp"
 #include "renderpass.hpp"
 #include "shader.hpp"
+#include "surface.hpp"

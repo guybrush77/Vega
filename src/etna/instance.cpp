@@ -1,5 +1,6 @@
 #include "instance.hpp"
 #include "device.hpp"
+#include "surface.hpp"
 
 #include <algorithm>
 #include <spdlog/spdlog.h>
@@ -146,7 +147,13 @@ Instance::operator VkInstance() const noexcept
 UniqueDevice Instance::CreateDevice()
 {
     assert(m_state);
-    return Device::Create(m_state->instance);
+    return Device::Create(m_state->instance, nullptr);
+}
+
+UniqueDevice Instance::CreateDevice(SurfaceKHR surface)
+{
+    assert(m_state);
+    return Device::Create(m_state->instance, surface);
 }
 
 UniqueInstance Instance::Create(
