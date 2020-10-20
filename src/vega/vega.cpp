@@ -146,7 +146,8 @@ int main()
     }
 
     auto instance = CreateInstance("Vega", Version{ 0, 1, 0 }, extensions, layers);
-    auto device   = instance->CreateDevice();
+    auto gpus     = instance->EnumeratePhysicalDevices();
+    auto device   = instance->CreateDevice(gpus.front());
 
     auto mesh = LoadMesh("C:/Users/slobodan/Documents/Programming/Vega/data/models/suzanne.obj");
 

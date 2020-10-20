@@ -144,16 +144,34 @@ Instance::operator VkInstance() const noexcept
     return m_state ? m_state->instance : VkInstance{};
 }
 
-UniqueDevice Instance::CreateDevice()
+#include <algorithm>
+
+std::vector<PhysicalDevice> Instance::EnumeratePhysicalDevices() const
 {
     assert(m_state);
-    return Device::Create(m_state->instance, nullptr);
+
+    uint32_t count = 0;
+    vkEnumeratePhysicalDevices(m_state->instance, &count, nullptr);
+
+    if (count == 0) {
+        throw_runtime_error("Failed to detect GPU!");
+    }
+
+    std::vector<VkPhysicalDevice> vk_physical_devices(count);
+    vkEnumeratePhysicalDevices(m_state->instance, &count, vk_physical_devices.data());
+
+    std::vector<PhysicalDevice> physical_devices(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        physical_devices[i] = vk_physical_devices[i];
+    }
+
+    return physical_devices;
 }
 
-UniqueDevice Instance::CreateDevice(SurfaceKHR surface)
+UniqueDevice Instance::CreateDevice(PhysicalDevice physical_device)
 {
     assert(m_state);
-    return Device::Create(m_state->instance, surface);
+    return Device::Create(m_state->instance, physical_device);
 }
 
 UniqueInstance Instance::Create(

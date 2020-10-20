@@ -27,7 +27,6 @@ struct QueueInfo final {
 
 struct QueueIndices final {
     QueueInfo graphics;
-    QueueInfo presentation;
     QueueInfo compute;
     QueueInfo transfer;
 };
@@ -38,34 +37,7 @@ struct EtnaDevice_T final {
     VmaAllocator allocator;
 };
 
-static VkPhysicalDevice GetGpu(VkInstance instance)
-{
-    uint32_t count = 0;
-    vkEnumeratePhysicalDevices(instance, &count, nullptr);
-
-    if (count == 0) {
-        etna::throw_runtime_error("Failed to detect GPU!");
-    }
-
-    std::vector<VkPhysicalDevice> gpus(count);
-    vkEnumeratePhysicalDevices(instance, &count, gpus.data());
-
-    // TODO: pick the best device instead of picking the first available
-    return gpus[0];
-}
-
-static bool IsPresentationSupported(VkPhysicalDevice gpu, uint32_t queue_family_index, VkSurfaceKHR surface)
-{
-    VkBool32 supported = false;
-
-    if (surface) {
-        vkGetPhysicalDeviceSurfaceSupportKHR(gpu, queue_family_index, surface, &supported);
-    }
-
-    return supported;
-}
-
-static QueueIndices GetQueueIndices(VkPhysicalDevice gpu, VkSurfaceKHR surface)
+static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
 {
     using etna::throw_runtime_error;
 
@@ -82,9 +54,6 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu, VkSurfaceKHR surface)
     const auto mask = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
 
     std::optional<QueueInfo> graphics;
-
-    std::optional<QueueInfo> presentation;
-    std::optional<QueueInfo> graphics_presentation;
 
     std::optional<QueueInfo> compute;
     std::optional<QueueInfo> dedicated_compute;
@@ -106,15 +75,6 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu, VkSurfaceKHR surface)
         if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
             if (!graphics.has_value() || queue_count > graphics->queue_count) {
                 graphics = queue_info;
-            }
-        }
-
-        if (IsPresentationSupported(gpu, family_index, surface)) {
-            presentation = queue_info;
-            if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
-                if (false == graphics_presentation.has_value()) {
-                    graphics_presentation = queue_info;
-                }
             }
         }
 
@@ -155,17 +115,6 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu, VkSurfaceKHR surface)
         throw_runtime_error("Failed to detect GPU graphics queue!");
     }
 
-    if (surface) {
-        if (graphics_presentation.has_value()) {
-            presentation = graphics_presentation;
-        }
-        if (false == presentation.has_value()) {
-            throw_runtime_error("Failed to detect GPU presentation queue!");
-        }
-    } else {
-        presentation = QueueInfo{ VK_QUEUE_FAMILY_IGNORED, 0, 0 };
-    }
-
     if (dedicated_compute.has_value()) {
         compute = dedicated_compute;
     } else if (mixed_compute.has_value()) {
@@ -190,7 +139,7 @@ static QueueIndices GetQueueIndices(VkPhysicalDevice gpu, VkSurfaceKHR surface)
         throw_runtime_error("Failed to detect GPU transfer queue!");
     }
 
-    return { graphics.value(), presentation.value(), compute.value(), transfer.value() };
+    return { graphics.value(), compute.value(), transfer.value() };
 }
 
 static auto GetDeviceQueueCreateInfos(const QueueIndices& queue_indices)
@@ -208,7 +157,6 @@ static auto GetDeviceQueueCreateInfos(const QueueIndices& queue_indices)
     };
 
     auto family_indices = std::vector{ queue_indices.graphics.family_index,
-                                       queue_indices.presentation.family_index,
                                        queue_indices.transfer.family_index,
                                        queue_indices.compute.family_index };
 
@@ -249,7 +197,7 @@ UniqueDescriptorPool Device::CreateDescriptorPool(DescriptorType descriptor_type
 {
     assert(m_state);
 
-    VkDescriptorPoolSize vk_pool_size = DescriptorPoolSize{ descriptor_type, size };
+    VkDescriptorPoolSize vk_pool_size = DescriptorPoolSize{ GetVk(descriptor_type), size };
 
     VkDescriptorPoolCreateInfo create_info = {
 
@@ -455,13 +403,12 @@ void Device::WaitIdle()
     vkDeviceWaitIdle(m_state->device);
 }
 
-UniqueDevice Device::Create(VkInstance instance, VkSurfaceKHR surface)
+UniqueDevice Device::Create(VkInstance instance, VkPhysicalDevice physical_device)
 {
-    auto gpu                = GetGpu(instance);
-    auto queue_indices      = GetQueueIndices(gpu, surface);
+    auto queue_indices      = GetQueueIndices(physical_device);
     auto queue_create_infos = GetDeviceQueueCreateInfos(queue_indices);
 
-    VkDeviceCreateInfo device_create_info = {
+    VkDeviceCreateInfo create_info = {
 
         .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext                   = nullptr,
@@ -477,7 +424,7 @@ UniqueDevice Device::Create(VkInstance instance, VkSurfaceKHR surface)
 
     VkDevice device{};
 
-    if (auto result = vkCreateDevice(gpu, &device_create_info, nullptr, &device); result != VK_SUCCESS) {
+    if (auto result = vkCreateDevice(physical_device, &create_info, nullptr, &device); result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreateDevice error: {}", result).c_str());
     }
 
@@ -486,7 +433,7 @@ UniqueDevice Device::Create(VkInstance instance, VkSurfaceKHR surface)
     VmaAllocatorCreateInfo allocator_create_info = {
 
         .flags                       = {},
-        .physicalDevice              = gpu,
+        .physicalDevice              = physical_device,
         .device                      = device,
         .preferredLargeHeapBlockSize = {},
         .pAllocationCallbacks        = nullptr,
@@ -532,9 +479,6 @@ uint32_t Device::GetQueueFamilyIndex(QueueFamily queue_family) const noexcept
     switch (queue_family) {
     case QueueFamily::Graphics:
         family_index = m_state->indices.graphics.family_index;
-        break;
-    case QueueFamily::Presentation:
-        family_index = m_state->indices.presentation.family_index;
         break;
     case QueueFamily::Compute:
         family_index = m_state->indices.compute.family_index;

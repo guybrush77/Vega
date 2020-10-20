@@ -17,6 +17,12 @@
     struct composable_flags<##type##> : std::true_type {};                                                             \
     using type##Mask = Mask<##type##>;
 
+#define ETNA_DEFINE_VK_FLAGS_SUFFIXED(type)                                                                            \
+    inline constexpr auto GetVk(type val) noexcept { return static_cast<Vk##type>(val); }                              \
+    template <>                                                                                                        \
+    struct composable_flags<##type##> : std::true_type {};                                                             \
+    using type##Mask = Mask<##type##>;
+
 template <typename>
 struct etna_vertex_attribute_type_trait;
 
@@ -40,7 +46,7 @@ struct composable_flags : std::false_type {};
 template <typename>
 class Mask;
 
-enum class QueueFamily { Graphics, Presentation, Transfer, Compute };
+enum class QueueFamily { Graphics, Transfer, Compute };
 
 enum class MemoryUsage { Unknown, GpuOnly, CpuOnly, CpuToGpu, GpuToCpu, CpuCopy, GpuLazilyAllocated };
 
@@ -612,6 +618,16 @@ enum class Access : VkAccessFlags {
 
 ETNA_DEFINE_VK_FLAGS(Access)
 
+enum class QueueFlags : VkQueueFlags {
+    Graphics      = VK_QUEUE_GRAPHICS_BIT,
+    Compute       = VK_QUEUE_COMPUTE_BIT,
+    Transfer      = VK_QUEUE_TRANSFER_BIT,
+    SparseBinding = VK_QUEUE_SPARSE_BINDING_BIT,
+    Protected     = VK_QUEUE_PROTECTED_BIT
+};
+
+ETNA_DEFINE_VK_FLAGS_SUFFIXED(QueueFlags)
+
 enum class ImageAspect : VkImageAspectFlags {
     Color           = VK_IMAGE_ASPECT_COLOR_BIT,
     Depth           = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -673,44 +689,13 @@ requires composable_flags<T>::value inline constexpr auto operator|(T lhs, T rhs
     return Mask<T>(static_cast<mask_type>(lhs) | static_cast<mask_type>(rhs));
 }
 
-struct Offset2D final {
-    int32_t x;
-    int32_t y;
-
-    constexpr operator VkOffset2D() const noexcept { return { x, y }; }
-};
-
-struct Extent2D final {
-    uint32_t width;
-    uint32_t height;
-
-    constexpr operator VkExtent2D() const noexcept { return { width, height }; }
-};
-
-struct Rect2D final {
-    Offset2D offset;
-    Extent2D extent;
-
-    constexpr operator VkRect2D() const noexcept { return { { offset.x, offset.y }, { extent.width, extent.height } }; }
-};
-
-struct Viewport final {
-    float x;
-    float y;
-    float width;
-    float height;
-    float min_depth;
-    float max_depth;
-
-    constexpr operator VkViewport() const noexcept { return { x, y, width, height, min_depth, max_depth }; }
-};
-
-struct DescriptorPoolSize final {
-    DescriptorType type;
-    uint32_t       size;
-
-    constexpr operator VkDescriptorPoolSize() const noexcept { return { GetVk(type), size }; }
-};
+using Offset2D            = VkOffset2D;
+using Extent2D            = VkExtent2D;
+using Extent3D            = VkExtent3D;
+using Rect2D              = VkRect2D;
+using Viewport            = VkViewport;
+using ExtensionProperties = VkExtensionProperties;
+using DescriptorPoolSize  = VkDescriptorPoolSize;
 
 struct ClearColor final {
     constexpr ClearColor(float r, float g, float b, float a = 1.0f) noexcept

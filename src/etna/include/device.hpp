@@ -63,7 +63,7 @@ class Device {
 
     Device(EtnaDevice device) : m_state(device) {}
 
-    static auto Create(VkInstance instance, VkSurfaceKHR surface) -> UniqueDevice;
+    static auto Create(VkInstance instance, VkPhysicalDevice physical_device) -> UniqueDevice;
 
     void Destroy() noexcept;
 

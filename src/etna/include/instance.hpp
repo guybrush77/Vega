@@ -3,6 +3,7 @@
 #include "core.hpp"
 
 #include <span>
+#include <vector>
 
 ETNA_DEFINE_HANDLE(EtnaInstance)
 
@@ -14,17 +15,31 @@ struct Version {
     uint32_t patch = 0;
 };
 
-class Device;
-class Instance;
-
-using UniqueDevice   = UniqueHandle<Device>;
-using UniqueInstance = UniqueHandle<Instance>;
-
 auto CreateInstance(
     const char*            application_name,
     Version                application_version,
     std::span<const char*> extensions,
     std::span<const char*> layers) -> UniqueInstance;
+
+class PhysicalDevice {
+  public:
+    PhysicalDevice() noexcept {}
+    PhysicalDevice(std::nullptr_t) noexcept {}
+    PhysicalDevice(VkPhysicalDevice physical_device) noexcept : m_physical_device(physical_device) {}
+
+    operator VkPhysicalDevice() const noexcept { return m_physical_device; }
+
+    explicit operator bool() const noexcept { return m_physical_device != nullptr; }
+
+    bool operator==(const PhysicalDevice& rhs) const noexcept { return m_physical_device == rhs.m_physical_device; }
+    bool operator!=(const PhysicalDevice& rhs) const noexcept { return m_physical_device != rhs.m_physical_device; }
+
+    // std::vector<QueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties() const;
+    // std::vector<ExtensionProperties>   EnumerateDeviceExtensionProperties(const char* layer_name = nullptr) const;
+
+  private:
+    VkPhysicalDevice m_physical_device{};
+};
 
 class Instance {
   public:
@@ -38,8 +53,9 @@ class Instance {
     bool operator==(const Instance& rhs) const noexcept { return m_state == rhs.m_state; }
     bool operator!=(const Instance& rhs) const noexcept { return m_state != rhs.m_state; }
 
-    UniqueDevice CreateDevice();
-    UniqueDevice CreateDevice(SurfaceKHR surface);
+    std::vector<PhysicalDevice> EnumeratePhysicalDevices() const;
+
+    UniqueDevice CreateDevice(PhysicalDevice physical_device);
 
   private:
     template <typename>
