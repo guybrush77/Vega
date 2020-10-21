@@ -34,8 +34,8 @@ class PhysicalDevice {
     bool operator==(const PhysicalDevice& rhs) const noexcept { return m_physical_device == rhs.m_physical_device; }
     bool operator!=(const PhysicalDevice& rhs) const noexcept { return m_physical_device != rhs.m_physical_device; }
 
-    // std::vector<QueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties() const;
-    // std::vector<ExtensionProperties>   EnumerateDeviceExtensionProperties(const char* layer_name = nullptr) const;
+    std::vector<QueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties() const;
+    std::vector<ExtensionProperties>   EnumerateDeviceExtensionProperties(const char* layer_name = nullptr) const;
 
   private:
     VkPhysicalDevice m_physical_device{};
@@ -55,7 +55,7 @@ class Instance {
 
     std::vector<PhysicalDevice> EnumeratePhysicalDevices() const;
 
-    UniqueDevice CreateDevice(PhysicalDevice physical_device);
+    UniqueDevice CreateDevice(PhysicalDevice physical_device, const VkDeviceCreateInfo& device_create_info);
 
   private:
     template <typename>

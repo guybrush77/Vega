@@ -62,7 +62,7 @@ struct PipelineBuilder final {
 
     void AddDynamicState(DynamicState dynamic_state);
 
-    void SetDepthState(bool depth_test_enable, bool depth_write_enable, CompareOp compare_op) noexcept;
+    void SetDepthState(DepthTest depth_test, DepthWrite depth_write, CompareOp compare_op) noexcept;
 
     VkGraphicsPipelineCreateInfo create_info{};
 

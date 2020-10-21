@@ -13,7 +13,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/matrix.hpp>
 
-#include <array>
+#include <algorithm>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -127,6 +128,121 @@ Mesh LoadMesh(const char* filepath)
     return { std::move(shape.name), { std::move(vertices) }, { std::move(indices) } };
 }
 
+struct QueueInfo final {
+    uint32_t         family_index;
+    etna::QueueFlags flags;
+    uint32_t         count;
+};
+
+struct QueueFamilies final {
+    QueueInfo graphics;
+    QueueInfo compute;
+    QueueInfo transfer;
+};
+
+struct Queues final {
+    etna::Queue graphics;
+    etna::Queue compute;
+    etna::Queue transfer;
+};
+
+QueueFamilies GetQueueFamilies(etna::PhysicalDevice gpu)
+{
+    using namespace etna;
+
+    auto properties = gpu.GetPhysicalDeviceQueueFamilyProperties();
+
+    constexpr auto mask = QueueFlags::Graphics | QueueFlags::Compute | QueueFlags::Transfer;
+
+    std::optional<QueueInfo> graphics;
+
+    std::optional<QueueInfo> compute;
+    std::optional<QueueInfo> dedicated_compute;
+    std::optional<QueueInfo> graphics_compute;
+    std::optional<QueueInfo> mixed_compute;
+
+    std::optional<QueueInfo> transfer;
+    std::optional<QueueInfo> dedicated_transfer;
+    std::optional<QueueInfo> graphics_transfer;
+    std::optional<QueueInfo> mixed_transfer;
+
+    for (std::size_t i = 0; i != properties.size(); ++i) {
+        const auto family_index = narrow_cast<uint32_t>(i);
+        const auto queue_flags  = properties[i].queueFlags;
+        const auto queue_count  = properties[i].queueCount;
+        const auto masked_flags = queue_flags & mask;
+        const auto queue_info   = QueueInfo{ family_index, queue_flags, queue_count };
+
+        if (masked_flags & QueueFlags::Graphics) {
+            if (!graphics.has_value() || queue_count > graphics->count) {
+                graphics = queue_info;
+            }
+        }
+
+        if (masked_flags == QueueFlags::Compute) {
+            if (!dedicated_compute.has_value() || queue_count > dedicated_compute->count) {
+                dedicated_compute = queue_info;
+            }
+        } else if (masked_flags & QueueFlags::Compute) {
+            if (masked_flags & QueueFlags::Graphics) {
+                if (!graphics_compute.has_value() || queue_count > graphics_compute->count) {
+                    graphics_compute = queue_info;
+                }
+            } else {
+                if (!mixed_compute.has_value() || queue_count > mixed_compute->count) {
+                    mixed_compute = queue_info;
+                }
+            }
+        }
+
+        if (masked_flags == QueueFlags::Transfer) {
+            if (!dedicated_transfer.has_value() || queue_count > dedicated_transfer->count) {
+                dedicated_transfer = queue_info;
+            }
+        } else if (masked_flags & QueueFlags::Transfer) {
+            if (masked_flags & QueueFlags::Graphics) {
+                if (!graphics_transfer.has_value() || queue_count > graphics_transfer->count) {
+                    graphics_transfer = queue_info;
+                }
+            } else {
+                if (!mixed_transfer.has_value() || queue_count > mixed_transfer->count) {
+                    mixed_transfer = queue_info;
+                }
+            }
+        }
+    }
+
+    if (false == graphics.has_value()) {
+        throw_runtime_error("Failed to detect GPU graphics queue!");
+    }
+
+    if (dedicated_compute.has_value()) {
+        compute = dedicated_compute;
+    } else if (mixed_compute.has_value()) {
+        compute = mixed_compute;
+    } else if (graphics_compute.has_value()) {
+        compute = graphics_compute;
+    }
+
+    if (false == compute.has_value()) {
+        throw_runtime_error("Failed to detect GPU compute queue!");
+    }
+
+    if (dedicated_transfer.has_value()) {
+        transfer = dedicated_transfer;
+    } else if (mixed_transfer.has_value()) {
+        transfer = mixed_transfer;
+    } else if (graphics_transfer.has_value()) {
+        transfer = graphics_transfer;
+    }
+
+    if (false == transfer.has_value()) {
+        throw_runtime_error("Failed to detect GPU transfer queue!");
+    }
+
+    return { graphics.value(), compute.value(), transfer.value() };
+}
+
 int main()
 {
 #ifdef NDEBUG
@@ -147,7 +263,29 @@ int main()
 
     auto instance = CreateInstance("Vega", Version{ 0, 1, 0 }, extensions, layers);
     auto gpus     = instance->EnumeratePhysicalDevices();
-    auto device   = instance->CreateDevice(gpus.front());
+    auto gpu      = gpus.front();
+
+    auto [graphics, compute, transfer] = GetQueueFamilies(gpu);
+
+    UniqueDevice device;
+    {
+        auto device_state = device->CreateDeviceBuilder();
+
+        device_state.AddQueue(graphics.family_index, 1);
+        device_state.AddQueue(compute.family_index, 1);
+        device_state.AddQueue(transfer.family_index, 1);
+
+        device_state.AddEnabledLayer(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+        device = instance->CreateDevice(gpu, device_state);
+    }
+
+    Queues queues;
+    {
+        queues.graphics = device->GetQueue(graphics.family_index);
+        queues.compute  = device->GetQueue(compute.family_index);
+        queues.transfer = device->GetQueue(transfer.family_index);
+    }
 
     auto mesh = LoadMesh("C:/Users/slobodan/Documents/Programming/Vega/data/models/suzanne.obj");
 
@@ -178,7 +316,7 @@ int main()
             BufferUsage::IndexBuffer | BufferUsage::TransferDst,
             MemoryUsage::GpuOnly);
 
-        auto cmd_pool   = device->CreateCommandPool(QueueFamily::Transfer, CommandPoolCreate::Transient);
+        auto cmd_pool   = device->CreateCommandPool(transfer.family_index, CommandPoolCreate::Transient);
         auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
 
         cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
@@ -186,7 +324,7 @@ int main()
         cmd_buffer->CopyBuffer(*src_ibo, *index_buffer, mesh.indices.size());
         cmd_buffer->End();
 
-        device->GetQueue(QueueFamily::Transfer).Submit(*cmd_buffer);
+        queues.transfer.Submit(*cmd_buffer);
         device->WaitIdle();
     }
 
@@ -284,7 +422,7 @@ int main()
             offsetof(VertexPN, normal));
         builder.AddViewport(viewport);
         builder.AddScissor(Rect2D{ Offset2D{ 0, 0 }, image->Extent2D() });
-        builder.SetDepthState(true, true, CompareOp::Less);
+        builder.SetDepthState(DepthTest::Enable, DepthWrite::Enable, CompareOp::Less);
         builder.AddColorBlendAttachmentBaseState();
 
         pipeline = device->CreateGraphicsPipeline(builder);
@@ -320,7 +458,7 @@ int main()
         auto clear_color   = ClearColor::Transparent;
         auto depth_stencil = ClearDepthStencil::Default;
 
-        auto cmd_pool   = device->CreateCommandPool(QueueFamily::Graphics, CommandPoolCreate::Transient);
+        auto cmd_pool   = device->CreateCommandPool(graphics.family_index, CommandPoolCreate::Transient);
         auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
 
         cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
@@ -333,7 +471,7 @@ int main()
         cmd_buffer->EndRenderPass();
         cmd_buffer->End();
 
-        device->GetQueue(QueueFamily::Graphics).Submit(*cmd_buffer);
+        queues.graphics.Submit(*cmd_buffer);
         device->WaitIdle();
     }
 
@@ -347,7 +485,7 @@ int main()
             MemoryUsage::CpuOnly,
             ImageTiling::Linear);
 
-        auto cmd_pool   = device->CreateCommandPool(QueueFamily::Transfer, CommandPoolCreate::Transient);
+        auto cmd_pool   = device->CreateCommandPool(transfer.family_index, CommandPoolCreate::Transient);
         auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
 
         cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
@@ -377,7 +515,7 @@ int main()
             ImageAspect::Color);
         cmd_buffer->End();
 
-        device->GetQueue(QueueFamily::Transfer).Submit(*cmd_buffer);
+        queues.transfer.Submit(*cmd_buffer);
         device->WaitIdle();
     }
 

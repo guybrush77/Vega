@@ -2,23 +2,41 @@
 
 #include "core.hpp"
 
-ETNA_DEFINE_HANDLE(EtnaDevice)
+VK_DEFINE_HANDLE(VmaAllocator)
 
 namespace etna {
+
+struct DeviceBuilder final {
+    DeviceBuilder() noexcept;
+
+    constexpr operator VkDeviceCreateInfo() const noexcept { return create_info; }
+
+    void AddQueue(uint32_t queue_family_index, uint32_t queue_count);
+
+    void AddEnabledLayer(const char* layer_name);
+
+    VkDeviceCreateInfo create_info{};
+
+  private:
+    std::vector<VkDeviceQueueCreateInfo> m_device_queues;
+    std::vector<const char*>             m_enabled_layer_names;
+};
 
 class Device {
   public:
     Device() noexcept {}
     Device(std::nullptr_t) noexcept {}
 
-    operator VkDevice() const noexcept;
+    operator VkDevice() const noexcept { return m_device; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    explicit operator bool() const noexcept { return m_device != nullptr; }
 
-    bool operator==(const Device& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const Device& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const Device& rhs) const noexcept { return m_device == rhs.m_device; }
+    bool operator!=(const Device& rhs) const noexcept { return m_device != rhs.m_device; }
 
-    auto CreateCommandPool(QueueFamily queue_family, CommandPoolCreate command_pool_create_flags = {})
+    auto CreateDeviceBuilder() const noexcept { return DeviceBuilder{}; }
+
+    auto CreateCommandPool(uint32_t queue_family_index, CommandPoolCreate command_pool_create_flags = {})
         -> UniqueCommandPool;
 
     auto CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent) -> UniqueFramebuffer;
@@ -49,7 +67,7 @@ class Device {
 
     auto CreateImageView(Image2D image, ImageAspect image_aspect_flags) -> UniqueImageView2D;
 
-    auto GetQueue(QueueFamily queue_family) const noexcept -> Queue;
+    auto GetQueue(uint32_t queue_family_index) const noexcept -> Queue;
 
     void UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set);
 
@@ -61,17 +79,15 @@ class Device {
 
     friend class Instance;
 
-    Device(EtnaDevice device) : m_state(device) {}
+    Device(VkDevice device, VmaAllocator allocator) noexcept : m_device(device), m_allocator(allocator) {}
 
-    static auto Create(VkInstance instance, VkPhysicalDevice physical_device) -> UniqueDevice;
+    static auto Create(VkInstance instance, VkPhysicalDevice physical_device, const VkDeviceCreateInfo& create_info)
+        -> UniqueDevice;
 
     void Destroy() noexcept;
 
-    uint32_t GetQueueFamilyIndex(QueueFamily queue_family) const noexcept;
-
-    operator EtnaDevice() const noexcept { return m_state; }
-
-    EtnaDevice m_state{};
+    VkDevice     m_device{};
+    VmaAllocator m_allocator{};
 };
 
 } // namespace etna

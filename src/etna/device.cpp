@@ -11,191 +11,28 @@
 #include "renderpass.hpp"
 #include "shader.hpp"
 
-#include <algorithm>
-#include <optional>
 #include <spdlog/spdlog.h>
 
 #define COMPONENT "Etna: "
-
-namespace {
-
-struct QueueInfo final {
-    uint32_t family_index = 0;
-    uint32_t queue_flags  = 0;
-    uint32_t queue_count  = 0;
-};
-
-struct QueueIndices final {
-    QueueInfo graphics;
-    QueueInfo compute;
-    QueueInfo transfer;
-};
-
-struct EtnaDevice_T final {
-    VkDevice     device;
-    QueueIndices indices;
-    VmaAllocator allocator;
-};
-
-static QueueIndices GetQueueIndices(VkPhysicalDevice gpu)
-{
-    using etna::throw_runtime_error;
-
-    uint32_t count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, nullptr);
-
-    if (count == 0) {
-        throw_runtime_error("Failed to detect GPU device queues!");
-    }
-
-    std::vector<VkQueueFamilyProperties> properties(count);
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, properties.data());
-
-    const auto mask = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
-
-    std::optional<QueueInfo> graphics;
-
-    std::optional<QueueInfo> compute;
-    std::optional<QueueInfo> dedicated_compute;
-    std::optional<QueueInfo> graphics_compute;
-    std::optional<QueueInfo> mixed_compute;
-
-    std::optional<QueueInfo> transfer;
-    std::optional<QueueInfo> dedicated_transfer;
-    std::optional<QueueInfo> graphics_transfer;
-    std::optional<QueueInfo> mixed_transfer;
-
-    for (std::size_t i = 0; i != properties.size(); ++i) {
-        const auto family_index = etna::narrow_cast<uint32_t>(i);
-        const auto queue_flags  = properties[i].queueFlags;
-        const auto queue_count  = properties[i].queueCount;
-        const auto masked_flags = queue_flags & mask;
-        const auto queue_info   = QueueInfo{ family_index, queue_flags, queue_count };
-
-        if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
-            if (!graphics.has_value() || queue_count > graphics->queue_count) {
-                graphics = queue_info;
-            }
-        }
-
-        if (masked_flags == VK_QUEUE_COMPUTE_BIT) {
-            if (!dedicated_compute.has_value() || queue_count > dedicated_compute->queue_count) {
-                dedicated_compute = queue_info;
-            }
-        } else if (masked_flags & VK_QUEUE_COMPUTE_BIT) {
-            if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
-                if (!graphics_compute.has_value() || queue_count > graphics_compute->queue_count) {
-                    graphics_compute = queue_info;
-                }
-            } else {
-                if (!mixed_compute.has_value() || queue_count > mixed_compute->queue_count) {
-                    mixed_compute = queue_info;
-                }
-            }
-        }
-
-        if (masked_flags == VK_QUEUE_TRANSFER_BIT) {
-            if (!dedicated_transfer.has_value() || queue_count > dedicated_transfer->queue_count) {
-                dedicated_transfer = queue_info;
-            }
-        } else if (masked_flags & VK_QUEUE_TRANSFER_BIT) {
-            if (masked_flags & VK_QUEUE_GRAPHICS_BIT) {
-                if (!graphics_transfer.has_value() || queue_count > graphics_transfer->queue_count) {
-                    graphics_transfer = queue_info;
-                }
-            } else {
-                if (!mixed_transfer.has_value() || queue_count > mixed_transfer->queue_count) {
-                    mixed_transfer = queue_info;
-                }
-            }
-        }
-    }
-
-    if (false == graphics.has_value()) {
-        throw_runtime_error("Failed to detect GPU graphics queue!");
-    }
-
-    if (dedicated_compute.has_value()) {
-        compute = dedicated_compute;
-    } else if (mixed_compute.has_value()) {
-        compute = mixed_compute;
-    } else if (graphics_compute.has_value()) {
-        compute = graphics_compute;
-    }
-
-    if (false == compute.has_value()) {
-        throw_runtime_error("Failed to detect GPU compute queue!");
-    }
-
-    if (dedicated_transfer.has_value()) {
-        transfer = dedicated_transfer;
-    } else if (mixed_transfer.has_value()) {
-        transfer = mixed_transfer;
-    } else if (graphics_transfer.has_value()) {
-        transfer = graphics_transfer;
-    }
-
-    if (false == transfer.has_value()) {
-        throw_runtime_error("Failed to detect GPU transfer queue!");
-    }
-
-    return { graphics.value(), compute.value(), transfer.value() };
-}
-
-static auto GetDeviceQueueCreateInfos(const QueueIndices& queue_indices)
-{
-    static const float queue_priority = 1.0f;
-
-    VkDeviceQueueCreateInfo prototype = {
-
-        .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .pNext            = nullptr,
-        .flags            = {},
-        .queueFamilyIndex = {},
-        .queueCount       = 1,
-        .pQueuePriorities = &queue_priority
-    };
-
-    auto family_indices = std::vector{ queue_indices.graphics.family_index,
-                                       queue_indices.transfer.family_index,
-                                       queue_indices.compute.family_index };
-
-    // Remove duplicates (TODO: use ranges)
-    family_indices.erase(
-        std::remove(family_indices.begin(), family_indices.end(), VK_QUEUE_FAMILY_IGNORED),
-        family_indices.end());
-    std::sort(family_indices.begin(), family_indices.end());
-    family_indices.erase(std::unique(family_indices.begin(), family_indices.end()), family_indices.end());
-
-    std::vector<VkDeviceQueueCreateInfo> create_infos(family_indices.size(), prototype);
-
-    for (size_t i = 0; i < family_indices.size(); ++i) {
-        create_infos[i].queueFamilyIndex = family_indices[i];
-    }
-
-    return create_infos;
-}
-
-} // namespace
 
 namespace etna {
 
 UniqueRenderPass Device::CreateRenderPass(const VkRenderPassCreateInfo& create_info)
 {
-    assert(m_state);
-    return RenderPass::Create(m_state->device, create_info);
+    assert(m_device);
+    return RenderPass::Create(m_device, create_info);
 }
 
 UniqueDescriptorSetLayout Device::CreateDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& create_info)
 {
-    assert(m_state);
+    assert(m_device);
 
-    return DescriptorSetLayout::Create(m_state->device, create_info);
+    return DescriptorSetLayout::Create(m_device, create_info);
 }
 
 UniqueDescriptorPool Device::CreateDescriptorPool(DescriptorType descriptor_type, uint32_t size, uint32_t max_sets)
 {
-    assert(m_state);
+    assert(m_device);
 
     VkDescriptorPoolSize vk_pool_size = DescriptorPoolSize{ GetVk(descriptor_type), size };
 
@@ -209,12 +46,12 @@ UniqueDescriptorPool Device::CreateDescriptorPool(DescriptorType descriptor_type
         .pPoolSizes    = &vk_pool_size
     };
 
-    return DescriptorPool::Create(m_state->device, create_info);
+    return DescriptorPool::Create(m_device, create_info);
 }
 
 UniqueShaderModule Device::CreateShaderModule(const unsigned char* shader_data, size_t shader_size)
 {
-    assert(m_state);
+    assert(m_device);
 
     VkShaderModuleCreateInfo create_info = {
 
@@ -225,12 +62,12 @@ UniqueShaderModule Device::CreateShaderModule(const unsigned char* shader_data, 
         .pCode    = reinterpret_cast<const std::uint32_t*>(shader_data)
     };
 
-    return ShaderModule::Create(m_state->device, create_info);
+    return ShaderModule::Create(m_device, create_info);
 }
 
 UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage)
 {
-    assert(m_state);
+    assert(m_device);
 
     VkBufferCreateInfo create_info = {
 
@@ -244,32 +81,27 @@ UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsage buffer_usage_fla
         .pQueueFamilyIndices   = nullptr
     };
 
-    return Buffer::Create(m_state->allocator, create_info, memory_usage);
+    return Buffer::Create(m_allocator, create_info, memory_usage);
 }
 
-Device::operator VkDevice() const noexcept
+UniqueCommandPool Device::CreateCommandPool(uint32_t queue_family_index, CommandPoolCreate command_pool_create_flags)
 {
-    return m_state ? m_state->device : VkDevice{};
-}
-
-UniqueCommandPool Device::CreateCommandPool(QueueFamily queue_family, CommandPoolCreate command_pool_create_flags)
-{
-    assert(m_state);
+    assert(m_device);
 
     auto create_info = VkCommandPoolCreateInfo{
 
         .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .pNext            = nullptr,
         .flags            = GetVk(command_pool_create_flags),
-        .queueFamilyIndex = GetQueueFamilyIndex(queue_family)
+        .queueFamilyIndex = queue_family_index
     };
 
-    return CommandPool::Create(m_state->device, create_info);
+    return CommandPool::Create(m_device, create_info);
 }
 
 UniqueFramebuffer Device::CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent)
 {
-    assert(m_state);
+    assert(m_device);
 
     VkImageView vk_image_view = image_view;
 
@@ -286,7 +118,7 @@ UniqueFramebuffer Device::CreateFramebuffer(RenderPass renderpass, ImageView2D i
         .layers          = 1
     };
 
-    return Framebuffer::Create(m_state->device, create_info);
+    return Framebuffer::Create(m_device, create_info);
 }
 
 auto Device::CreateFramebuffer(
@@ -294,7 +126,7 @@ auto Device::CreateFramebuffer(
     std::initializer_list<const ImageView2D> image_views,
     Extent2D                                 extent) -> UniqueFramebuffer
 {
-    assert(m_state);
+    assert(m_device);
 
     auto vk_image_views = std::vector<VkImageView>(image_views.begin(), image_views.end());
 
@@ -311,18 +143,18 @@ auto Device::CreateFramebuffer(
         .layers          = 1
     };
 
-    return Framebuffer::Create(m_state->device, create_info);
+    return Framebuffer::Create(m_device, create_info);
 }
 
 UniquePipeline Device::CreateGraphicsPipeline(const VkGraphicsPipelineCreateInfo& create_info)
 {
-    assert(m_state);
-    return Pipeline::Create(m_state->device, create_info);
+    assert(m_device);
+    return Pipeline::Create(m_device, create_info);
 }
 
 UniquePipelineLayout Device::CreatePipelineLayout(const VkPipelineLayoutCreateInfo& create_info)
 {
-    return PipelineLayout::Create(m_state->device, create_info);
+    return PipelineLayout::Create(m_device, create_info);
 }
 
 UniqueImage2D Device::CreateImage(
@@ -332,7 +164,7 @@ UniqueImage2D Device::CreateImage(
     MemoryUsage memory_usage,
     ImageTiling image_tiling)
 {
-    assert(m_state);
+    assert(m_device);
 
     VkImageCreateInfo create_info = {
 
@@ -353,12 +185,12 @@ UniqueImage2D Device::CreateImage(
         .initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED
     };
 
-    return Image2D::Create(m_state->allocator, create_info, memory_usage);
+    return Image2D::Create(m_allocator, create_info, memory_usage);
 }
 
 UniqueImageView2D Device::CreateImageView(Image2D image, ImageAspect image_aspect_flags)
 {
-    assert(m_state);
+    assert(m_device);
 
     auto vk_aspect_flags = GetVk(image_aspect_flags);
 
@@ -374,54 +206,38 @@ UniqueImageView2D Device::CreateImageView(Image2D image, ImageAspect image_aspec
         .subresourceRange = { vk_aspect_flags, 0, 1, 0, 1 }
     };
 
-    return ImageView2D::Create(m_state->device, create_info);
+    return ImageView2D::Create(m_device, create_info);
 }
 
-Queue Device::GetQueue(QueueFamily queue_family) const noexcept
+Queue Device::GetQueue(uint32_t queue_family_index) const noexcept
 {
-    assert(m_state);
+    assert(m_device);
 
     VkQueue vk_queue{};
 
-    vkGetDeviceQueue(m_state->device, GetQueueFamilyIndex(queue_family), 0, &vk_queue);
+    vkGetDeviceQueue(m_device, queue_family_index, 0, &vk_queue);
 
     return Queue(vk_queue);
 }
 
 void Device::UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set)
 {
-    assert(m_state);
+    assert(m_device);
 
     VkWriteDescriptorSet vk_write_descriptor_set = write_descriptor_set;
 
-    vkUpdateDescriptorSets(m_state->device, 1, &vk_write_descriptor_set, 0, nullptr);
+    vkUpdateDescriptorSets(m_device, 1, &vk_write_descriptor_set, 0, nullptr);
 }
 
 void Device::WaitIdle()
 {
-    assert(m_state);
-    vkDeviceWaitIdle(m_state->device);
+    assert(m_device);
+    vkDeviceWaitIdle(m_device);
 }
 
-UniqueDevice Device::Create(VkInstance instance, VkPhysicalDevice physical_device)
+UniqueDevice
+Device::Create(VkInstance instance, VkPhysicalDevice physical_device, const VkDeviceCreateInfo& create_info)
 {
-    auto queue_indices      = GetQueueIndices(physical_device);
-    auto queue_create_infos = GetDeviceQueueCreateInfos(queue_indices);
-
-    VkDeviceCreateInfo create_info = {
-
-        .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext                   = nullptr,
-        .flags                   = {},
-        .queueCreateInfoCount    = narrow_cast<std::uint32_t>(queue_create_infos.size()),
-        .pQueueCreateInfos       = queue_create_infos.data(),
-        .enabledLayerCount       = 0,
-        .ppEnabledLayerNames     = nullptr,
-        .enabledExtensionCount   = 0,
-        .ppEnabledExtensionNames = nullptr,
-        .pEnabledFeatures        = nullptr
-    };
-
     VkDevice device{};
 
     if (auto result = vkCreateDevice(physical_device, &create_info, nullptr, &device); result != VK_SUCCESS) {
@@ -453,45 +269,66 @@ UniqueDevice Device::Create(VkInstance instance, VkPhysicalDevice physical_devic
 
     spdlog::info(COMPONENT "Created VmaAllocator {}", fmt::ptr(allocator));
 
-    return UniqueDevice(new EtnaDevice_T{ device, queue_indices, allocator });
+    return UniqueDevice(Device(device, allocator));
 }
 
 void Device::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_device);
 
-    vmaDestroyAllocator(m_state->allocator);
-    spdlog::info(COMPONENT "Destroyed VmaAllocator {}", fmt::ptr(m_state->allocator));
+    vmaDestroyAllocator(m_allocator);
+    spdlog::info(COMPONENT "Destroyed VmaAllocator {}", fmt::ptr(m_allocator));
 
-    vkDestroyDevice(m_state->device, nullptr);
-    spdlog::info(COMPONENT "Destroyed VkDevice {}", fmt::ptr(m_state->device));
+    vkDestroyDevice(m_device, nullptr);
+    spdlog::info(COMPONENT "Destroyed VkDevice {}", fmt::ptr(m_device));
 
-    delete m_state;
-    m_state = nullptr;
+    m_device    = nullptr;
+    m_allocator = nullptr;
 }
 
-uint32_t Device::GetQueueFamilyIndex(QueueFamily queue_family) const noexcept
+DeviceBuilder::DeviceBuilder() noexcept
 {
-    assert(m_state);
+    create_info = VkDeviceCreateInfo{
 
-    uint32_t family_index{};
+        .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext                   = nullptr,
+        .flags                   = {},
+        .queueCreateInfoCount    = 0,
+        .pQueueCreateInfos       = nullptr,
+        .enabledLayerCount       = 0,
+        .ppEnabledLayerNames     = nullptr,
+        .enabledExtensionCount   = 0,
+        .ppEnabledExtensionNames = nullptr,
+        .pEnabledFeatures        = nullptr
+    };
+}
 
-    switch (queue_family) {
-    case QueueFamily::Graphics:
-        family_index = m_state->indices.graphics.family_index;
-        break;
-    case QueueFamily::Compute:
-        family_index = m_state->indices.compute.family_index;
-        break;
-    case QueueFamily::Transfer:
-        family_index = m_state->indices.transfer.family_index;
-        break;
-    default:
-        throw_runtime_error("Device::GetQueueFamilyIndex bad argument: queue family unrecognized");
-        break;
-    }
+void DeviceBuilder::AddQueue(uint32_t queue_family_index, uint32_t queue_count)
+{
+    static const float queue_priority = 1.0f;
 
-    return family_index;
+    VkDeviceQueueCreateInfo device_queue_create_info = {
+
+        .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext            = nullptr,
+        .flags            = {},
+        .queueFamilyIndex = queue_family_index,
+        .queueCount       = queue_count,
+        .pQueuePriorities = &queue_priority
+    };
+
+    m_device_queues.push_back(device_queue_create_info);
+
+    create_info.queueCreateInfoCount = narrow_cast<uint32_t>(m_device_queues.size());
+    create_info.pQueueCreateInfos    = m_device_queues.data();
+}
+
+void DeviceBuilder::AddEnabledLayer(const char* layer_name)
+{
+    m_enabled_layer_names.push_back(layer_name);
+
+    create_info.enabledLayerCount   = narrow_cast<uint32_t>(m_enabled_layer_names.size());
+    create_info.ppEnabledLayerNames = m_enabled_layer_names.data();
 }
 
 } // namespace etna

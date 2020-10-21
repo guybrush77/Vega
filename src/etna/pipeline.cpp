@@ -263,10 +263,10 @@ void PipelineBuilder::AddDynamicState(DynamicState dynamic_state)
     m_dynamic_state.dynamicStateCount = narrow_cast<std::uint32_t>(m_dynamic_states.size());
 }
 
-void PipelineBuilder::SetDepthState(bool depth_test_enable, bool depth_write_enable, CompareOp compare_op) noexcept
+void PipelineBuilder::SetDepthState(DepthTest depth_test, DepthWrite depth_write, CompareOp compare_op) noexcept
 {
-    m_depth_stencil_state.depthTestEnable  = depth_test_enable;
-    m_depth_stencil_state.depthWriteEnable = depth_write_enable;
+    m_depth_stencil_state.depthTestEnable  = depth_test == DepthTest::Enable;
+    m_depth_stencil_state.depthWriteEnable = depth_write == DepthWrite::Enable;
     m_depth_stencil_state.depthCompareOp   = GetVk(compare_op);
 }
 

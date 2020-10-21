@@ -168,10 +168,10 @@ std::vector<PhysicalDevice> Instance::EnumeratePhysicalDevices() const
     return physical_devices;
 }
 
-UniqueDevice Instance::CreateDevice(PhysicalDevice physical_device)
+UniqueDevice Instance::CreateDevice(PhysicalDevice physical_device, const VkDeviceCreateInfo& device_create_info)
 {
     assert(m_state);
-    return Device::Create(m_state->instance, physical_device);
+    return Device::Create(m_state->instance, physical_device, device_create_info);
 }
 
 UniqueInstance Instance::Create(
@@ -258,6 +258,40 @@ void Instance::Destroy() noexcept
     delete m_state;
 
     m_state = nullptr;
+}
+
+std::vector<QueueFamilyProperties> PhysicalDevice::GetPhysicalDeviceQueueFamilyProperties() const
+{
+    assert(m_physical_device);
+
+    uint32_t count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &count, nullptr);
+
+    std::vector<VkQueueFamilyProperties> vk_properties(count);
+    vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &count, vk_properties.data());
+
+    std::vector<QueueFamilyProperties> properties(count);
+
+    for (size_t i = 0; i < count; ++i) {
+        properties[i].queueFlags                  = static_cast<QueueFlags>(vk_properties[i].queueFlags);
+        properties[i].queueCount                  = vk_properties[i].queueCount;
+        properties[i].timestampValidBits          = vk_properties[i].timestampValidBits;
+        properties[i].minImageTransferGranularity = vk_properties[i].minImageTransferGranularity;
+    }
+    return properties;
+}
+
+std::vector<ExtensionProperties> PhysicalDevice::EnumerateDeviceExtensionProperties(const char* layer_name) const
+{
+    assert(m_physical_device);
+
+    uint32_t count = 0;
+    vkEnumerateDeviceExtensionProperties(m_physical_device, layer_name, &count, nullptr);
+
+    std::vector<ExtensionProperties> properties(count);
+    vkEnumerateDeviceExtensionProperties(m_physical_device, layer_name, &count, properties.data());
+
+    return properties;
 }
 
 } // namespace etna

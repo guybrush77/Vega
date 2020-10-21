@@ -43,12 +43,16 @@ using Binding  = uint32_t;
 template <typename>
 struct composable_flags : std::false_type {};
 
-template <typename>
+template <typename T>
+concept EnumClass = std::integral_constant<bool, std::is_enum_v<T> && !std::is_convertible_v<T, int>>::value;
+
+template <EnumClass>
 class Mask;
 
-enum class QueueFamily { Graphics, Transfer, Compute };
-
 enum class MemoryUsage { Unknown, GpuOnly, CpuOnly, CpuToGpu, GpuToCpu, CpuCopy, GpuLazilyAllocated };
+
+enum class DepthTest { Disable, Enable };
+enum class DepthWrite { Disable, Enable };
 
 enum class AttachmentLoadOp {
     Load     = VK_ATTACHMENT_LOAD_OP_LOAD,
@@ -647,46 +651,54 @@ enum class ImageAspect : VkImageAspectFlags {
 
 ETNA_DEFINE_VK_FLAGS(ImageAspect)
 
-template <typename T>
+template <EnumClass E>
 class Mask final {
   public:
-    using mask_type = std::underlying_type_t<T>;
+    using mask_type = std::underlying_type_t<E>;
 
     constexpr Mask() noexcept = default;
-    constexpr Mask(T value) noexcept : m_value(static_cast<mask_type>(value)) {}
-
-    constexpr bool operator==(Mask<T> rhs) const noexcept { return m_value == rhs.m_value; }
-    constexpr bool operator!=(Mask<T> rhs) const noexcept { return m_value != rhs.m_value; }
+    constexpr Mask(E value) noexcept : m_value(static_cast<mask_type>(value)) {}
 
     constexpr explicit operator bool() const noexcept { return m_value; }
 
-    constexpr auto operator|(T rhs) const noexcept { return Mask<T>(m_value | static_cast<mask_type>(rhs)); }
-    constexpr auto operator&(T rhs) const noexcept { return Mask<T>(m_value & static_cast<mask_type>(rhs)); }
+    constexpr bool operator==(Mask<E> rhs) const noexcept { return m_value == rhs.m_value; }
+    constexpr bool operator!=(Mask<E> rhs) const noexcept { return m_value != rhs.m_value; }
 
-    constexpr operator T() const noexcept { return static_cast<T>(m_value); }
+    constexpr bool operator==(E rhs) const noexcept { return m_value == static_cast<mask_type>(rhs); }
+    constexpr bool operator!=(E rhs) const noexcept { return m_value != static_cast<mask_type>(rhs); }
+
+    constexpr auto operator|(E rhs) const noexcept { return Mask<E>(m_value | static_cast<mask_type>(rhs)); }
+    constexpr auto operator&(E rhs) const noexcept { return Mask<E>(m_value & static_cast<mask_type>(rhs)); }
+
+    constexpr operator E() const noexcept { return static_cast<E>(m_value); }
 
     constexpr auto GetVk() const noexcept { return m_value; }
 
   private:
-    template <typename T>
-    requires composable_flags<T>::value friend constexpr auto operator|(T, T) noexcept;
+    template <typename E>
+    requires composable_flags<E>::value friend constexpr auto operator|(E, E) noexcept;
 
-    constexpr Mask(mask_type value) noexcept : m_value(value) {}
+    explicit constexpr Mask(mask_type value) noexcept : m_value(value) {}
 
     mask_type m_value{};
 };
 
-template <typename T>
-inline auto GetVk(Mask<T> mask) noexcept
+template <typename E>
+inline auto GetVk(Mask<E> mask) noexcept
 {
     return mask.GetVk();
 }
 
-template <typename T>
-requires composable_flags<T>::value inline constexpr auto operator|(T lhs, T rhs) noexcept
+template <typename E>
+requires composable_flags<E>::value inline constexpr auto operator|(E lhs, E rhs) noexcept
 {
-    using mask_type = std::underlying_type_t<T>;
-    return Mask<T>(static_cast<mask_type>(lhs) | static_cast<mask_type>(rhs));
+    return Mask(lhs) | rhs;
+}
+
+template <typename E>
+requires composable_flags<E>::value inline constexpr auto operator&(E lhs, Mask<E> rhs) noexcept
+{
+    return rhs & lhs;
 }
 
 using Offset2D            = VkOffset2D;
@@ -696,6 +708,18 @@ using Rect2D              = VkRect2D;
 using Viewport            = VkViewport;
 using ExtensionProperties = VkExtensionProperties;
 using DescriptorPoolSize  = VkDescriptorPoolSize;
+
+struct QueueFamilyProperties final {
+    QueueFlags queueFlags;
+    uint32_t   queueCount;
+    uint32_t   timestampValidBits;
+    Extent3D   minImageTransferGranularity;
+
+    constexpr operator VkQueueFamilyProperties() const noexcept
+    {
+        return { GetVk(queueFlags), queueCount, timestampValidBits, minImageTransferGranularity };
+    }
+};
 
 struct ClearColor final {
     constexpr ClearColor(float r, float g, float b, float a = 1.0f) noexcept
@@ -811,10 +835,10 @@ class UniqueHandle {
 
 void throw_runtime_error(const char* description);
 
-template <class T, class U>
+template <typename T, typename U>
 struct have_same_sign : std::integral_constant<bool, std::is_signed<T>::value == std::is_signed<U>::value> {};
 
-template <class DstT, class SrcT>
+template <typename DstT, typename SrcT>
 constexpr DstT narrow_cast(SrcT src)
 {
     DstT dst = static_cast<DstT>(src);
