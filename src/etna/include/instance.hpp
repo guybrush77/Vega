@@ -35,7 +35,9 @@ class PhysicalDevice {
     bool operator!=(const PhysicalDevice& rhs) const noexcept { return m_physical_device != rhs.m_physical_device; }
 
     std::vector<QueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties() const;
+    SurfaceCapabilitiesKHR             GetPhysicalDeviceSurfaceCapabilitiesKHR(SurfaceKHR surface) const;
     std::vector<SurfaceFormatKHR>      GetPhysicalDeviceSurfaceFormatsKHR(SurfaceKHR surface) const;
+    std::vector<PresentModeKHR>        GetPhysicalDeviceSurfacePresentModesKHR(SurfaceKHR surface) const;
     std::vector<ExtensionProperties>   EnumerateDeviceExtensionProperties(const char* layer_name = nullptr) const;
 
   private:

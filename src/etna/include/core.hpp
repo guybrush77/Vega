@@ -8,20 +8,14 @@
     using handle = struct handle##_T*;                                                                                 \
     }
 
-#define ETNA_DEFINE_VK_ENUM(type)                                                                                      \
+#define ETNA_DEFINE_ENUM_ANALOGUE(type)                                                                                \
     inline constexpr auto GetVk(type val) noexcept { return static_cast<Vk##type>(val); }
 
-#define ETNA_DEFINE_VK_FLAGS(type)                                                                                     \
-    inline constexpr auto GetVk(type val) noexcept { return static_cast<Vk##type##Flags>(val); }                       \
+#define ETNA_DEFINE_FLAGS_ANALOGUE(type, vk_type)                                                                      \
+    inline constexpr auto GetVk(type val) noexcept { return static_cast<vk_type>(val); }                               \
     template <>                                                                                                        \
-    struct composable_flags<##type##> : std::true_type {};                                                             \
-    using type##Mask = Mask<##type##>;
-
-#define ETNA_DEFINE_VK_FLAGS_SUFFIXED(type)                                                                            \
-    inline constexpr auto GetVk(type val) noexcept { return static_cast<Vk##type>(val); }                              \
-    template <>                                                                                                        \
-    struct composable_flags<##type##> : std::true_type {};                                                             \
-    using type##Mask = Mask<##type##>;
+    struct composable_flags<type> : std::true_type {};                                                                 \
+    using type##Mask = Mask<type>;
 
 template <typename>
 struct etna_vertex_attribute_type_trait;
@@ -60,11 +54,11 @@ enum class AttachmentLoadOp {
     DontCare = VK_ATTACHMENT_LOAD_OP_DONT_CARE
 };
 
-ETNA_DEFINE_VK_ENUM(AttachmentLoadOp)
+ETNA_DEFINE_ENUM_ANALOGUE(AttachmentLoadOp)
 
 enum class AttachmentStoreOp { Store = VK_ATTACHMENT_STORE_OP_STORE, DontCare = VK_ATTACHMENT_STORE_OP_DONT_CARE };
 
-ETNA_DEFINE_VK_ENUM(AttachmentStoreOp)
+ETNA_DEFINE_ENUM_ANALOGUE(AttachmentStoreOp)
 
 enum class Format {
     Undefined                               = VK_FORMAT_UNDEFINED,
@@ -344,7 +338,7 @@ enum class Format {
     G16B16R163Plane444UnormKHR              = VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM_KHR
 };
 
-ETNA_DEFINE_VK_ENUM(Format)
+ETNA_DEFINE_ENUM_ANALOGUE(Format)
 
 enum class ColorSpaceKHR {
     SrgbNonlinear             = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -367,11 +361,22 @@ enum class ColorSpaceKHR {
     DciP3LinearEXT            = VK_COLOR_SPACE_DCI_P3_LINEAR_EXT
 };
 
-ETNA_DEFINE_VK_ENUM(ColorSpaceKHR)
+ETNA_DEFINE_ENUM_ANALOGUE(ColorSpaceKHR)
+
+enum class PresentModeKHR {
+    Immediate               = VK_PRESENT_MODE_IMMEDIATE_KHR,
+    Mailbox                 = VK_PRESENT_MODE_MAILBOX_KHR,
+    Fifo                    = VK_PRESENT_MODE_FIFO_KHR,
+    FifoRelaxed             = VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+    SharedDemandRefresh     = VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR,
+    SharedContinuousRefresh = VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR
+};
+
+ETNA_DEFINE_ENUM_ANALOGUE(PresentModeKHR)
 
 enum class VertexInputRate { Vertex = VK_VERTEX_INPUT_RATE_VERTEX, Instance = VK_VERTEX_INPUT_RATE_INSTANCE };
 
-ETNA_DEFINE_VK_ENUM(VertexInputRate)
+ETNA_DEFINE_ENUM_ANALOGUE(VertexInputRate)
 
 enum class IndexType {
     Uint16   = VK_INDEX_TYPE_UINT16,
@@ -381,7 +386,7 @@ enum class IndexType {
     NoneNV   = VK_INDEX_TYPE_NONE_NV
 };
 
-ETNA_DEFINE_VK_ENUM(IndexType)
+ETNA_DEFINE_ENUM_ANALOGUE(IndexType)
 
 enum class ImageLayout {
     Undefined                                = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -411,7 +416,7 @@ enum class ImageLayout {
     StencilReadOnlyOptimalKHR                = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR
 };
 
-ETNA_DEFINE_VK_ENUM(ImageLayout)
+ETNA_DEFINE_ENUM_ANALOGUE(ImageLayout)
 
 enum class DynamicState {
     Viewport                     = VK_DYNAMIC_STATE_VIEWPORT,
@@ -432,7 +437,7 @@ enum class DynamicState {
     LineStippleEXT               = VK_DYNAMIC_STATE_LINE_STIPPLE_EXT
 };
 
-ETNA_DEFINE_VK_ENUM(DynamicState)
+ETNA_DEFINE_ENUM_ANALOGUE(DynamicState)
 
 enum class CompareOp {
     Never          = VK_COMPARE_OP_NEVER,
@@ -445,7 +450,7 @@ enum class CompareOp {
     Always         = VK_COMPARE_OP_ALWAYS
 };
 
-ETNA_DEFINE_VK_ENUM(CompareOp)
+ETNA_DEFINE_ENUM_ANALOGUE(CompareOp)
 
 enum class DescriptorType {
     Sampler                  = VK_DESCRIPTOR_TYPE_SAMPLER,
@@ -464,7 +469,7 @@ enum class DescriptorType {
     AccelerationStructureNV  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
 };
 
-ETNA_DEFINE_VK_ENUM(DescriptorType)
+ETNA_DEFINE_ENUM_ANALOGUE(DescriptorType)
 
 enum class ImageTiling {
     Optimal              = VK_IMAGE_TILING_OPTIMAL,
@@ -472,21 +477,21 @@ enum class ImageTiling {
     DrmFormatModifierEXT = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT
 };
 
-ETNA_DEFINE_VK_ENUM(ImageTiling)
+ETNA_DEFINE_ENUM_ANALOGUE(ImageTiling)
 
 enum class CommandBufferLevel {
     Primary   = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
     Secondary = VK_COMMAND_BUFFER_LEVEL_SECONDARY
 };
 
-ETNA_DEFINE_VK_ENUM(CommandBufferLevel)
+ETNA_DEFINE_ENUM_ANALOGUE(CommandBufferLevel)
 
 enum class SubpassContents {
     Inline                  = VK_SUBPASS_CONTENTS_INLINE,
     SecondaryCommandBuffers = VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
 };
 
-ETNA_DEFINE_VK_ENUM(SubpassContents)
+ETNA_DEFINE_ENUM_ANALOGUE(SubpassContents)
 
 enum class PipelineBindPoint {
     Graphics      = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -495,7 +500,7 @@ enum class PipelineBindPoint {
     RayTracingNV  = VK_PIPELINE_BIND_POINT_RAY_TRACING_NV
 };
 
-ETNA_DEFINE_VK_ENUM(PipelineBindPoint)
+ETNA_DEFINE_ENUM_ANALOGUE(PipelineBindPoint)
 
 enum class ImageUsage : VkImageUsageFlags {
     TransferSrc            = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -510,7 +515,7 @@ enum class ImageUsage : VkImageUsageFlags {
     FragmentDensityMapEXT  = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT
 };
 
-ETNA_DEFINE_VK_FLAGS(ImageUsage)
+ETNA_DEFINE_FLAGS_ANALOGUE(ImageUsage, VkImageUsageFlags)
 
 enum class BufferUsage : VkBufferUsageFlags {
     TransferSrc                       = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -532,7 +537,7 @@ enum class BufferUsage : VkBufferUsageFlags {
     ShaderDeviceAddressKHR            = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR
 };
 
-ETNA_DEFINE_VK_FLAGS(BufferUsage)
+ETNA_DEFINE_FLAGS_ANALOGUE(BufferUsage, VkBufferUsageFlags)
 
 enum class CommandBufferUsage : VkCommandBufferUsageFlags {
     OneTimeSubmit      = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -540,7 +545,7 @@ enum class CommandBufferUsage : VkCommandBufferUsageFlags {
     SimultaneousUse    = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
 };
 
-ETNA_DEFINE_VK_FLAGS(CommandBufferUsage)
+ETNA_DEFINE_FLAGS_ANALOGUE(CommandBufferUsage, VkCommandBufferUsageFlags)
 
 enum class CommandPoolCreate : VkCommandPoolCreateFlags {
     Transient          = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
@@ -548,7 +553,7 @@ enum class CommandPoolCreate : VkCommandPoolCreateFlags {
     Protected          = VK_COMMAND_POOL_CREATE_PROTECTED_BIT
 };
 
-ETNA_DEFINE_VK_FLAGS(CommandPoolCreate)
+ETNA_DEFINE_FLAGS_ANALOGUE(CommandPoolCreate, VkCommandPoolCreateFlags)
 
 enum class ShaderStage : VkShaderStageFlags {
     Vertex                 = VK_SHADER_STAGE_VERTEX_BIT,
@@ -575,7 +580,7 @@ enum class ShaderStage : VkShaderStageFlags {
     CallableNV             = VK_SHADER_STAGE_CALLABLE_BIT_NV
 };
 
-ETNA_DEFINE_VK_FLAGS(ShaderStage)
+ETNA_DEFINE_FLAGS_ANALOGUE(ShaderStage, VkShaderStageFlags)
 
 enum class PipelineStage : VkPipelineStageFlags {
     TopOfPipe                     = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -608,7 +613,7 @@ enum class PipelineStage : VkPipelineStageFlags {
     AccelerationStructureBuildNV  = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV
 };
 
-ETNA_DEFINE_VK_FLAGS(PipelineStage)
+ETNA_DEFINE_FLAGS_ANALOGUE(PipelineStage, VkPipelineStageFlags)
 
 enum class Access : VkAccessFlags {
     IndirectCommandRead               = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
@@ -643,7 +648,7 @@ enum class Access : VkAccessFlags {
     AccelerationStructureWriteNV      = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV
 };
 
-ETNA_DEFINE_VK_FLAGS(Access)
+ETNA_DEFINE_FLAGS_ANALOGUE(Access, VkAccessFlags)
 
 enum class QueueFlags : VkQueueFlags {
     Graphics      = VK_QUEUE_GRAPHICS_BIT,
@@ -653,7 +658,7 @@ enum class QueueFlags : VkQueueFlags {
     Protected     = VK_QUEUE_PROTECTED_BIT
 };
 
-ETNA_DEFINE_VK_FLAGS_SUFFIXED(QueueFlags)
+ETNA_DEFINE_FLAGS_ANALOGUE(QueueFlags, VkQueueFlags)
 
 enum class ImageAspect : VkImageAspectFlags {
     Color           = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -672,7 +677,30 @@ enum class ImageAspect : VkImageAspectFlags {
     Plane2KHR       = VK_IMAGE_ASPECT_PLANE_2_BIT_KHR
 };
 
-ETNA_DEFINE_VK_FLAGS(ImageAspect)
+ETNA_DEFINE_FLAGS_ANALOGUE(ImageAspect, VkImageAspectFlags)
+
+enum class SurfaceTransformKHR : VkSurfaceTransformFlagsKHR {
+    Identity                  = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+    Rotate90                  = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
+    Rotate180                 = VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR,
+    Rotate270                 = VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR,
+    HorizontalMirror          = VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_BIT_KHR,
+    HorizontalMirrorRotate90  = VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR,
+    HorizontalMirrorRotate180 = VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180_BIT_KHR,
+    HorizontalMirrorRotate270 = VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR,
+    Inherit                   = VK_SURFACE_TRANSFORM_INHERIT_BIT_KHR
+};
+
+ETNA_DEFINE_FLAGS_ANALOGUE(SurfaceTransformKHR, VkSurfaceTransformFlagsKHR)
+
+enum class CompositeAlphaKHR : VkCompositeAlphaFlagsKHR {
+    Opaque         = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+    PreMultiplied  = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+    PostMultiplied = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+    Inherit        = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR
+};
+
+ETNA_DEFINE_FLAGS_ANALOGUE(CompositeAlphaKHR, VkCompositeAlphaFlagsKHR)
 
 template <EnumClass E>
 class Mask final {
@@ -749,6 +777,19 @@ struct SurfaceFormatKHR final {
     ColorSpaceKHR colorSpace;
 
     constexpr operator VkSurfaceFormatKHR() const noexcept { return { GetVk(format), GetVk(colorSpace) }; }
+};
+
+struct SurfaceCapabilitiesKHR final {
+    uint32_t            minImageCount;
+    uint32_t            maxImageCount;
+    Extent2D            currentExtent;
+    Extent2D            minImageExtent;
+    Extent2D            maxImageExtent;
+    uint32_t            maxImageArrayLayers;
+    SurfaceTransformKHR supportedTransforms;
+    SurfaceTransformKHR currentTransform;
+    CompositeAlphaKHR   supportedCompositeAlpha;
+    ImageUsage          supportedUsageFlags;
 };
 
 struct ClearColor final {

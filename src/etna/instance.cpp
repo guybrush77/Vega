@@ -281,6 +281,30 @@ std::vector<QueueFamilyProperties> PhysicalDevice::GetPhysicalDeviceQueueFamilyP
     return properties;
 }
 
+SurfaceCapabilitiesKHR PhysicalDevice::GetPhysicalDeviceSurfaceCapabilitiesKHR(SurfaceKHR surface) const
+{
+    VkSurfaceCapabilitiesKHR vk_capabilities{};
+
+    if (auto result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, surface, &vk_capabilities);
+        result != VK_SUCCESS) {
+        throw_runtime_error(fmt::format("vkGetPhysicalDeviceSurfaceCapabilitiesKHR error: {}", result).c_str());
+    }
+
+    return SurfaceCapabilitiesKHR{
+
+        .minImageCount           = vk_capabilities.minImageCount,
+        .maxImageCount           = vk_capabilities.maxImageCount,
+        .currentExtent           = vk_capabilities.currentExtent,
+        .minImageExtent          = vk_capabilities.minImageExtent,
+        .maxImageExtent          = vk_capabilities.maxImageExtent,
+        .maxImageArrayLayers     = vk_capabilities.maxImageArrayLayers,
+        .supportedTransforms     = static_cast<SurfaceTransformKHR>(vk_capabilities.supportedTransforms),
+        .currentTransform        = static_cast<SurfaceTransformKHR>(vk_capabilities.currentTransform),
+        .supportedCompositeAlpha = static_cast<CompositeAlphaKHR>(vk_capabilities.supportedCompositeAlpha),
+        .supportedUsageFlags     = static_cast<ImageUsage>(vk_capabilities.supportedUsageFlags)
+    };
+}
+
 std::vector<SurfaceFormatKHR> PhysicalDevice::GetPhysicalDeviceSurfaceFormatsKHR(SurfaceKHR surface) const
 {
     assert(m_physical_device);
@@ -299,6 +323,25 @@ std::vector<SurfaceFormatKHR> PhysicalDevice::GetPhysicalDeviceSurfaceFormatsKHR
     }
 
     return formats;
+}
+
+std::vector<PresentModeKHR> PhysicalDevice::GetPhysicalDeviceSurfacePresentModesKHR(SurfaceKHR surface) const
+{
+    assert(m_physical_device);
+
+    uint32_t count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, surface, &count, nullptr);
+
+    std::vector<VkPresentModeKHR> vk_present_modes(count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, surface, &count, vk_present_modes.data());
+
+    std::vector<PresentModeKHR> present_modes(count);
+
+    for (size_t i = 0; i < count; ++i) {
+        present_modes[i] = static_cast<PresentModeKHR>(vk_present_modes[i]);
+    }
+
+    return present_modes;
 }
 
 std::vector<ExtensionProperties> PhysicalDevice::EnumerateDeviceExtensionProperties(const char* layer_name) const
