@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <spdlog/spdlog.h>
 #include <unordered_map>
 #include <vector>
 
@@ -253,31 +254,38 @@ int main()
 
     using namespace etna;
 
-    std::vector<const char*> extensions;
-    std::vector<const char*> layers;
+    UniqueInstance instance;
+    {
+        std::vector<const char*> extensions;
+        std::vector<const char*> layers;
 
-    if (enable_validation) {
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        layers.push_back("VK_LAYER_KHRONOS_validation");
+        if (enable_validation) {
+            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            layers.push_back("VK_LAYER_KHRONOS_validation");
+        }
+
+        instance = CreateInstance("Vega", Version{ 0, 1, 0 }, extensions, layers);
     }
 
-    auto instance = CreateInstance("Vega", Version{ 0, 1, 0 }, extensions, layers);
-    auto gpus     = instance->EnumeratePhysicalDevices();
-    auto gpu      = gpus.front();
+    PhysicalDevice gpu;
+    {
+        auto gpus = instance->EnumeratePhysicalDevices();
+        gpu       = gpus.front();
+    }
 
     auto [graphics, compute, transfer] = GetQueueFamilies(gpu);
 
     UniqueDevice device;
     {
-        auto device_state = device->CreateDeviceBuilder();
+        auto builder = Device::Builder();
 
-        device_state.AddQueue(graphics.family_index, 1);
-        device_state.AddQueue(compute.family_index, 1);
-        device_state.AddQueue(transfer.family_index, 1);
+        builder.AddQueue(graphics.family_index, 1);
+        builder.AddQueue(compute.family_index, 1);
+        builder.AddQueue(transfer.family_index, 1);
 
-        device_state.AddEnabledLayer(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        builder.AddEnabledLayer(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
-        device = instance->CreateDevice(gpu, device_state);
+        device = instance->CreateDevice(gpu, builder.state);
     }
 
     Queues queues;
@@ -331,33 +339,33 @@ int main()
     // Create pipeline renderpass
     UniqueRenderPass renderpass;
     {
-        auto renderpass_state = renderpass->CreateRenderPassBuilder();
+        auto builder = RenderPass::Builder();
 
-        auto color_attachment = renderpass_state.AddAttachment(
+        auto color_attachment = builder.AddAttachment(
             Format::R8G8B8A8Srgb,
             AttachmentLoadOp::Clear,
             AttachmentStoreOp::Store,
             ImageLayout::Undefined,
             ImageLayout::TransferSrcOptimal);
 
-        auto depth_attachment = renderpass_state.AddAttachment(
+        auto depth_attachment = builder.AddAttachment(
             Format::D24UnormS8Uint,
             AttachmentLoadOp::Clear,
             AttachmentStoreOp::DontCare,
             ImageLayout::Undefined,
             ImageLayout::DepthStencilAttachmentOptimal);
 
-        auto color_ref = renderpass_state.AddReference(color_attachment, ImageLayout::ColorAttachmentOptimal);
-        auto depth_ref = renderpass_state.AddReference(depth_attachment, ImageLayout::DepthStencilAttachmentOptimal);
+        auto color_ref = builder.AddReference(color_attachment, ImageLayout::ColorAttachmentOptimal);
+        auto depth_ref = builder.AddReference(depth_attachment, ImageLayout::DepthStencilAttachmentOptimal);
 
-        auto subpass = renderpass_state.CreateSubpassBuilder();
+        auto subpass = builder.CreateSubpass();
 
         subpass.AddColorAttachment(color_ref);
         subpass.SetDepthStencilAttachment(depth_ref);
 
-        renderpass_state.AddSubpass(subpass);
+        builder.AddSubpass(subpass.state);
 
-        renderpass = device->CreateRenderPass(renderpass_state);
+        renderpass = device->CreateRenderPass(builder.state);
     }
 
     // Create render target image
@@ -383,29 +391,30 @@ int main()
     // Create descriptor set layouts
     UniqueDescriptorSetLayout descriptor_set_layout;
     {
-        DescriptorSetLayoutBuilder builder;
+        auto builder = DescriptorSetLayout::Builder();
         builder.AddDescriptorSetLayoutBinding(Binding{ 0 }, DescriptorType::UniformBuffer, 1, ShaderStage::Vertex);
-        descriptor_set_layout = device->CreateDescriptorSetLayout(builder);
+        descriptor_set_layout = device->CreateDescriptorSetLayout(builder.state);
     }
 
     // Create pipeline layout
     UniquePipelineLayout layout;
     {
-        PipelineLayoutBuilder builder;
+        auto builder = PipelineLayout::Builder();
         builder.AddDescriptorSetLayout(*descriptor_set_layout);
-        layout = device->CreatePipelineLayout(builder);
+        layout = device->CreatePipelineLayout(builder.state);
     }
 
     // Create pipeline
     UniquePipeline pipeline;
     {
-        auto builder            = PipelineBuilder(*layout, *renderpass);
+        auto builder            = Pipeline::Builder(*layout, *renderpass);
         auto [vs_data, vs_size] = GetResource("shader.vert");
         auto [fs_data, fs_size] = GetResource("shader.frag");
         auto vertex_shader      = device->CreateShaderModule(vs_data, vs_size);
         auto fragment_shader    = device->CreateShaderModule(fs_data, fs_size);
         auto [width, height]    = image->Extent2D();
         auto viewport           = Viewport{ 0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1 };
+        auto scissor            = Rect2D{ Offset2D{ 0, 0 }, Extent2D{ width, height } };
 
         builder.AddShaderStage(*vertex_shader, ShaderStage::Vertex);
         builder.AddShaderStage(*fragment_shader, ShaderStage::Fragment);
@@ -421,11 +430,11 @@ int main()
             formatof(VertexPN, normal),
             offsetof(VertexPN, normal));
         builder.AddViewport(viewport);
-        builder.AddScissor(Rect2D{ Offset2D{ 0, 0 }, image->Extent2D() });
+        builder.AddScissor(scissor);
         builder.SetDepthState(DepthTest::Enable, DepthWrite::Enable, CompareOp::Less);
-        builder.AddColorBlendAttachmentBaseState();
+        builder.AddColorBlendAttachmentState();
 
-        pipeline = device->CreateGraphicsPipeline(builder);
+        pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
     // Create and initialize descriptor sets

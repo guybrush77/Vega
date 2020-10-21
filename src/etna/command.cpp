@@ -8,78 +8,52 @@
 
 #define COMPONENT "Etna: "
 
-namespace {
-
-struct EtnaCommandPool_T final {
-    VkCommandPool command_pool;
-    VkDevice      device;
-};
-
-struct EtnaCommandBuffer_T final {
-    VkCommandBuffer command_buffer;
-    VkDevice        device;
-    VkCommandPool   command_pool;
-};
-
-} // namespace
-
 namespace etna {
-
-CommandPool::operator VkCommandPool() const noexcept
-{
-    return m_state ? m_state->command_pool : VkCommandPool{};
-}
 
 UniqueCommandBuffer CommandPool::AllocateCommandBuffer(CommandBufferLevel level)
 {
-    assert(m_state);
+    assert(m_command_pool);
 
     auto alloc_info = VkCommandBufferAllocateInfo{
 
         .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext              = nullptr,
-        .commandPool        = m_state->command_pool,
+        .commandPool        = m_command_pool,
         .level              = GetVk(level),
         .commandBufferCount = 1
     };
 
-    return CommandBuffer::Create(m_state->device, alloc_info);
+    return CommandBuffer::Create(m_device, alloc_info);
 }
 
-UniqueCommandPool CommandPool::Create(VkDevice device, const VkCommandPoolCreateInfo& create_info)
+UniqueCommandPool CommandPool::Create(VkDevice vk_device, const VkCommandPoolCreateInfo& create_info)
 {
-    VkCommandPool command_pool{};
+    VkCommandPool vk_command_pool{};
 
-    if (auto result = vkCreateCommandPool(device, &create_info, nullptr, &command_pool); result != VK_SUCCESS) {
+    if (auto result = vkCreateCommandPool(vk_device, &create_info, nullptr, &vk_command_pool); result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreateCommandPool error: {}", result).c_str());
     }
 
-    spdlog::info(COMPONENT "Created VkCommandPool {}", fmt::ptr(command_pool));
+    spdlog::info(COMPONENT "Created VkCommandPool {}", fmt::ptr(vk_command_pool));
 
-    return UniqueCommandPool(new EtnaCommandPool_T{ command_pool, device });
+    return UniqueCommandPool(CommandPool(vk_command_pool, vk_device));
 }
 
 void CommandPool::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_command_pool);
 
-    vkDestroyCommandPool(m_state->device, m_state->command_pool, nullptr);
+    vkDestroyCommandPool(m_device, m_command_pool, nullptr);
 
-    spdlog::info(COMPONENT "Destroyed VkCommandPool {}", fmt::ptr(m_state->command_pool));
+    spdlog::info(COMPONENT "Destroyed VkCommandPool {}", fmt::ptr(m_command_pool));
 
-    delete m_state;
-
-    m_state = nullptr;
-}
-
-CommandBuffer::operator VkCommandBuffer() const noexcept
-{
-    return m_state ? m_state->command_buffer : VkCommandBuffer{};
+    m_command_pool = nullptr;
+    m_device       = nullptr;
 }
 
 void CommandBuffer::Begin(CommandBufferUsage command_buffer_usage_flags)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
     auto begin_info = VkCommandBufferBeginInfo{
 
@@ -89,7 +63,7 @@ void CommandBuffer::Begin(CommandBufferUsage command_buffer_usage_flags)
         .pInheritanceInfo = nullptr
     };
 
-    if (auto result = vkBeginCommandBuffer(m_state->command_buffer, &begin_info); result != VK_SUCCESS) {
+    if (auto result = vkBeginCommandBuffer(m_command_buffer, &begin_info); result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkBeginCommandBuffer error: {}", result).c_str());
     }
 }
@@ -99,7 +73,7 @@ void CommandBuffer::BeginRenderPass(
     std::initializer_list<const ClearValue> clear_values,
     SubpassContents                         subpass_contents)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
     std::vector<VkClearValue> vk_clear_values(clear_values.begin(), clear_values.end());
 
@@ -116,45 +90,45 @@ void CommandBuffer::BeginRenderPass(
         .pClearValues    = vk_clear_values.data()
     };
 
-    vkCmdBeginRenderPass(m_state->command_buffer, &begin_info, GetVk(subpass_contents));
+    vkCmdBeginRenderPass(m_command_buffer, &begin_info, GetVk(subpass_contents));
 }
 
 void CommandBuffer::EndRenderPass()
 {
-    assert(m_state);
-    vkCmdEndRenderPass(m_state->command_buffer);
+    assert(m_command_buffer);
+    vkCmdEndRenderPass(m_command_buffer);
 }
 
 void CommandBuffer::End()
 {
-    assert(m_state);
-    vkEndCommandBuffer(m_state->command_buffer);
+    assert(m_command_buffer);
+    vkEndCommandBuffer(m_command_buffer);
 }
 
 void CommandBuffer::BindPipeline(PipelineBindPoint pipeline_bind_point, Pipeline pipeline)
 {
-    assert(m_state);
-    vkCmdBindPipeline(m_state->command_buffer, GetVk(pipeline_bind_point), pipeline);
+    assert(m_command_buffer);
+    vkCmdBindPipeline(m_command_buffer, GetVk(pipeline_bind_point), pipeline);
 }
 
 void CommandBuffer::BindVertexBuffers(Buffer buffer)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
     VkBuffer     vk_buffer = buffer;
     VkDeviceSize vk_offset = 0;
 
-    vkCmdBindVertexBuffers(m_state->command_buffer, 0, 1, &vk_buffer, &vk_offset);
+    vkCmdBindVertexBuffers(m_command_buffer, 0, 1, &vk_buffer, &vk_offset);
 }
 
 void CommandBuffer::BindIndexBuffer(Buffer buffer, IndexType index_type, size_t offset)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
     VkBuffer     vk_buffer = buffer;
     VkDeviceSize vk_offset = narrow_cast<VkDeviceSize>(offset);
 
-    vkCmdBindIndexBuffer(m_state->command_buffer, vk_buffer, vk_offset, GetVk(index_type));
+    vkCmdBindIndexBuffer(m_command_buffer, vk_buffer, vk_offset, GetVk(index_type));
 }
 
 void CommandBuffer::BindDescriptorSet(
@@ -162,12 +136,12 @@ void CommandBuffer::BindDescriptorSet(
     PipelineLayout    pipeline_layout,
     DescriptorSet     descriptor_set)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
     VkDescriptorSet vk_descriptor_set = descriptor_set;
 
     vkCmdBindDescriptorSets(
-        m_state->command_buffer,
+        m_command_buffer,
         GetVk(pipeline_bind_point),
         pipeline_layout,
         0,
@@ -179,9 +153,9 @@ void CommandBuffer::BindDescriptorSet(
 
 void CommandBuffer::Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
-    vkCmdDraw(m_state->command_buffer, vertex_count, instance_count, first_vertex, first_instance);
+    vkCmdDraw(m_command_buffer, vertex_count, instance_count, first_vertex, first_instance);
 }
 
 void CommandBuffer::DrawIndexed(
@@ -191,9 +165,9 @@ void CommandBuffer::DrawIndexed(
     int32_t  vertex_offset,
     uint32_t first_instance)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
-    vkCmdDrawIndexed(m_state->command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
+    vkCmdDrawIndexed(m_command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
 void CommandBuffer::PipelineBarrier(
@@ -206,7 +180,7 @@ void CommandBuffer::PipelineBarrier(
     ImageLayout   new_layout,
     ImageAspect   aspect_flags)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
     VkImageSubresourceRange subresource_range = {
 
@@ -232,7 +206,7 @@ void CommandBuffer::PipelineBarrier(
     };
 
     vkCmdPipelineBarrier(
-        m_state->command_buffer,
+        m_command_buffer,
         GetVk(src_stage_flags),
         GetVk(dst_stage_flags),
         {},
@@ -251,7 +225,7 @@ void CommandBuffer::CopyImage(
     ImageLayout dst_image_layout,
     ImageAspect image_aspect_flags)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
     auto [width, height] = src_image.Extent2D();
 
@@ -265,7 +239,7 @@ void CommandBuffer::CopyImage(
     };
 
     vkCmdCopyImage(
-        m_state->command_buffer,
+        m_command_buffer,
         src_image,
         GetVk(src_image_layout),
         dst_image,
@@ -276,7 +250,7 @@ void CommandBuffer::CopyImage(
 
 void CommandBuffer::CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size)
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
     VkBufferCopy buffer_copy = {
 
@@ -285,33 +259,33 @@ void CommandBuffer::CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size
         .size      = narrow_cast<VkDeviceSize>(size)
     };
 
-    vkCmdCopyBuffer(m_state->command_buffer, src_buffer, dst_buffer, 1, &buffer_copy);
+    vkCmdCopyBuffer(m_command_buffer, src_buffer, dst_buffer, 1, &buffer_copy);
 }
 
-UniqueCommandBuffer CommandBuffer::Create(VkDevice device, const VkCommandBufferAllocateInfo& alloc_info)
+UniqueCommandBuffer CommandBuffer::Create(VkDevice vk_device, const VkCommandBufferAllocateInfo& alloc_info)
 {
-    VkCommandBuffer command_buffer{};
+    VkCommandBuffer vk_command_buffer{};
 
-    if (auto result = vkAllocateCommandBuffers(device, &alloc_info, &command_buffer); result != VK_SUCCESS) {
+    if (auto result = vkAllocateCommandBuffers(vk_device, &alloc_info, &vk_command_buffer); result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreateCommandPool error: {}", result).c_str());
     }
 
-    spdlog::info(COMPONENT "Allocated VkCommandBuffer {}", fmt::ptr(command_buffer));
+    spdlog::info(COMPONENT "Allocated VkCommandBuffer {}", fmt::ptr(vk_command_buffer));
 
-    return UniqueCommandBuffer(new EtnaCommandBuffer_T{ command_buffer, device, alloc_info.commandPool });
+    return UniqueCommandBuffer(CommandBuffer(vk_command_buffer, vk_device, alloc_info.commandPool));
 }
 
 void CommandBuffer::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_command_buffer);
 
-    vkFreeCommandBuffers(m_state->device, m_state->command_pool, 1, &m_state->command_buffer);
+    vkFreeCommandBuffers(m_device, m_command_pool, 1, &m_command_buffer);
 
-    spdlog::info(COMPONENT "Destroyed VkCommandBuffer {}", fmt::ptr(m_state->command_buffer));
+    spdlog::info(COMPONENT "Destroyed VkCommandBuffer {}", fmt::ptr(m_command_buffer));
 
-    delete m_state;
-
-    m_state = nullptr;
+    m_command_buffer = nullptr;
+    m_device         = nullptr;
+    m_command_pool   = nullptr;
 }
 
 } // namespace etna

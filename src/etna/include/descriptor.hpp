@@ -9,25 +9,23 @@ ETNA_DEFINE_HANDLE(EtnaDescriptorPool)
 
 namespace etna {
 
-struct DescriptorSetLayoutBuilder final {
-    DescriptorSetLayoutBuilder() noexcept;
-
-    constexpr operator VkDescriptorSetLayoutCreateInfo() const noexcept { return create_info; }
-
-    void AddDescriptorSetLayoutBinding(
-        Binding        binding,
-        DescriptorType descriptor_type,
-        uint32_t       descriptor_count,
-        ShaderStage    shader_stage_flags);
-
-    VkDescriptorSetLayoutCreateInfo create_info{};
-
-  private:
-    std::vector<VkDescriptorSetLayoutBinding> m_descriptor_set_layout_bindings;
-};
-
 class DescriptorSetLayout {
   public:
+    struct Builder final {
+        Builder() noexcept;
+
+        void AddDescriptorSetLayoutBinding(
+            Binding        binding,
+            DescriptorType descriptor_type,
+            uint32_t       descriptor_count,
+            ShaderStage    shader_stage_flags);
+
+        VkDescriptorSetLayoutCreateInfo state{};
+
+      private:
+        std::vector<VkDescriptorSetLayoutBinding> m_descriptor_set_layout_bindings;
+    };
+
     DescriptorSetLayout() noexcept {}
     DescriptorSetLayout(std::nullptr_t) noexcept {}
 
@@ -112,19 +110,6 @@ class DescriptorPool {
     void Destroy() noexcept;
 
     EtnaDescriptorPool m_state{};
-};
-
-struct PipelineLayoutBuilder final {
-    PipelineLayoutBuilder() noexcept;
-
-    constexpr operator VkPipelineLayoutCreateInfo() const noexcept { return create_info; }
-
-    void AddDescriptorSetLayout(DescriptorSetLayout descriptor_set_layout);
-
-    VkPipelineLayoutCreateInfo create_info{};
-
-  private:
-    std::vector<VkDescriptorSetLayout> m_descriptor_set_layouts;
 };
 
 } // namespace etna

@@ -46,9 +46,9 @@ void RenderPass::Destroy() noexcept
     m_state = nullptr;
 }
 
-RenderPassBuilder::RenderPassBuilder() noexcept
+RenderPass::Builder::Builder() noexcept
 {
-    create_info = VkRenderPassCreateInfo{
+    state = VkRenderPassCreateInfo{
 
         .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .pNext           = nullptr,
@@ -62,12 +62,7 @@ RenderPassBuilder::RenderPassBuilder() noexcept
     };
 }
 
-SubpassBuilder RenderPassBuilder::CreateSubpassBuilder() const
-{
-    return SubpassBuilder(this);
-}
-
-AttachmentID RenderPassBuilder::AddAttachment(
+AttachmentID RenderPass::Builder::AddAttachment(
     Format            format,
     AttachmentLoadOp  load_op,
     AttachmentStoreOp store_op,
@@ -89,45 +84,49 @@ AttachmentID RenderPassBuilder::AddAttachment(
 
     m_attachment_descriptions.push_back(description);
 
-    create_info.attachmentCount = narrow_cast<uint32_t>(m_attachment_descriptions.size());
-    create_info.pAttachments    = m_attachment_descriptions.data();
+    state.attachmentCount = narrow_cast<uint32_t>(m_attachment_descriptions.size());
+    state.pAttachments    = m_attachment_descriptions.data();
 
     return AttachmentID(m_attachment_descriptions.size() - 1);
 }
 
-ReferenceID RenderPassBuilder::AddReference(AttachmentID attachment_id, ImageLayout image_layout)
+ReferenceID RenderPass::Builder::AddReference(AttachmentID attachment_id, ImageLayout image_layout)
 {
     m_references.push_back({ attachment_id.value, GetVk(image_layout) });
     return ReferenceID(m_references.size() - 1);
 }
 
-void RenderPassBuilder::AddSubpass(VkSubpassDescription subpass_description)
+Subpass RenderPass::Builder::CreateSubpass() noexcept
+{
+    return Subpass(this);
+}
+
+void RenderPass::Builder::AddSubpass(VkSubpassDescription subpass_description)
 {
     m_subpass_descriptions.push_back(subpass_description);
 
-    create_info.subpassCount = narrow_cast<uint32_t>(m_subpass_descriptions.size());
-    create_info.pSubpasses   = m_subpass_descriptions.data();
+    state.subpassCount = narrow_cast<uint32_t>(m_subpass_descriptions.size());
+    state.pSubpasses   = m_subpass_descriptions.data();
 }
 
-void SubpassBuilder::AddColorAttachment(ReferenceID reference_id)
+void Subpass::AddColorAttachment(ReferenceID reference_id)
 {
     m_color_attachment_references.push_back(m_renderpass_builder->m_references[reference_id.value]);
 
-    subpass_description.colorAttachmentCount = narrow_cast<uint32_t>(m_color_attachment_references.size());
-    subpass_description.pColorAttachments    = m_color_attachment_references.data();
+    state.colorAttachmentCount = narrow_cast<uint32_t>(m_color_attachment_references.size());
+    state.pColorAttachments    = m_color_attachment_references.data();
 }
 
-void SubpassBuilder::SetDepthStencilAttachment(ReferenceID reference_id)
+void Subpass::SetDepthStencilAttachment(ReferenceID reference_id)
 {
     depth_stencil_attachment_reference = m_renderpass_builder->m_references[reference_id.value];
 
-    subpass_description.pDepthStencilAttachment = &depth_stencil_attachment_reference;
+    state.pDepthStencilAttachment = &depth_stencil_attachment_reference;
 }
 
-SubpassBuilder::SubpassBuilder(const RenderPassBuilder* renderpass_builder) noexcept
-    : m_renderpass_builder(renderpass_builder)
+Subpass::Subpass(const RenderPass::Builder* renderpass_builder) noexcept : m_renderpass_builder(renderpass_builder)
 {
-    subpass_description = VkSubpassDescription{
+    state = VkSubpassDescription{
 
         .flags                   = {},
         .pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS,

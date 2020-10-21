@@ -281,6 +281,26 @@ std::vector<QueueFamilyProperties> PhysicalDevice::GetPhysicalDeviceQueueFamilyP
     return properties;
 }
 
+std::vector<SurfaceFormatKHR> PhysicalDevice::GetPhysicalDeviceSurfaceFormatsKHR(SurfaceKHR surface) const
+{
+    assert(m_physical_device);
+
+    uint32_t count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(m_physical_device, surface, &count, nullptr);
+
+    std::vector<VkSurfaceFormatKHR> vk_formats(count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(m_physical_device, surface, &count, vk_formats.data());
+
+    std::vector<SurfaceFormatKHR> formats(count);
+
+    for (size_t i = 0; i < count; ++i) {
+        formats[i].format     = static_cast<Format>(vk_formats[i].format);
+        formats[i].colorSpace = static_cast<ColorSpaceKHR>(vk_formats[i].colorSpace);
+    }
+
+    return formats;
+}
+
 std::vector<ExtensionProperties> PhysicalDevice::EnumerateDeviceExtensionProperties(const char* layer_name) const
 {
     assert(m_physical_device);

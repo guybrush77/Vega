@@ -346,6 +346,29 @@ enum class Format {
 
 ETNA_DEFINE_VK_ENUM(Format)
 
+enum class ColorSpaceKHR {
+    SrgbNonlinear             = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+    DisplayP3NonlinearEXT     = VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT,
+    ExtendedSrgbLinearEXT     = VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT,
+    DisplayP3LinearEXT        = VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT,
+    DciP3NonlinearEXT         = VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT,
+    Bt709LinearEXT            = VK_COLOR_SPACE_BT709_LINEAR_EXT,
+    Bt709NonlinearEXT         = VK_COLOR_SPACE_BT709_NONLINEAR_EXT,
+    Bt2020LinearEXT           = VK_COLOR_SPACE_BT2020_LINEAR_EXT,
+    Hdr10St2084EXT            = VK_COLOR_SPACE_HDR10_ST2084_EXT,
+    DolbyvisionEXT            = VK_COLOR_SPACE_DOLBYVISION_EXT,
+    Hdr10HlgEXT               = VK_COLOR_SPACE_HDR10_HLG_EXT,
+    AdobergbLinearEXT         = VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT,
+    AdobergbNonlinearEXT      = VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT,
+    PassThroughEXT            = VK_COLOR_SPACE_PASS_THROUGH_EXT,
+    ExtendedSrgbNonlinearEXT  = VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT,
+    DisplayNativeAMD          = VK_COLOR_SPACE_DISPLAY_NATIVE_AMD,
+    VkColorspaceSrgbNonlinear = VK_COLORSPACE_SRGB_NONLINEAR_KHR,
+    DciP3LinearEXT            = VK_COLOR_SPACE_DCI_P3_LINEAR_EXT
+};
+
+ETNA_DEFINE_VK_ENUM(ColorSpaceKHR)
+
 enum class VertexInputRate { Vertex = VK_VERTEX_INPUT_RATE_VERTEX, Instance = VK_VERTEX_INPUT_RATE_INSTANCE };
 
 ETNA_DEFINE_VK_ENUM(VertexInputRate)
@@ -719,6 +742,13 @@ struct QueueFamilyProperties final {
     {
         return { GetVk(queueFlags), queueCount, timestampValidBits, minImageTransferGranularity };
     }
+};
+
+struct SurfaceFormatKHR final {
+    Format        format;
+    ColorSpaceKHR colorSpace;
+
+    constexpr operator VkSurfaceFormatKHR() const noexcept { return { GetVk(format), GetVk(colorSpace) }; }
 };
 
 struct ClearColor final {

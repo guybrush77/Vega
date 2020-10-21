@@ -10,42 +10,38 @@ ETNA_DEFINE_HANDLE(EtnaRenderPass)
 
 namespace etna {
 
-struct SubpassBuilder;
-
-struct RenderPassBuilder final {
-    RenderPassBuilder() noexcept;
-
-    constexpr operator VkRenderPassCreateInfo() const noexcept { return create_info; }
-
-    SubpassBuilder CreateSubpassBuilder() const;
-
-    AttachmentID AddAttachment(
-        Format            format,
-        AttachmentLoadOp  load_op,
-        AttachmentStoreOp store_op,
-        ImageLayout       initial_layout,
-        ImageLayout       final_layout);
-
-    ReferenceID AddReference(AttachmentID attachment_id, ImageLayout image_layout);
-
-    void AddSubpass(VkSubpassDescription subpass_description);
-
-    VkRenderPassCreateInfo create_info{};
-
-  private:
-    friend struct SubpassBuilder;
-
-    std::vector<VkAttachmentDescription> m_attachment_descriptions;
-    std::deque<VkAttachmentReference>    m_references;
-    std::vector<VkSubpassDescription>    m_subpass_descriptions;
-};
+struct Subpass;
 
 class RenderPass {
   public:
+    struct Builder final {
+        Builder() noexcept;
+
+        AttachmentID AddAttachment(
+            Format            format,
+            AttachmentLoadOp  load_op,
+            AttachmentStoreOp store_op,
+            ImageLayout       initial_layout,
+            ImageLayout       final_layout);
+
+        ReferenceID AddReference(AttachmentID attachment_id, ImageLayout image_layout);
+
+        Subpass CreateSubpass() noexcept;
+
+        void AddSubpass(VkSubpassDescription subpass_description);
+
+        VkRenderPassCreateInfo state{};
+
+      private:
+        friend struct Subpass;
+
+        std::vector<VkAttachmentDescription> m_attachment_descriptions;
+        std::deque<VkAttachmentReference>    m_references;
+        std::vector<VkSubpassDescription>    m_subpass_descriptions;
+    };
+
     RenderPass() noexcept {}
     RenderPass(std::nullptr_t) noexcept {}
-
-    RenderPassBuilder CreateRenderPassBuilder() const { return RenderPassBuilder{}; }
 
     operator VkRenderPass() const noexcept;
 
@@ -69,23 +65,21 @@ class RenderPass {
     EtnaRenderPass m_state{};
 };
 
-struct SubpassBuilder final {
+struct Subpass final {
     void AddColorAttachment(ReferenceID reference_id);
     void SetDepthStencilAttachment(ReferenceID reference_id);
 
-    constexpr operator VkSubpassDescription() const noexcept { return subpass_description; }
-
-    VkSubpassDescription subpass_description{};
+    VkSubpassDescription state{};
 
   private:
-    friend struct RenderPassBuilder;
+    friend struct RenderPass::Builder;
 
-    SubpassBuilder(const RenderPassBuilder* renderpass_builder) noexcept;
+    Subpass(const RenderPass::Builder* renderpass_builder) noexcept;
 
     std::vector<VkAttachmentReference> m_color_attachment_references;
     VkAttachmentReference              depth_stencil_attachment_reference;
 
-    const RenderPassBuilder* m_renderpass_builder{};
+    const RenderPass::Builder* m_renderpass_builder{};
 };
 
 } // namespace etna

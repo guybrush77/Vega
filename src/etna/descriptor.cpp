@@ -55,9 +55,9 @@ void DescriptorSetLayout::Destroy() noexcept
     m_state = nullptr;
 }
 
-DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder() noexcept
+DescriptorSetLayout::Builder::Builder() noexcept
 {
-    create_info = VkDescriptorSetLayoutCreateInfo{
+    state = VkDescriptorSetLayoutCreateInfo{
 
         .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .pNext        = nullptr,
@@ -67,7 +67,7 @@ DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder() noexcept
     };
 }
 
-void DescriptorSetLayoutBuilder::AddDescriptorSetLayoutBinding(
+void DescriptorSetLayout::Builder::AddDescriptorSetLayoutBinding(
     Binding        binding,
     DescriptorType descriptor_type,
     uint32_t       descriptor_count,
@@ -84,8 +84,8 @@ void DescriptorSetLayoutBuilder::AddDescriptorSetLayoutBinding(
 
     m_descriptor_set_layout_bindings.push_back(descriptor_set_layout_binding);
 
-    create_info.bindingCount = narrow_cast<uint32_t>(m_descriptor_set_layout_bindings.size());
-    create_info.pBindings    = m_descriptor_set_layout_bindings.data();
+    state.bindingCount = narrow_cast<uint32_t>(m_descriptor_set_layout_bindings.size());
+    state.pBindings    = m_descriptor_set_layout_bindings.data();
 }
 
 DescriptorPool::operator VkDescriptorPool() const noexcept
@@ -166,28 +166,6 @@ void WriteDescriptorSet::AddBuffer(Buffer buffer, size_t offset, size_t size)
 
     state.descriptorCount = narrow_cast<uint32_t>(m_descriptor_buffer_infos.size());
     state.pBufferInfo     = m_descriptor_buffer_infos.data();
-}
-
-PipelineLayoutBuilder::PipelineLayoutBuilder() noexcept
-{
-    create_info = VkPipelineLayoutCreateInfo{
-
-        .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .pNext                  = nullptr,
-        .flags                  = {},
-        .setLayoutCount         = 0,
-        .pSetLayouts            = nullptr,
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges    = nullptr
-    };
-}
-
-void PipelineLayoutBuilder::AddDescriptorSetLayout(DescriptorSetLayout descriptor_set_layout)
-{
-    m_descriptor_set_layouts.push_back(descriptor_set_layout);
-
-    create_info.setLayoutCount = narrow_cast<uint32_t>(m_descriptor_set_layouts.size());
-    create_info.pSetLayouts    = m_descriptor_set_layouts.data();
 }
 
 } // namespace etna

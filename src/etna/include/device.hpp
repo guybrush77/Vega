@@ -6,24 +6,21 @@ VK_DEFINE_HANDLE(VmaAllocator)
 
 namespace etna {
 
-struct DeviceBuilder final {
-    DeviceBuilder() noexcept;
-
-    constexpr operator VkDeviceCreateInfo() const noexcept { return create_info; }
-
-    void AddQueue(uint32_t queue_family_index, uint32_t queue_count);
-
-    void AddEnabledLayer(const char* layer_name);
-
-    VkDeviceCreateInfo create_info{};
-
-  private:
-    std::vector<VkDeviceQueueCreateInfo> m_device_queues;
-    std::vector<const char*>             m_enabled_layer_names;
-};
-
 class Device {
   public:
+    struct Builder final {
+        Builder() noexcept;
+
+        void AddQueue(uint32_t queue_family_index, uint32_t queue_count);
+        void AddEnabledLayer(const char* layer_name);
+
+        VkDeviceCreateInfo state{};
+
+      private:
+        std::vector<VkDeviceQueueCreateInfo> m_device_queues;
+        std::vector<const char*>             m_enabled_layer_names;
+    };
+
     Device() noexcept {}
     Device(std::nullptr_t) noexcept {}
 
@@ -33,8 +30,6 @@ class Device {
 
     bool operator==(const Device& rhs) const noexcept { return m_device == rhs.m_device; }
     bool operator!=(const Device& rhs) const noexcept { return m_device != rhs.m_device; }
-
-    auto CreateDeviceBuilder() const noexcept { return DeviceBuilder{}; }
 
     auto CreateCommandPool(uint32_t queue_family_index, CommandPoolCreate command_pool_create_flags = {})
         -> UniqueCommandPool;

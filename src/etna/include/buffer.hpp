@@ -3,8 +3,7 @@
 #include "core.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocator)
-
-ETNA_DEFINE_HANDLE(EtnaBuffer)
+VK_DEFINE_HANDLE(VmaAllocation)
 
 namespace etna {
 
@@ -13,12 +12,12 @@ class Buffer {
     Buffer() noexcept {}
     Buffer(std::nullptr_t) noexcept {}
 
-    operator VkBuffer() const noexcept;
+    operator VkBuffer() const noexcept { return m_buffer; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    explicit operator bool() const noexcept { return m_buffer != nullptr; }
 
-    bool operator==(const Buffer& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const Buffer& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const Buffer& rhs) const noexcept { return m_buffer == rhs.m_buffer; }
+    bool operator!=(const Buffer& rhs) const noexcept { return m_buffer != rhs.m_buffer; }
 
     void* MapMemory();
     void  UnmapMemory();
@@ -29,16 +28,18 @@ class Buffer {
 
     friend class Device;
 
-    operator EtnaBuffer() const noexcept { return m_state; }
-
-    Buffer(EtnaBuffer buffer) : m_state(buffer) {}
+    Buffer(VkBuffer buffer, VmaAllocator allocator, VmaAllocation allocation) noexcept
+        : m_buffer(buffer), m_allocator(allocator), m_allocation(allocation)
+    {}
 
     static auto Create(VmaAllocator allocator, const VkBufferCreateInfo& create_info, MemoryUsage memory_usage)
         -> UniqueBuffer;
 
     void Destroy() noexcept;
 
-    EtnaBuffer m_state{};
+    VkBuffer      m_buffer{};
+    VmaAllocator  m_allocator{};
+    VmaAllocation m_allocation{};
 };
 
 } // namespace etna

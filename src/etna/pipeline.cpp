@@ -1,4 +1,5 @@
 #include "pipeline.hpp"
+#include "descriptor.hpp"
 #include "renderpass.hpp"
 #include "shader.hpp"
 
@@ -22,7 +23,29 @@ struct EtnaPipeline_T final {
 
 namespace etna {
 
-PipelineBuilder::PipelineBuilder()
+PipelineLayout::Builder::Builder() noexcept
+{
+    state = VkPipelineLayoutCreateInfo{
+
+        .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext                  = nullptr,
+        .flags                  = {},
+        .setLayoutCount         = 0,
+        .pSetLayouts            = nullptr,
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges    = nullptr
+    };
+}
+
+void PipelineLayout::Builder::AddDescriptorSetLayout(DescriptorSetLayout descriptor_set_layout)
+{
+    m_descriptor_set_layouts.push_back(descriptor_set_layout);
+
+    state.setLayoutCount = narrow_cast<uint32_t>(m_descriptor_set_layouts.size());
+    state.pSetLayouts    = m_descriptor_set_layouts.data();
+}
+
+Pipeline::Builder::Builder()
 {
     m_vertex_input_state = VkPipelineVertexInputStateCreateInfo{
 
@@ -130,7 +153,7 @@ PipelineBuilder::PipelineBuilder()
         .pDynamicStates    = nullptr
     };
 
-    create_info = VkGraphicsPipelineCreateInfo{
+    state = VkGraphicsPipelineCreateInfo{
 
         .sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext               = nullptr,
@@ -154,13 +177,13 @@ PipelineBuilder::PipelineBuilder()
     };
 }
 
-PipelineBuilder::PipelineBuilder(PipelineLayout layout, RenderPass renderpass) noexcept : PipelineBuilder()
+Pipeline::Builder::Builder(PipelineLayout layout, RenderPass renderpass) noexcept : Builder()
 {
-    create_info.layout     = layout;
-    create_info.renderPass = renderpass;
+    state.layout     = layout;
+    state.renderPass = renderpass;
 }
 
-void PipelineBuilder::AddShaderStage(
+void Pipeline::Builder::AddShaderStage(
     ShaderModule shader_module,
     ShaderStage  shader_stage_flags,
     const char*  entry_function)
@@ -178,11 +201,11 @@ void PipelineBuilder::AddShaderStage(
 
     m_shader_stages.push_back(shader_stage_create_info);
 
-    create_info.pStages    = m_shader_stages.data();
-    create_info.stageCount = narrow_cast<std::uint32_t>(m_shader_stages.size());
+    state.pStages    = m_shader_stages.data();
+    state.stageCount = narrow_cast<std::uint32_t>(m_shader_stages.size());
 }
 
-void PipelineBuilder::AddVertexInputBindingDescription(
+void Pipeline::Builder::AddVertexInputBindingDescription(
     Binding         binding,
     size_t          stride,
     VertexInputRate vertex_input_rate)
@@ -193,7 +216,7 @@ void PipelineBuilder::AddVertexInputBindingDescription(
     m_vertex_input_state.pVertexBindingDescriptions    = m_binding_descriptions.data();
 }
 
-void PipelineBuilder::AddVertexInputAttributeDescription(
+void Pipeline::Builder::AddVertexInputAttributeDescription(
     Location location,
     Binding  binding,
     Format   format,
@@ -205,7 +228,7 @@ void PipelineBuilder::AddVertexInputAttributeDescription(
     m_vertex_input_state.pVertexAttributeDescriptions    = m_attribute_descriptions.data();
 }
 
-void PipelineBuilder::AddViewport(Viewport viewport)
+void Pipeline::Builder::AddViewport(Viewport viewport)
 {
     m_viewports.push_back(viewport);
 
@@ -213,7 +236,7 @@ void PipelineBuilder::AddViewport(Viewport viewport)
     m_viewport_state.pViewports    = m_viewports.data();
 }
 
-void PipelineBuilder::AddScissor(Rect2D scissor)
+void Pipeline::Builder::AddScissor(Rect2D scissor)
 {
     m_scissors.push_back(scissor);
 
@@ -223,7 +246,7 @@ void PipelineBuilder::AddScissor(Rect2D scissor)
 
 // TODO
 /*
-void PipelineBuilder::AddColorBlendAttachmentState(const VkPipelineColorBlendAttachmentState& state)
+void Pipeline::Builder::AddColorBlendAttachmentState(const VkPipelineColorBlendAttachmentState& state)
 {
     m_color_blend_attachments.push_back(state);
 
@@ -232,7 +255,7 @@ void PipelineBuilder::AddColorBlendAttachmentState(const VkPipelineColorBlendAtt
 }
 */
 
-void PipelineBuilder::AddColorBlendAttachmentBaseState()
+void Pipeline::Builder::AddColorBlendAttachmentState()
 {
     VkColorComponentFlags write_mask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
                                        VK_COLOR_COMPONENT_A_BIT;
@@ -255,7 +278,7 @@ void PipelineBuilder::AddColorBlendAttachmentBaseState()
     m_color_blend_state.attachmentCount = narrow_cast<std::uint32_t>(m_color_blend_attachments.size());
 }
 
-void PipelineBuilder::AddDynamicState(DynamicState dynamic_state)
+void Pipeline::Builder::AddDynamicState(DynamicState dynamic_state)
 {
     m_dynamic_states.push_back(GetVk(dynamic_state));
 
@@ -263,7 +286,7 @@ void PipelineBuilder::AddDynamicState(DynamicState dynamic_state)
     m_dynamic_state.dynamicStateCount = narrow_cast<std::uint32_t>(m_dynamic_states.size());
 }
 
-void PipelineBuilder::SetDepthState(DepthTest depth_test, DepthWrite depth_write, CompareOp compare_op) noexcept
+void Pipeline::Builder::SetDepthState(DepthTest depth_test, DepthWrite depth_write, CompareOp compare_op) noexcept
 {
     m_depth_stencil_state.depthTestEnable  = depth_test == DepthTest::Enable;
     m_depth_stencil_state.depthWriteEnable = depth_write == DepthWrite::Enable;

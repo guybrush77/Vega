@@ -286,9 +286,9 @@ void Device::Destroy() noexcept
     m_allocator = nullptr;
 }
 
-DeviceBuilder::DeviceBuilder() noexcept
+Device::Builder::Builder() noexcept
 {
-    create_info = VkDeviceCreateInfo{
+    state = VkDeviceCreateInfo{
 
         .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext                   = nullptr,
@@ -303,7 +303,7 @@ DeviceBuilder::DeviceBuilder() noexcept
     };
 }
 
-void DeviceBuilder::AddQueue(uint32_t queue_family_index, uint32_t queue_count)
+void Device::Builder::AddQueue(uint32_t queue_family_index, uint32_t queue_count)
 {
     static const float queue_priority = 1.0f;
 
@@ -319,16 +319,16 @@ void DeviceBuilder::AddQueue(uint32_t queue_family_index, uint32_t queue_count)
 
     m_device_queues.push_back(device_queue_create_info);
 
-    create_info.queueCreateInfoCount = narrow_cast<uint32_t>(m_device_queues.size());
-    create_info.pQueueCreateInfos    = m_device_queues.data();
+    state.queueCreateInfoCount = narrow_cast<uint32_t>(m_device_queues.size());
+    state.pQueueCreateInfos    = m_device_queues.data();
 }
 
-void DeviceBuilder::AddEnabledLayer(const char* layer_name)
+void Device::Builder::AddEnabledLayer(const char* layer_name)
 {
     m_enabled_layer_names.push_back(layer_name);
 
-    create_info.enabledLayerCount   = narrow_cast<uint32_t>(m_enabled_layer_names.size());
-    create_info.ppEnabledLayerNames = m_enabled_layer_names.data();
+    state.enabledLayerCount   = narrow_cast<uint32_t>(m_enabled_layer_names.size());
+    state.ppEnabledLayerNames = m_enabled_layer_names.data();
 }
 
 } // namespace etna

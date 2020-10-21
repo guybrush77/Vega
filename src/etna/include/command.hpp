@@ -2,9 +2,6 @@
 
 #include "core.hpp"
 
-ETNA_DEFINE_HANDLE(EtnaCommandPool)
-ETNA_DEFINE_HANDLE(EtnaCommandBuffer)
-
 namespace etna {
 
 class CommandPool {
@@ -12,12 +9,12 @@ class CommandPool {
     CommandPool() noexcept {}
     CommandPool(std::nullptr_t) noexcept {}
 
-    operator VkCommandPool() const noexcept;
+    operator VkCommandPool() const noexcept { return m_command_pool; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    explicit operator bool() const noexcept { return m_command_pool != nullptr; }
 
-    bool operator==(const CommandPool& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const CommandPool& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const CommandPool& rhs) const noexcept { return m_command_pool == rhs.m_command_pool; }
+    bool operator!=(const CommandPool& rhs) const noexcept { return m_command_pool != rhs.m_command_pool; }
 
     auto AllocateCommandBuffer(CommandBufferLevel level = CommandBufferLevel::Primary) -> UniqueCommandBuffer;
 
@@ -27,15 +24,15 @@ class CommandPool {
 
     friend class Device;
 
-    CommandPool(EtnaCommandPool command_pool) : m_state(command_pool) {}
+    CommandPool(VkCommandPool command_pool, VkDevice device) noexcept : m_command_pool(command_pool), m_device(device)
+    {}
 
-    static auto Create(VkDevice device, const VkCommandPoolCreateInfo& create_info) -> UniqueCommandPool;
+    static auto Create(VkDevice vk_device, const VkCommandPoolCreateInfo& create_info) -> UniqueCommandPool;
 
     void Destroy() noexcept;
 
-    operator EtnaCommandPool() const noexcept { return m_state; }
-
-    EtnaCommandPool m_state{};
+    VkCommandPool m_command_pool{};
+    VkDevice      m_device{};
 };
 
 class CommandBuffer {
@@ -43,12 +40,12 @@ class CommandBuffer {
     CommandBuffer() noexcept {}
     CommandBuffer(std::nullptr_t) noexcept {}
 
-    operator VkCommandBuffer() const noexcept;
+    operator VkCommandBuffer() const noexcept { return m_command_buffer; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    explicit operator bool() const noexcept { return m_command_buffer != nullptr; }
 
-    bool operator==(const CommandBuffer& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const CommandBuffer& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const CommandBuffer& rhs) const noexcept { return m_command_buffer == rhs.m_command_buffer; }
+    bool operator!=(const CommandBuffer& rhs) const noexcept { return m_command_buffer != rhs.m_command_buffer; }
 
     void Begin(CommandBufferUsage command_buffer_usage_flags = {});
 
@@ -106,15 +103,17 @@ class CommandBuffer {
 
     friend class CommandPool;
 
-    CommandBuffer(EtnaCommandBuffer command_buffer) : m_state(command_buffer) {}
+    CommandBuffer(VkCommandBuffer command_buffer, VkDevice device, VkCommandPool command_pool) noexcept
+        : m_command_buffer(command_buffer), m_device(device), m_command_pool(command_pool)
+    {}
 
-    static auto Create(VkDevice device, const VkCommandBufferAllocateInfo& alloc_info) -> UniqueCommandBuffer;
+    static auto Create(VkDevice vk_device, const VkCommandBufferAllocateInfo& alloc_info) -> UniqueCommandBuffer;
 
     void Destroy() noexcept;
 
-    operator EtnaCommandBuffer() const noexcept { return m_state; }
-
-    EtnaCommandBuffer m_state{};
+    VkCommandBuffer m_command_buffer{};
+    VkDevice        m_device{};
+    VkCommandPool   m_command_pool{};
 };
 
 } // namespace etna
