@@ -368,17 +368,19 @@ int main()
         renderpass = device->CreateRenderPass(builder.state);
     }
 
+    auto extent = Extent2D{ 640, 640 };
+
     // Create render target image
     UniqueImage2D image = device->CreateImage(
         Format::R8G8B8A8Srgb,
-        Extent2D{ 640, 640 },
+        extent,
         ImageUsage::ColorAttachment | ImageUsage::TransferSrc,
         MemoryUsage::GpuOnly,
         ImageTiling::Optimal);
 
     UniqueImage2D depth = device->CreateImage(
         Format::D24UnormS8Uint,
-        Extent2D{ 640, 640 },
+        extent,
         ImageUsage::DepthStencilAttachment,
         MemoryUsage::GpuOnly,
         ImageTiling::Optimal);
@@ -386,7 +388,7 @@ int main()
     // Create render target framebuffer
     auto image_view  = device->CreateImageView(*image, ImageAspect::Color);
     auto depth_view  = device->CreateImageView(*depth, ImageAspect::Depth);
-    auto framebuffer = device->CreateFramebuffer(*renderpass, { *image_view, *depth_view }, image->Extent2D());
+    auto framebuffer = device->CreateFramebuffer(*renderpass, { *image_view, *depth_view }, extent);
 
     // Create descriptor set layouts
     UniqueDescriptorSetLayout descriptor_set_layout;
@@ -412,7 +414,7 @@ int main()
         auto [fs_data, fs_size] = GetResource("shader.frag");
         auto vertex_shader      = device->CreateShaderModule(vs_data, vs_size);
         auto fragment_shader    = device->CreateShaderModule(fs_data, fs_size);
-        auto [width, height]    = image->Extent2D();
+        auto [width, height]    = extent;
         auto viewport           = Viewport{ 0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1 };
         auto scissor            = Rect2D{ Offset2D{ 0, 0 }, Extent2D{ width, height } };
 
@@ -464,14 +466,15 @@ int main()
 
     // Render image
     {
-        auto clear_color   = ClearColor::Transparent;
-        auto depth_stencil = ClearDepthStencil::Default;
+        auto clear_color = ClearColor::Transparent;
+        auto clear_depth = ClearDepthStencil::Default;
+        auto render_area = Rect2D{ Offset2D{ 0, 0 }, extent };
 
         auto cmd_pool   = device->CreateCommandPool(graphics.family_index, CommandPoolCreate::Transient);
         auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
 
         cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
-        cmd_buffer->BeginRenderPass(*framebuffer, { clear_color, depth_stencil }, SubpassContents::Inline);
+        cmd_buffer->BeginRenderPass(*framebuffer, render_area, { clear_color, clear_depth }, SubpassContents::Inline);
         cmd_buffer->BindPipeline(PipelineBindPoint::Graphics, *pipeline);
         cmd_buffer->BindVertexBuffers(*vertex_buffer);
         cmd_buffer->BindIndexBuffer(*index_buffer, IndexType::Uint32);
@@ -489,7 +492,7 @@ int main()
     {
         dst_image = device->CreateImage(
             image->Format(),
-            image->Extent2D(),
+            extent,
             ImageUsage::TransferDst,
             MemoryUsage::CpuOnly,
             ImageTiling::Linear);
@@ -512,6 +515,7 @@ int main()
             ImageLayout::TransferSrcOptimal,
             *dst_image,
             ImageLayout::TransferDstOptimal,
+            extent,
             ImageAspect::Color);
         cmd_buffer->PipelineBarrier(
             *dst_image,
@@ -530,7 +534,7 @@ int main()
 
     // Write image to file
     {
-        auto [width, height] = dst_image->Extent2D();
+        auto [width, height] = extent;
         auto stride          = 4 * width;
 
         void* data = dst_image->MapMemory();

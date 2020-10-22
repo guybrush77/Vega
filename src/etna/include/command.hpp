@@ -11,10 +11,7 @@ class CommandPool {
 
     operator VkCommandPool() const noexcept { return m_command_pool; }
 
-    explicit operator bool() const noexcept { return m_command_pool != nullptr; }
-
-    bool operator==(const CommandPool& rhs) const noexcept { return m_command_pool == rhs.m_command_pool; }
-    bool operator!=(const CommandPool& rhs) const noexcept { return m_command_pool != rhs.m_command_pool; }
+    bool operator==(const CommandPool&) const = default;
 
     auto AllocateCommandBuffer(CommandBufferLevel level = CommandBufferLevel::Primary) -> UniqueCommandBuffer;
 
@@ -51,6 +48,7 @@ class CommandBuffer {
 
     void BeginRenderPass(
         Framebuffer                             framebuffer,
+        Rect2D                                  render_area,
         std::initializer_list<const ClearValue> clear_values,
         SubpassContents                         subpass_contents);
 
@@ -93,6 +91,7 @@ class CommandBuffer {
         ImageLayout src_image_layout,
         Image2D     dst_image,
         ImageLayout dst_image_layout,
+        Extent2D    extent,
         ImageAspect image_aspect_flags);
 
     void CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size);

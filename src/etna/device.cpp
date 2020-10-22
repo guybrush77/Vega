@@ -10,6 +10,8 @@
 #include "queue.hpp"
 #include "renderpass.hpp"
 #include "shader.hpp"
+#include "surface.hpp"
+#include "swapchain.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -63,6 +65,41 @@ UniqueShaderModule Device::CreateShaderModule(const unsigned char* shader_data, 
     };
 
     return ShaderModule::Create(m_device, create_info);
+}
+
+UniqueSwapchainKHR Device::CreateSwapchainKHR(
+    SurfaceKHR       surface,
+    uint32_t         min_image_count,
+    SurfaceFormatKHR surface_format,
+    Extent2D         extent,
+    ImageUsage       image_usage,
+    PresentModeKHR   present_mode)
+{
+    assert(m_device);
+
+    auto create_info = VkSwapchainCreateInfoKHR{
+
+        .sType                 = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .pNext                 = nullptr,
+        .flags                 = {},
+        .surface               = surface,
+        .minImageCount         = min_image_count,
+        .imageFormat           = GetVk(surface_format.format),
+        .imageColorSpace       = GetVk(surface_format.colorSpace),
+        .imageExtent           = extent,
+        .imageArrayLayers      = 1,
+        .imageUsage            = GetVk(image_usage),
+        .imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices   = nullptr,
+        .preTransform          = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+        .compositeAlpha        = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode           = GetVk(present_mode),
+        .clipped               = VK_TRUE,
+        .oldSwapchain          = nullptr
+    };
+
+    return SwapchainKHR::Create(m_device, create_info);
 }
 
 UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage)
@@ -220,6 +257,24 @@ Queue Device::GetQueue(uint32_t queue_family_index) const noexcept
     return Queue(vk_queue);
 }
 
+auto Device::GetSwapchainImagesKHR(SwapchainKHR swapchain) const -> std::vector<Image2D>
+{
+    assert(m_device);
+
+    uint32_t count = 0;
+    vkGetSwapchainImagesKHR(m_device, swapchain, &count, nullptr);
+
+    std::vector<VkImage> vk_images(count);
+    vkGetSwapchainImagesKHR(m_device, swapchain, &count, vk_images.data());
+
+    std::vector<Image2D> images(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        images[i] = Image2D(vk_images[i], nullptr, nullptr, GetVk(swapchain.Format()));
+    }
+
+    return images;
+}
+
 void Device::UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set)
 {
     assert(m_device);
@@ -329,6 +384,14 @@ void Device::Builder::AddEnabledLayer(const char* layer_name)
 
     state.enabledLayerCount   = narrow_cast<uint32_t>(m_enabled_layer_names.size());
     state.ppEnabledLayerNames = m_enabled_layer_names.data();
+}
+
+void Device::Builder::AddEnabledExtension(const char* extension_name)
+{
+    m_enabled_extension_names.push_back(extension_name);
+
+    state.enabledExtensionCount   = narrow_cast<uint32_t>(m_enabled_extension_names.size());
+    state.ppEnabledExtensionNames = m_enabled_extension_names.data();
 }
 
 } // namespace etna

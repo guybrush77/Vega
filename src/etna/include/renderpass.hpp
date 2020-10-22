@@ -6,8 +6,6 @@
 #include <span>
 #include <vector>
 
-ETNA_DEFINE_HANDLE(EtnaRenderPass)
-
 namespace etna {
 
 struct Subpass;
@@ -43,26 +41,25 @@ class RenderPass {
     RenderPass() noexcept {}
     RenderPass(std::nullptr_t) noexcept {}
 
-    operator VkRenderPass() const noexcept;
+    operator VkRenderPass() const noexcept { return m_renderpass; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
-
-    bool operator==(const RenderPass& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const RenderPass& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const RenderPass&) const = default;
 
   private:
     template <typename>
     friend class UniqueHandle;
 
     friend class Device;
+    friend class Framebuffer;
 
-    RenderPass(EtnaRenderPass state) : m_state(state) {}
+    RenderPass(VkRenderPass renderpass, VkDevice device) noexcept : m_renderpass(renderpass), m_device(device) {}
 
-    static auto Create(VkDevice device, const VkRenderPassCreateInfo& create_info) -> UniqueRenderPass;
+    static auto Create(VkDevice vk_device, const VkRenderPassCreateInfo& create_info) -> UniqueRenderPass;
 
     void Destroy() noexcept;
 
-    EtnaRenderPass m_state{};
+    VkRenderPass m_renderpass{};
+    VkDevice     m_device{};
 };
 
 struct Subpass final {

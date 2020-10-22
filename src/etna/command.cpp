@@ -3,6 +3,7 @@
 #include "descriptor.hpp"
 #include "image.hpp"
 #include "pipeline.hpp"
+#include "renderpass.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -70,6 +71,7 @@ void CommandBuffer::Begin(CommandBufferUsage command_buffer_usage_flags)
 
 void CommandBuffer::BeginRenderPass(
     Framebuffer                             framebuffer,
+    Rect2D                                  render_area,
     std::initializer_list<const ClearValue> clear_values,
     SubpassContents                         subpass_contents)
 {
@@ -77,15 +79,13 @@ void CommandBuffer::BeginRenderPass(
 
     std::vector<VkClearValue> vk_clear_values(clear_values.begin(), clear_values.end());
 
-    auto vk_render_area = VkRect2D{ VkOffset2D{ 0, 0 }, framebuffer.Extent2D() };
-
     VkRenderPassBeginInfo begin_info = {
 
         .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .pNext           = nullptr,
         .renderPass      = framebuffer.RenderPass(),
         .framebuffer     = framebuffer,
-        .renderArea      = vk_render_area,
+        .renderArea      = render_area,
         .clearValueCount = narrow_cast<uint32_t>(vk_clear_values.size()),
         .pClearValues    = vk_clear_values.data()
     };
@@ -223,11 +223,10 @@ void CommandBuffer::CopyImage(
     ImageLayout src_image_layout,
     Image2D     dst_image,
     ImageLayout dst_image_layout,
+    Extent2D    extent,
     ImageAspect image_aspect_flags)
 {
     assert(m_command_buffer);
-
-    auto [width, height] = src_image.Extent2D();
 
     VkImageCopy image_copy = {
 
@@ -235,7 +234,7 @@ void CommandBuffer::CopyImage(
         .srcOffset      = { 0, 0, 0 },
         .dstSubresource = { GetVk(image_aspect_flags), 0, 0, 1 },
         .dstOffset      = { 0, 0, 0 },
-        .extent         = { width, height, 1 }
+        .extent         = VkExtent3D{ extent.width, extent.height, 1 }
     };
 
     vkCmdCopyImage(

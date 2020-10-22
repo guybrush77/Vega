@@ -776,6 +776,8 @@ struct SurfaceFormatKHR final {
     Format        format;
     ColorSpaceKHR colorSpace;
 
+    bool operator==(const SurfaceFormatKHR& rhs) const = default;
+
     constexpr operator VkSurfaceFormatKHR() const noexcept { return { GetVk(format), GetVk(colorSpace) }; }
 };
 
@@ -953,6 +955,7 @@ class Queue;
 class RenderPass;
 class ShaderModule;
 class SurfaceKHR;
+class SwapchainKHR;
 class WriteDescriptorSet;
 
 using UniqueBuffer              = UniqueHandle<Buffer>;
@@ -970,5 +973,6 @@ using UniquePipelineLayout      = UniqueHandle<PipelineLayout>;
 using UniqueRenderPass          = UniqueHandle<RenderPass>;
 using UniqueShaderModule        = UniqueHandle<ShaderModule>;
 using UniqueSurfaceKHR          = UniqueHandle<SurfaceKHR>;
+using UniqueSwapchainKHR        = UniqueHandle<SwapchainKHR>;
 
 } // namespace etna

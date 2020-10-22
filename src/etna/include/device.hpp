@@ -13,12 +13,14 @@ class Device {
 
         void AddQueue(uint32_t queue_family_index, uint32_t queue_count);
         void AddEnabledLayer(const char* layer_name);
+        void AddEnabledExtension(const char* extension_name);
 
         VkDeviceCreateInfo state{};
 
       private:
         std::vector<VkDeviceQueueCreateInfo> m_device_queues;
         std::vector<const char*>             m_enabled_layer_names;
+        std::vector<const char*>             m_enabled_extension_names;
     };
 
     Device() noexcept {}
@@ -51,6 +53,14 @@ class Device {
 
     auto CreateShaderModule(const unsigned char* shader_data, size_t shader_size) -> UniqueShaderModule;
 
+    auto CreateSwapchainKHR(
+        SurfaceKHR       surface,
+        uint32_t         min_image_count,
+        SurfaceFormatKHR surface_format,
+        Extent2D         extent,
+        ImageUsage       image_usage,
+        PresentModeKHR   present_mode) -> UniqueSwapchainKHR;
+
     auto CreateBuffer(std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage) -> UniqueBuffer;
 
     auto CreateImage(
@@ -63,6 +73,8 @@ class Device {
     auto CreateImageView(Image2D image, ImageAspect image_aspect_flags) -> UniqueImageView2D;
 
     auto GetQueue(uint32_t queue_family_index) const noexcept -> Queue;
+
+    auto GetSwapchainImagesKHR(SwapchainKHR swapchain) const -> std::vector<Image2D>;
 
     void UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set);
 

@@ -4,46 +4,31 @@
 
 #define COMPONENT "Etna: "
 
-namespace {
-
-struct EtnaRenderPass_T final {
-    VkRenderPass renderpass;
-    VkDevice     device;
-};
-
-} // namespace
-
 namespace etna {
 
-RenderPass::operator VkRenderPass() const noexcept
+UniqueRenderPass RenderPass::Create(VkDevice vk_device, const VkRenderPassCreateInfo& create_info)
 {
-    return m_state ? m_state->renderpass : VkRenderPass{};
-}
+    VkRenderPass vk_renderpass{};
 
-UniqueRenderPass RenderPass::Create(VkDevice device, const VkRenderPassCreateInfo& create_info)
-{
-    VkRenderPass renderpass{};
-
-    if (auto result = vkCreateRenderPass(device, &create_info, nullptr, &renderpass); result != VK_SUCCESS) {
+    if (auto result = vkCreateRenderPass(vk_device, &create_info, nullptr, &vk_renderpass); result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreateRenderPass error: {}", result).c_str());
     }
 
-    spdlog::info(COMPONENT "Created VkRenderPass {}", fmt::ptr(renderpass));
+    spdlog::info(COMPONENT "Created VkRenderPass {}", fmt::ptr(vk_renderpass));
 
-    return UniqueRenderPass(new EtnaRenderPass_T{ renderpass, device });
+    return UniqueRenderPass(RenderPass(vk_renderpass, vk_device));
 }
 
 void RenderPass::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_renderpass);
 
-    vkDestroyRenderPass(m_state->device, m_state->renderpass, nullptr);
+    vkDestroyRenderPass(m_device, m_renderpass, nullptr);
 
-    spdlog::info(COMPONENT "Destroyed VkRenderPass {}", fmt::ptr(m_state->renderpass));
+    spdlog::info(COMPONENT "Destroyed VkRenderPass {}", fmt::ptr(m_renderpass));
 
-    delete m_state;
-
-    m_state = nullptr;
+    m_renderpass = nullptr;
+    m_device     = nullptr;
 }
 
 RenderPass::Builder::Builder() noexcept

@@ -3,11 +3,7 @@
 #include "core.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocator)
-VK_DEFINE_HANDLE(VmaAllocator)
-
-ETNA_DEFINE_HANDLE(EtnaImage2D)
-ETNA_DEFINE_HANDLE(EtnaImageView2D)
-ETNA_DEFINE_HANDLE(EtnaFramebuffer)
+VK_DEFINE_HANDLE(VmaAllocation)
 
 namespace etna {
 
@@ -16,15 +12,11 @@ class Image2D {
     Image2D() noexcept {}
     Image2D(std::nullptr_t) noexcept {}
 
-    operator VkImage() const noexcept;
+    operator VkImage() const noexcept { return m_image; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    bool operator==(const Image2D&) const = default;
 
-    bool operator==(const Image2D& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const Image2D& rhs) const noexcept { return m_state != rhs.m_state; }
-
-    auto Format() const noexcept -> Format;
-    auto Extent2D() const noexcept -> Extent2D;
+    auto Format() const noexcept { return static_cast<etna::Format>(m_format); }
 
     void* MapMemory();
     void  UnmapMemory();
@@ -35,16 +27,19 @@ class Image2D {
 
     friend class Device;
 
-    operator EtnaImage2D() const noexcept { return m_state; }
-
-    Image2D(EtnaImage2D image) : m_state(image) {}
+    Image2D(VkImage image, VmaAllocator allocator, VmaAllocation allocation, VkFormat format) noexcept
+        : m_image(image), m_allocator(allocator), m_allocation(allocation), m_format(format)
+    {}
 
     static auto Create(VmaAllocator allocator, const VkImageCreateInfo& create_info, MemoryUsage memory_usage)
         -> UniqueImage2D;
 
     void Destroy() noexcept;
 
-    EtnaImage2D m_state = nullptr;
+    VkImage       m_image{};
+    VmaAllocator  m_allocator{};
+    VmaAllocation m_allocation{};
+    VkFormat      m_format{};
 };
 
 class ImageView2D {
@@ -52,12 +47,9 @@ class ImageView2D {
     ImageView2D() noexcept {}
     ImageView2D(std::nullptr_t) noexcept {}
 
-    operator VkImageView() const noexcept;
+    operator VkImageView() const noexcept { return m_image_view; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
-
-    bool operator==(const ImageView2D& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const ImageView2D& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const ImageView2D&) const = default;
 
   private:
     template <typename>
@@ -65,15 +57,14 @@ class ImageView2D {
 
     friend class Device;
 
-    operator EtnaImageView2D() const noexcept { return m_state; }
+    ImageView2D(VkImageView image_view, VkDevice device) noexcept : m_image_view(image_view), m_device(device) {}
 
-    ImageView2D(EtnaImageView2D image_view) : m_state(image_view) {}
-
-    static auto Create(VkDevice device, const VkImageViewCreateInfo& create_info) -> UniqueImageView2D;
+    static auto Create(VkDevice vk_device, const VkImageViewCreateInfo& create_info) -> UniqueImageView2D;
 
     void Destroy() noexcept;
 
-    EtnaImageView2D m_state = nullptr;
+    VkImageView m_image_view{};
+    VkDevice    m_device{};
 };
 
 class Framebuffer {
@@ -81,33 +72,29 @@ class Framebuffer {
     Framebuffer() noexcept {}
     Framebuffer(std::nullptr_t) noexcept {}
 
-    operator VkFramebuffer() const noexcept;
+    operator VkFramebuffer() const noexcept { return m_framebuffer; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    bool operator==(const Framebuffer&) const = default;
 
-    bool operator==(const Framebuffer& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const Framebuffer& rhs) const noexcept { return m_state != rhs.m_state; }
-
-    Extent2D Extent2D() const noexcept;
+    RenderPass RenderPass() const noexcept;
 
   private:
     template <typename>
     friend class UniqueHandle;
 
     friend class Device;
-    friend class CommandBuffer;
 
-    operator EtnaFramebuffer() const noexcept { return m_state; }
-
-    Framebuffer(EtnaFramebuffer framebuffer) : m_state(framebuffer) {}
-
-    VkRenderPass RenderPass() const noexcept;
+    Framebuffer(VkFramebuffer framebuffer, VkDevice device, VkRenderPass renderpass) noexcept
+        : m_framebuffer(framebuffer), m_device(device), m_renderpass(renderpass)
+    {}
 
     static auto Create(VkDevice device, const VkFramebufferCreateInfo& create_info) -> UniqueFramebuffer;
 
     void Destroy() noexcept;
 
-    EtnaFramebuffer m_state = nullptr;
+    VkFramebuffer m_framebuffer{};
+    VkDevice      m_device{};
+    VkRenderPass  m_renderpass{};
 };
 
 } // namespace etna

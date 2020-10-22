@@ -14,8 +14,6 @@ class Buffer {
 
     operator VkBuffer() const noexcept { return m_buffer; }
 
-    explicit operator bool() const noexcept { return m_buffer != nullptr; }
-
     bool operator==(const Buffer& rhs) const noexcept { return m_buffer == rhs.m_buffer; }
     bool operator!=(const Buffer& rhs) const noexcept { return m_buffer != rhs.m_buffer; }
 
