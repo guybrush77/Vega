@@ -7,20 +7,6 @@
 
 #define COMPONENT "Etna: "
 
-namespace {
-
-struct EtnaPipelineLayout_T final {
-    VkPipelineLayout pipeline_layout;
-    VkDevice         device;
-};
-
-struct EtnaPipeline_T final {
-    VkPipeline pipeline;
-    VkDevice   device;
-};
-
-} // namespace
-
 namespace etna {
 
 PipelineLayout::Builder::Builder() noexcept
@@ -293,66 +279,56 @@ void Pipeline::Builder::SetDepthState(DepthTest depth_test, DepthWrite depth_wri
     m_depth_stencil_state.depthCompareOp   = GetVk(compare_op);
 }
 
-PipelineLayout::operator VkPipelineLayout() const noexcept
+UniquePipelineLayout PipelineLayout::Create(VkDevice vk_device, const VkPipelineLayoutCreateInfo& create_info)
 {
-    return m_state ? m_state->pipeline_layout : VkPipelineLayout{};
-}
+    VkPipelineLayout vk_pipeline_layout{};
 
-UniquePipelineLayout PipelineLayout::Create(VkDevice device, const VkPipelineLayoutCreateInfo& create_info)
-{
-    VkPipelineLayout pipeline_layout{};
-
-    if (auto result = vkCreatePipelineLayout(device, &create_info, nullptr, &pipeline_layout); result != VK_SUCCESS) {
+    if (auto result = vkCreatePipelineLayout(vk_device, &create_info, nullptr, &vk_pipeline_layout);
+        result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreatePipelineLayout error: {}", result).c_str());
     }
 
-    spdlog::info(COMPONENT "Created VkPipelineLayout {}", fmt::ptr(pipeline_layout));
+    spdlog::info(COMPONENT "Created VkPipelineLayout {}", fmt::ptr(vk_pipeline_layout));
 
-    return UniquePipelineLayout(new EtnaPipelineLayout_T{ pipeline_layout, device });
+    return UniquePipelineLayout(PipelineLayout(vk_pipeline_layout, vk_device));
 }
 
 void PipelineLayout::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_pipeline_layout);
 
-    vkDestroyPipelineLayout(m_state->device, m_state->pipeline_layout, nullptr);
+    vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
 
-    spdlog::info(COMPONENT "Destroyed VkPipelineLayout {}", fmt::ptr(m_state->pipeline_layout));
+    spdlog::info(COMPONENT "Destroyed VkPipelineLayout {}", fmt::ptr(m_pipeline_layout));
 
-    delete m_state;
-
-    m_state = nullptr;
+    m_pipeline_layout = nullptr;
+    m_device          = nullptr;
 }
 
-Pipeline::operator VkPipeline() const noexcept
+UniquePipeline Pipeline::Create(VkDevice vk_device, const VkGraphicsPipelineCreateInfo& create_info)
 {
-    return m_state ? m_state->pipeline : VkPipeline{};
-}
+    VkPipeline vk_pipeline{};
 
-UniquePipeline Pipeline::Create(VkDevice device, const VkGraphicsPipelineCreateInfo& create_info)
-{
-    VkPipeline pipeline{};
-
-    if (auto res = vkCreateGraphicsPipelines(device, {}, 1, &create_info, nullptr, &pipeline); res != VK_SUCCESS) {
+    if (auto res = vkCreateGraphicsPipelines(vk_device, {}, 1, &create_info, nullptr, &vk_pipeline);
+        res != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreateGraphicsPipelines error: {}", res).c_str());
     }
 
-    spdlog::info(COMPONENT "Created VkPipeline {}", fmt::ptr(pipeline));
+    spdlog::info(COMPONENT "Created VkPipeline {}", fmt::ptr(vk_pipeline));
 
-    return UniquePipeline(new EtnaPipeline_T{ pipeline, device });
+    return UniquePipeline(Pipeline(vk_pipeline, vk_device));
 }
 
 void Pipeline::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_pipeline);
 
-    vkDestroyPipeline(m_state->device, m_state->pipeline, nullptr);
+    vkDestroyPipeline(m_device, m_pipeline, nullptr);
 
-    spdlog::info(COMPONENT "Destroyed VkPipeline {}", fmt::ptr(m_state->pipeline));
+    spdlog::info(COMPONENT "Destroyed VkPipeline {}", fmt::ptr(m_pipeline));
 
-    delete m_state;
-
-    m_state = nullptr;
+    m_pipeline = nullptr;
+    m_device   = nullptr;
 }
 
 } // namespace etna

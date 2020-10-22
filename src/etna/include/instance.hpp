@@ -38,6 +38,7 @@ class PhysicalDevice {
     SurfaceCapabilitiesKHR             GetPhysicalDeviceSurfaceCapabilitiesKHR(SurfaceKHR surface) const;
     std::vector<SurfaceFormatKHR>      GetPhysicalDeviceSurfaceFormatsKHR(SurfaceKHR surface) const;
     std::vector<PresentModeKHR>        GetPhysicalDeviceSurfacePresentModesKHR(SurfaceKHR surface) const;
+    bool                               GetPhysicalDeviceSurfaceSupportKHR(uint32_t queue_idx, SurfaceKHR surface) const;
     std::vector<ExtensionProperties>   EnumerateDeviceExtensionProperties(const char* layer_name = nullptr) const;
 
   private:

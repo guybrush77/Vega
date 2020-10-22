@@ -2,8 +2,6 @@
 
 #include "core.hpp"
 
-ETNA_DEFINE_HANDLE(EtnaShaderModule)
-
 namespace etna {
 
 class ShaderModule {
@@ -11,12 +9,12 @@ class ShaderModule {
     ShaderModule() noexcept {}
     ShaderModule(std::nullptr_t) noexcept {}
 
-    operator VkShaderModule() const noexcept;
+    operator VkShaderModule() const noexcept { return m_shader_module; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    explicit operator bool() const noexcept { return m_shader_module != nullptr; }
 
-    bool operator==(const ShaderModule& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const ShaderModule& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const ShaderModule& rhs) const noexcept { return m_shader_module == rhs.m_shader_module; }
+    bool operator!=(const ShaderModule& rhs) const noexcept { return m_shader_module != rhs.m_shader_module; }
 
   private:
     template <typename>
@@ -24,13 +22,14 @@ class ShaderModule {
 
     friend class Device;
 
-    ShaderModule(EtnaShaderModule state) noexcept : m_state(state) {}
+    ShaderModule(VkShaderModule shader_module, VkDevice device) : m_shader_module(shader_module), m_device(device) {}
 
-    static auto Create(VkDevice device, const VkShaderModuleCreateInfo& create_info) -> UniqueShaderModule;
+    static auto Create(VkDevice vk_device, const VkShaderModuleCreateInfo& create_info) -> UniqueShaderModule;
 
     void Destroy() noexcept;
 
-    EtnaShaderModule m_state{};
+    VkShaderModule m_shader_module{};
+    VkDevice       m_device{};
 };
 
 } // namespace etna

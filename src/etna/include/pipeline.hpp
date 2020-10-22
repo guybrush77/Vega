@@ -4,9 +4,6 @@
 
 #include <vector>
 
-ETNA_DEFINE_HANDLE(EtnaPipeline)
-ETNA_DEFINE_HANDLE(EtnaPipelineLayout)
-
 namespace etna {
 
 class PipelineLayout {
@@ -25,12 +22,12 @@ class PipelineLayout {
     PipelineLayout() noexcept {}
     PipelineLayout(std::nullptr_t) noexcept {}
 
-    operator VkPipelineLayout() const noexcept;
+    operator VkPipelineLayout() const noexcept { return m_pipeline_layout; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    explicit operator bool() const noexcept { return m_pipeline_layout != nullptr; }
 
-    bool operator==(const PipelineLayout& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const PipelineLayout& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const PipelineLayout& rhs) const noexcept { return m_pipeline_layout == rhs.m_pipeline_layout; }
+    bool operator!=(const PipelineLayout& rhs) const noexcept { return m_pipeline_layout != rhs.m_pipeline_layout; }
 
   private:
     template <typename>
@@ -38,13 +35,16 @@ class PipelineLayout {
 
     friend class Device;
 
-    PipelineLayout(EtnaPipelineLayout state) : m_state(state) {}
+    PipelineLayout(VkPipelineLayout pipeline_layout, VkDevice device) noexcept
+        : m_pipeline_layout(pipeline_layout), m_device(device)
+    {}
 
-    static auto Create(VkDevice device, const VkPipelineLayoutCreateInfo& create_info) -> UniquePipelineLayout;
+    static auto Create(VkDevice vk_device, const VkPipelineLayoutCreateInfo& create_info) -> UniquePipelineLayout;
 
     void Destroy() noexcept;
 
-    EtnaPipelineLayout m_state{};
+    VkPipelineLayout m_pipeline_layout{};
+    VkDevice         m_device{};
 };
 
 class Pipeline {
@@ -100,12 +100,12 @@ class Pipeline {
     Pipeline() noexcept {}
     Pipeline(std::nullptr_t) noexcept {}
 
-    operator VkPipeline() const noexcept;
+    operator VkPipeline() const noexcept { return m_pipeline; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
+    explicit operator bool() const noexcept { return m_pipeline != nullptr; }
 
-    bool operator==(const Pipeline& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const Pipeline& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const Pipeline& rhs) const noexcept { return m_pipeline == rhs.m_pipeline; }
+    bool operator!=(const Pipeline& rhs) const noexcept { return m_pipeline != rhs.m_pipeline; }
 
   private:
     template <typename>
@@ -113,13 +113,14 @@ class Pipeline {
 
     friend class Device;
 
-    Pipeline(EtnaPipeline state) : m_state(state) {}
+    Pipeline(VkPipeline pipeline, VkDevice device) noexcept : m_pipeline(pipeline), m_device(device) {}
 
-    static auto Create(VkDevice device, const VkGraphicsPipelineCreateInfo& create_info) -> UniquePipeline;
+    static auto Create(VkDevice vk_device, const VkGraphicsPipelineCreateInfo& create_info) -> UniquePipeline;
 
     void Destroy() noexcept;
 
-    EtnaPipeline m_state{};
+    VkPipeline m_pipeline{};
+    VkDevice   m_device{};
 };
 
 } // namespace etna

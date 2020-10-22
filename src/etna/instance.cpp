@@ -344,6 +344,20 @@ std::vector<PresentModeKHR> PhysicalDevice::GetPhysicalDeviceSurfacePresentModes
     return present_modes;
 }
 
+bool PhysicalDevice::GetPhysicalDeviceSurfaceSupportKHR(uint32_t queue_idx, SurfaceKHR surface) const
+{
+    assert(m_physical_device);
+
+    VkBool32 is_supported{};
+
+    if (auto result = vkGetPhysicalDeviceSurfaceSupportKHR(m_physical_device, queue_idx, surface, &is_supported);
+        result != VK_SUCCESS) {
+        throw_runtime_error(fmt::format("vkGetPhysicalDeviceSurfaceSupportKHR error: {}", result).c_str());
+    }
+
+    return is_supported;
+}
+
 std::vector<ExtensionProperties> PhysicalDevice::EnumerateDeviceExtensionProperties(const char* layer_name) const
 {
     assert(m_physical_device);
