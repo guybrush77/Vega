@@ -29,6 +29,7 @@ class PhysicalDevice {
 
     bool operator==(const PhysicalDevice&) const = default;
 
+    FormatProperties                   GetPhysicalDeviceFormatProperties(Format format) const;
     std::vector<QueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties() const;
     SurfaceCapabilitiesKHR             GetPhysicalDeviceSurfaceCapabilitiesKHR(SurfaceKHR surface) const;
     std::vector<SurfaceFormatKHR>      GetPhysicalDeviceSurfaceFormatsKHR(SurfaceKHR surface) const;

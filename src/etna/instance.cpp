@@ -246,6 +246,22 @@ void Instance::Destroy() noexcept
     m_debug_messenger = nullptr;
 }
 
+FormatProperties PhysicalDevice::GetPhysicalDeviceFormatProperties(Format format) const
+{
+    assert(m_physical_device);
+
+    VkFormat           vk_format = GetVk(format);
+    VkFormatProperties vk_format_properties{};
+
+    vkGetPhysicalDeviceFormatProperties(m_physical_device, vk_format, &vk_format_properties);
+
+    auto linear_tiling_features  = static_cast<FormatFeature>(vk_format_properties.linearTilingFeatures);
+    auto optimal_tiling_features = static_cast<FormatFeature>(vk_format_properties.optimalTilingFeatures);
+    auto buffer_features         = static_cast<FormatFeature>(vk_format_properties.bufferFeatures);
+
+    return FormatProperties{ linear_tiling_features, optimal_tiling_features, buffer_features };
+}
+
 std::vector<QueueFamilyProperties> PhysicalDevice::GetPhysicalDeviceQueueFamilyProperties() const
 {
     assert(m_physical_device);

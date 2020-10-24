@@ -498,6 +498,54 @@ enum class PipelineBindPoint {
 
 ETNA_DEFINE_ENUM_ANALOGUE(PipelineBindPoint)
 
+enum class FormatFeature : VkFormatFeatureFlags {
+    SampledImage                            = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
+    StorageImage                            = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,
+    StorageImageAtomic                      = VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT,
+    UniformTexelBuffer                      = VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT,
+    StorageTexelBuffer                      = VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT,
+    StorageTexelBufferAtomic                = VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT,
+    VertexBuffer                            = VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT,
+    ColorAttachment                         = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,
+    ColorAttachmentBlend                    = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT,
+    DepthStencilAttachment                  = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    BlitSrc                                 = VK_FORMAT_FEATURE_BLIT_SRC_BIT,
+    BlitDst                                 = VK_FORMAT_FEATURE_BLIT_DST_BIT,
+    SampledImageFilterLinear                = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT,
+    TransferSrc                             = VK_FORMAT_FEATURE_TRANSFER_SRC_BIT,
+    TransferDst                             = VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+    MidpointChromaSamples                   = VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT,
+    SampledImageYcbcrConversionLinearFilter = VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT,
+    SampledImageYcbcrConversionSeparateReconstructionFilter =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT,
+    SampledImageYcbcrConversionChromaReconstructionExplicit =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_BIT,
+    SampledImageYcbcrConversionChromaReconstructionExplicitForceable =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT,
+    Disjoint                                   = VK_FORMAT_FEATURE_DISJOINT_BIT,
+    CositedChromaSamples                       = VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT,
+    SampledImageFilterMinmax                   = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT,
+    SampledImageFilterCubicIMG                 = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_CUBIC_BIT_IMG,
+    AccelerationStructureVertexBufferKHR       = VK_FORMAT_FEATURE_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR,
+    FragmentDensityMapEXT                      = VK_FORMAT_FEATURE_FRAGMENT_DENSITY_MAP_BIT_EXT,
+    TransferSrcKHR                             = VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR,
+    TransferDstKHR                             = VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR,
+    SampledImageFilterMinmaxEXT                = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT,
+    MidpointChromaSamplesKHR                   = VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT_KHR,
+    SampledImageYcbcrConversionLinearFilterKHR = VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT_KHR,
+    SampledImageYcbcrConversionSeparateReconstructionFilterKHR =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT_KHR,
+    SampledImageYcbcrConversionChromaReconstructionExplicitKHR =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_BIT_KHR,
+    SampledImageYcbcrConversionChromaReconstructionExplicitForceableKHR =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT_KHR,
+    DisjointKHR                = VK_FORMAT_FEATURE_DISJOINT_BIT_KHR,
+    CositedChromaSamplesKHR    = VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT_KHR,
+    SampledImageFilterCubicEXT = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_CUBIC_BIT_EXT
+};
+
+ETNA_DEFINE_FLAGS_ANALOGUE(FormatFeature, VkFormatFeatureFlags)
+
 enum class ImageUsage : VkImageUsageFlags {
     TransferSrc            = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
     TransferDst            = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -747,6 +795,18 @@ requires composable_flags<E>::value inline constexpr auto operator|(E lhs, E rhs
 }
 
 template <EnumClass E>
+requires composable_flags<E>::value inline constexpr auto operator|(E lhs, Mask<E> rhs) noexcept
+{
+    return rhs | lhs;
+}
+
+template <EnumClass E>
+requires composable_flags<E>::value inline constexpr auto operator&(E lhs, E rhs) noexcept
+{
+    return Mask(lhs) & rhs;
+}
+
+template <EnumClass E>
 requires composable_flags<E>::value inline constexpr auto operator&(E lhs, Mask<E> rhs) noexcept
 {
     return rhs & lhs;
@@ -776,9 +836,22 @@ struct SurfaceFormatKHR final {
     Format        format;
     ColorSpaceKHR colorSpace;
 
-    bool operator==(const SurfaceFormatKHR& rhs) const = default;
+    bool operator==(const SurfaceFormatKHR&) const = default;
 
     constexpr operator VkSurfaceFormatKHR() const noexcept { return { GetVk(format), GetVk(colorSpace) }; }
+};
+
+struct FormatProperties {
+    FormatFeature linearTilingFeatures;
+    FormatFeature optimalTilingFeatures;
+    FormatFeature bufferFeatures;
+
+    bool operator==(const FormatProperties&) const = default;
+
+    constexpr operator VkFormatProperties() const noexcept
+    {
+        return { GetVk(linearTilingFeatures), GetVk(optimalTilingFeatures), GetVk(bufferFeatures) };
+    }
 };
 
 struct SurfaceCapabilitiesKHR final {
@@ -847,6 +920,8 @@ struct ClearValue final {
     ClearDepthStencil depth_stencil;
     bool              is_color;
 };
+
+void throw_runtime_error(const char* description);
 
 template <typename T, typename U>
 struct have_same_sign : std::integral_constant<bool, std::is_signed<T>::value == std::is_signed<U>::value> {};
@@ -954,8 +1029,6 @@ class UniqueHandle {
   private:
     T m_value{};
 };
-
-void throw_runtime_error(const char* description);
 
 struct AttachmentID final {
     explicit constexpr AttachmentID(uint32_t val) noexcept : value(val) {}
