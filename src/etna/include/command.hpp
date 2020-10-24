@@ -50,7 +50,7 @@ class CommandBuffer {
         Framebuffer                             framebuffer,
         Rect2D                                  render_area,
         std::initializer_list<const ClearValue> clear_values,
-        SubpassContents                         subpass_contents);
+        SubpassContents                         subpass_contents = SubpassContents::Inline);
 
     void EndRenderPass();
 

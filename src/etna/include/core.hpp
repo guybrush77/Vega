@@ -555,6 +555,10 @@ enum class CommandPoolCreate : VkCommandPoolCreateFlags {
 
 ETNA_DEFINE_FLAGS_ANALOGUE(CommandPoolCreate, VkCommandPoolCreateFlags)
 
+enum class FenceCreate : VkFenceCreateFlags { Signaled = VK_FENCE_CREATE_SIGNALED_BIT };
+
+ETNA_DEFINE_FLAGS_ANALOGUE(FenceCreate, VkCommandPoolCreateFlags)
+
 enum class ShaderStage : VkShaderStageFlags {
     Vertex                 = VK_SHADER_STAGE_VERTEX_BIT,
     TessellationControl    = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
@@ -726,7 +730,7 @@ class Mask final {
     constexpr auto GetVk() const noexcept { return m_value; }
 
   private:
-    template <typename E>
+    template <EnumClass E>
     requires composable_flags<E>::value friend constexpr auto operator|(E, E) noexcept;
 
     explicit constexpr Mask(mask_type value) noexcept : m_value(value) {}
@@ -734,19 +738,19 @@ class Mask final {
     mask_type m_value{};
 };
 
-template <typename E>
+template <EnumClass E>
 inline auto GetVk(Mask<E> mask) noexcept
 {
     return mask.GetVk();
 }
 
-template <typename E>
+template <EnumClass E>
 requires composable_flags<E>::value inline constexpr auto operator|(E lhs, E rhs) noexcept
 {
     return Mask(lhs) | rhs;
 }
 
-template <typename E>
+template <EnumClass E>
 requires composable_flags<E>::value inline constexpr auto operator&(E lhs, Mask<E> rhs) noexcept
 {
     return rhs & lhs;
@@ -848,6 +852,55 @@ struct ClearValue final {
     bool              is_color;
 };
 
+template <typename T, typename U>
+struct have_same_sign : std::integral_constant<bool, std::is_signed<T>::value == std::is_signed<U>::value> {};
+
+template <typename DstT, typename SrcT>
+constexpr DstT narrow_cast(SrcT src)
+{
+    if constexpr (std::is_same_v<SrcT, DstT>) {
+        return src;
+    }
+
+    DstT dst = static_cast<DstT>(src);
+
+    if (static_cast<SrcT>(dst) != src) {
+        throw_runtime_error("narrow_cast failed");
+    }
+
+    if (!have_same_sign<DstT, SrcT>::value && ((dst < DstT{}) != (src < SrcT{}))) {
+        throw_runtime_error("narrow_cast failed");
+    }
+
+    return dst;
+}
+
+template <typename T>
+struct Array final {
+    using value_type      = T;
+    using size_type       = uint32_t;
+    using const_reference = const value_type&;
+    using const_pointer   = const value_type*;
+    using const_iterator  = const value_type*;
+
+    Array(const_reference item) noexcept : m_data(&item), m_size(1) {}
+    Array(nullptr_t) noexcept {}
+    Array(std::initializer_list<T> items) noexcept : m_data(items.begin()), m_size(narrow_cast<size_type>(items.size()))
+    {}
+
+    const_reference operator[](size_t index) const noexcept { return *(m_data + index); }
+
+    const_iterator begin() const noexcept { return m_data; }
+    const_iterator end() const noexcept { return m_data + m_size; }
+
+    size_type size() const noexcept { return m_size; }
+    bool      empty() const noexcept { return m_size == 0; }
+
+  private:
+    const_pointer m_data{};
+    size_type     m_size{};
+};
+
 template <typename T>
 class UniqueHandle {
   public:
@@ -908,25 +961,6 @@ class UniqueHandle {
 
 void throw_runtime_error(const char* description);
 
-template <typename T, typename U>
-struct have_same_sign : std::integral_constant<bool, std::is_signed<T>::value == std::is_signed<U>::value> {};
-
-template <typename DstT, typename SrcT>
-constexpr DstT narrow_cast(SrcT src)
-{
-    DstT dst = static_cast<DstT>(src);
-
-    if (static_cast<SrcT>(dst) != src) {
-        throw_runtime_error("narrow_cast failed");
-    }
-
-    if (!have_same_sign<DstT, SrcT>::value && ((dst < DstT{}) != (src < SrcT{}))) {
-        throw_runtime_error("narrow_cast failed");
-    }
-
-    return dst;
-}
-
 struct AttachmentID final {
     explicit constexpr AttachmentID(uint32_t val) noexcept : value(val) {}
     explicit constexpr AttachmentID(size_t val) : value(narrow_cast<uint32_t>(val)) {}
@@ -945,6 +979,7 @@ class DescriptorPool;
 class DescriptorSet;
 class DescriptorSetLayout;
 class Device;
+class Fence;
 class Framebuffer;
 class Image2D;
 class ImageView2D;
@@ -953,6 +988,7 @@ class Pipeline;
 class PipelineLayout;
 class Queue;
 class RenderPass;
+class Semaphore;
 class ShaderModule;
 class SurfaceKHR;
 class SwapchainKHR;
@@ -964,6 +1000,7 @@ using UniqueCommandPool         = UniqueHandle<CommandPool>;
 using UniqueDescriptorPool      = UniqueHandle<DescriptorPool>;
 using UniqueDescriptorSetLayout = UniqueHandle<DescriptorSetLayout>;
 using UniqueDevice              = UniqueHandle<Device>;
+using UniqueFence               = UniqueHandle<Fence>;
 using UniqueFramebuffer         = UniqueHandle<Framebuffer>;
 using UniqueImage2D             = UniqueHandle<Image2D>;
 using UniqueInstance            = UniqueHandle<Instance>;
@@ -971,6 +1008,7 @@ using UniqueImageView2D         = UniqueHandle<ImageView2D>;
 using UniquePipeline            = UniqueHandle<Pipeline>;
 using UniquePipelineLayout      = UniqueHandle<PipelineLayout>;
 using UniqueRenderPass          = UniqueHandle<RenderPass>;
+using UniqueSemaphore           = UniqueHandle<Semaphore>;
 using UniqueShaderModule        = UniqueHandle<ShaderModule>;
 using UniqueSurfaceKHR          = UniqueHandle<SurfaceKHR>;
 using UniqueSwapchainKHR        = UniqueHandle<SwapchainKHR>;

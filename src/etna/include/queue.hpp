@@ -12,12 +12,17 @@ class Queue {
 
     operator VkQueue() const noexcept { return m_queue; }
 
-    explicit operator bool() const noexcept { return m_queue != nullptr; }
+    bool operator==(const Queue&) const = default;
 
-    bool operator==(const Queue& rhs) const noexcept { return m_queue == rhs.m_queue; }
-    bool operator!=(const Queue& rhs) const noexcept { return m_queue != rhs.m_queue; }
+    void QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, Array<Semaphore> wait_semaphores);
 
     void Submit(CommandBuffer command_buffer);
+
+    void Submit(
+        CommandBuffer        command_buffer,
+        Array<Semaphore>     wait_semaphores,
+        Array<PipelineStage> wait_stages,
+        Array<Semaphore>     signal_semaphores);
 
   private:
     VkQueue m_queue{};

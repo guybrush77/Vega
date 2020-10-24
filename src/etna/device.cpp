@@ -12,6 +12,7 @@
 #include "shader.hpp"
 #include "surface.hpp"
 #include "swapchain.hpp"
+#include "synchronization.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -121,6 +122,20 @@ UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsage buffer_usage_fla
     return Buffer::Create(m_allocator, create_info, memory_usage);
 }
 
+uint32_t Device::AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence)
+{
+    assert(m_device);
+
+    uint32_t image_index{};
+
+    if (auto result = vkAcquireNextImageKHR(m_device, swapchain, UINT64_MAX, semaphore, fence, &image_index);
+        result != VK_SUCCESS) {
+        throw_runtime_error(fmt::format("vkAcquireNextImageKHR error: {}", result).c_str());
+    }
+
+    return image_index;
+}
+
 UniqueCommandPool Device::CreateCommandPool(uint32_t queue_family_index, CommandPoolCreate command_pool_create_flags)
 {
     assert(m_device);
@@ -134,6 +149,20 @@ UniqueCommandPool Device::CreateCommandPool(uint32_t queue_family_index, Command
     };
 
     return CommandPool::Create(m_device, create_info);
+}
+
+auto Device::CreateFence(FenceCreate fence_flags) -> UniqueFence
+{
+    assert(m_device);
+
+    auto create_info = VkFenceCreateInfo{
+
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = GetVk(fence_flags)
+    };
+
+    return Fence::Create(m_device, create_info);
 }
 
 UniqueFramebuffer Device::CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent)
@@ -244,6 +273,20 @@ UniqueImageView2D Device::CreateImageView(Image2D image, ImageAspect image_aspec
     };
 
     return ImageView2D::Create(m_device, create_info);
+}
+
+UniqueSemaphore Device::CreateSemaphore()
+{
+    assert(m_device);
+
+    auto create_info = VkSemaphoreCreateInfo{
+
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = {}
+    };
+
+    return Semaphore::Create(m_device, create_info);
 }
 
 Queue Device::GetQueue(uint32_t queue_family_index) const noexcept

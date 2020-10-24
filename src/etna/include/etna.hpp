@@ -12,3 +12,4 @@
 #include "shader.hpp"
 #include "surface.hpp"
 #include "swapchain.hpp"
+#include "synchronization.hpp"

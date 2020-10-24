@@ -3,7 +3,7 @@
 #include "core.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocator)
-
+#include <vulkan/vulkan.hpp>
 namespace etna {
 
 class Device {
@@ -28,13 +28,14 @@ class Device {
 
     operator VkDevice() const noexcept { return m_device; }
 
-    explicit operator bool() const noexcept { return m_device != nullptr; }
+    bool operator==(const Device&) const = default;
 
-    bool operator==(const Device& rhs) const noexcept { return m_device == rhs.m_device; }
-    bool operator!=(const Device& rhs) const noexcept { return m_device != rhs.m_device; }
+    uint32_t AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence);
 
     auto CreateCommandPool(uint32_t queue_family_index, CommandPoolCreate command_pool_create_flags = {})
         -> UniqueCommandPool;
+
+    auto CreateFence(FenceCreate fence_flags = {}) -> UniqueFence;
 
     auto CreateFramebuffer(RenderPass renderpass, ImageView2D image_view, Extent2D extent) -> UniqueFramebuffer;
     auto CreateFramebuffer(RenderPass renderpass, std::initializer_list<const ImageView2D> image_views, Extent2D extent)
@@ -71,6 +72,8 @@ class Device {
         ImageTiling image_tiling) -> UniqueImage2D;
 
     auto CreateImageView(Image2D image, ImageAspect image_aspect_flags) -> UniqueImageView2D;
+
+    auto CreateSemaphore() -> UniqueSemaphore;
 
     auto GetQueue(uint32_t queue_family_index) const noexcept -> Queue;
 
