@@ -6,11 +6,11 @@ set(source_files make_resource.cpp)
 
 target_sources(make-resource PRIVATE ${source_files})
 
+target_compile_features(make-resource PUBLIC cxx_std_20)
+
 target_link_libraries(make-resource PRIVATE cxxopts fmt)
 
-
 # IDE specific
-
 get_directory_property(parent_path PARENT_DIRECTORY)
 get_filename_component(parent_dir ${parent_path} NAME)
 

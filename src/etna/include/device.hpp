@@ -3,7 +3,7 @@
 #include "core.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocator)
-#include <vulkan/vulkan.hpp>
+
 namespace etna {
 
 class Device {

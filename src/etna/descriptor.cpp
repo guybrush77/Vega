@@ -5,54 +5,34 @@
 
 #define COMPONENT "Etna: "
 
-namespace {
-
-struct EtnaDescriptorSetLayout_T final {
-    VkDescriptorSetLayout descriptor_set_layout;
-    VkDevice              device;
-};
-
-struct EtnaDescriptorPool_T final {
-    VkDescriptorPool descriptor_pool;
-    VkDevice         device;
-};
-
-} // namespace
-
 namespace etna {
 
-DescriptorSetLayout::operator VkDescriptorSetLayout() const noexcept
-{
-    return m_state ? m_state->descriptor_set_layout : VkDescriptorSetLayout{};
-}
-
 UniqueDescriptorSetLayout DescriptorSetLayout::Create(
-    VkDevice                               device,
+    VkDevice                               vk_device,
     const VkDescriptorSetLayoutCreateInfo& create_info)
 {
-    VkDescriptorSetLayout descriptor_set_layout{};
+    VkDescriptorSetLayout vk_descriptor_set_layout{};
 
-    if (auto result = vkCreateDescriptorSetLayout(device, &create_info, nullptr, &descriptor_set_layout);
+    if (auto result = vkCreateDescriptorSetLayout(vk_device, &create_info, nullptr, &vk_descriptor_set_layout);
         result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreateDescriptorSetLayout error: {}", result).c_str());
     }
 
-    spdlog::info(COMPONENT "Created VkDescriptorSetLayout {}", fmt::ptr(descriptor_set_layout));
+    spdlog::info(COMPONENT "Created VkDescriptorSetLayout {}", fmt::ptr(vk_descriptor_set_layout));
 
-    return UniqueDescriptorSetLayout(new EtnaDescriptorSetLayout_T{ descriptor_set_layout, device });
+    return UniqueDescriptorSetLayout(DescriptorSetLayout(vk_descriptor_set_layout, vk_device));
 }
 
 void DescriptorSetLayout::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_descriptor_set_layout);
 
-    vkDestroyDescriptorSetLayout(m_state->device, m_state->descriptor_set_layout, nullptr);
+    vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
 
-    spdlog::info(COMPONENT "Destroyed VkDescriptorSetLayout {}", fmt::ptr(m_state->descriptor_set_layout));
+    spdlog::info(COMPONENT "Destroyed VkDescriptorSetLayout {}", fmt::ptr(m_descriptor_set_layout));
 
-    delete m_state;
-
-    m_state = nullptr;
+    m_descriptor_set_layout = nullptr;
+    m_device                = nullptr;
 }
 
 DescriptorSetLayout::Builder::Builder() noexcept
@@ -88,14 +68,9 @@ void DescriptorSetLayout::Builder::AddDescriptorSetLayoutBinding(
     state.pBindings    = m_descriptor_set_layout_bindings.data();
 }
 
-DescriptorPool::operator VkDescriptorPool() const noexcept
-{
-    return m_state ? m_state->descriptor_pool : VkDescriptorPool{};
-}
-
 DescriptorSet DescriptorPool::AllocateDescriptorSet(DescriptorSetLayout descriptor_set_layout)
 {
-    assert(m_state);
+    assert(m_descriptor_pool);
 
     VkDescriptorSetLayout vk_descriptor_set_layout = descriptor_set_layout;
 
@@ -103,41 +78,41 @@ DescriptorSet DescriptorPool::AllocateDescriptorSet(DescriptorSetLayout descript
 
         .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext              = nullptr,
-        .descriptorPool     = m_state->descriptor_pool,
+        .descriptorPool     = m_descriptor_pool,
         .descriptorSetCount = 1,
         .pSetLayouts        = &vk_descriptor_set_layout
     };
 
     VkDescriptorSet descriptor_set{};
-    vkAllocateDescriptorSets(m_state->device, &allocate_info, &descriptor_set);
+    vkAllocateDescriptorSets(m_device, &allocate_info, &descriptor_set);
 
     return descriptor_set;
 }
 
-UniqueDescriptorPool DescriptorPool::Create(VkDevice device, const VkDescriptorPoolCreateInfo& create_info)
+UniqueDescriptorPool DescriptorPool::Create(VkDevice vk_device, const VkDescriptorPoolCreateInfo& create_info)
 {
-    VkDescriptorPool descriptor_pool{};
+    VkDescriptorPool vk_descriptor_pool{};
 
-    if (auto result = vkCreateDescriptorPool(device, &create_info, nullptr, &descriptor_pool); result != VK_SUCCESS) {
+    if (auto result = vkCreateDescriptorPool(vk_device, &create_info, nullptr, &vk_descriptor_pool);
+        result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreateDescriptorPool error: {}", result).c_str());
     }
 
-    spdlog::info(COMPONENT "Created VkDescriptorPool {}", fmt::ptr(descriptor_pool));
+    spdlog::info(COMPONENT "Created VkDescriptorPool {}", fmt::ptr(vk_descriptor_pool));
 
-    return UniqueDescriptorPool(new EtnaDescriptorPool_T{ descriptor_pool, device });
+    return UniqueDescriptorPool(DescriptorPool(vk_descriptor_pool, vk_device));
 }
 
 void DescriptorPool::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_descriptor_pool);
 
-    vkDestroyDescriptorPool(m_state->device, m_state->descriptor_pool, nullptr);
+    vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
 
-    spdlog::info(COMPONENT "Destroyed VkDescriptorPool {}", fmt::ptr(m_state->descriptor_pool));
+    spdlog::info(COMPONENT "Destroyed VkDescriptorPool {}", fmt::ptr(m_descriptor_pool));
 
-    delete m_state;
-
-    m_state = nullptr;
+    m_descriptor_pool = nullptr;
+    m_device          = nullptr;
 }
 
 WriteDescriptorSet::WriteDescriptorSet(

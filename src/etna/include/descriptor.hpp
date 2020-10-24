@@ -4,9 +4,6 @@
 
 #include <vector>
 
-ETNA_DEFINE_HANDLE(EtnaDescriptorSetLayout)
-ETNA_DEFINE_HANDLE(EtnaDescriptorPool)
-
 namespace etna {
 
 class DescriptorSetLayout {
@@ -29,12 +26,9 @@ class DescriptorSetLayout {
     DescriptorSetLayout() noexcept {}
     DescriptorSetLayout(std::nullptr_t) noexcept {}
 
-    operator VkDescriptorSetLayout() const noexcept;
+    operator VkDescriptorSetLayout() const noexcept { return m_descriptor_set_layout; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
-
-    bool operator==(const DescriptorSetLayout& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const DescriptorSetLayout& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const DescriptorSetLayout&) const = default;
 
   private:
     template <typename>
@@ -42,14 +36,17 @@ class DescriptorSetLayout {
 
     friend class Device;
 
-    DescriptorSetLayout(EtnaDescriptorSetLayout state) : m_state(state) {}
+    DescriptorSetLayout(VkDescriptorSetLayout descriptor_set_layout, VkDevice device) noexcept
+        : m_descriptor_set_layout(descriptor_set_layout), m_device(device)
+    {}
 
-    static auto Create(VkDevice device, const VkDescriptorSetLayoutCreateInfo& create_info)
+    static auto Create(VkDevice vk_device, const VkDescriptorSetLayoutCreateInfo& create_info)
         -> UniqueDescriptorSetLayout;
 
     void Destroy() noexcept;
 
-    EtnaDescriptorSetLayout m_state{};
+    VkDescriptorSetLayout m_descriptor_set_layout{};
+    VkDevice              m_device{};
 };
 
 class DescriptorSet {
@@ -60,10 +57,7 @@ class DescriptorSet {
 
     operator VkDescriptorSet() const noexcept { return m_descriptor_set; }
 
-    explicit operator bool() const noexcept { return m_descriptor_set != nullptr; }
-
-    bool operator==(const DescriptorSet& rhs) const noexcept { return m_descriptor_set == rhs.m_descriptor_set; }
-    bool operator!=(const DescriptorSet& rhs) const noexcept { return m_descriptor_set != rhs.m_descriptor_set; }
+    bool operator==(const DescriptorSet&) const = default;
 
   private:
     VkDescriptorSet m_descriptor_set{};
@@ -88,12 +82,9 @@ class DescriptorPool {
     DescriptorPool() noexcept {}
     DescriptorPool(std::nullptr_t) noexcept {}
 
-    operator VkDescriptorPool() const noexcept;
+    operator VkDescriptorPool() const noexcept { return m_descriptor_pool; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
-
-    bool operator==(const DescriptorPool& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const DescriptorPool& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const DescriptorPool& rhs) const = default;
 
     DescriptorSet AllocateDescriptorSet(DescriptorSetLayout descriptor_set_layout);
 
@@ -103,13 +94,16 @@ class DescriptorPool {
 
     friend class Device;
 
-    DescriptorPool(EtnaDescriptorPool state) : m_state(state) {}
+    DescriptorPool(VkDescriptorPool descriptor_pool, VkDevice device)
+        : m_descriptor_pool(descriptor_pool), m_device(device)
+    {}
 
-    static auto Create(VkDevice device, const VkDescriptorPoolCreateInfo& create_info) -> UniqueDescriptorPool;
+    static auto Create(VkDevice vk_device, const VkDescriptorPoolCreateInfo& create_info) -> UniqueDescriptorPool;
 
     void Destroy() noexcept;
 
-    EtnaDescriptorPool m_state{};
+    VkDescriptorPool m_descriptor_pool{};
+    VkDevice         m_device{};
 };
 
 } // namespace etna

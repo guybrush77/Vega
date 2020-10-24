@@ -5,6 +5,8 @@ add_executable(vega)
 set(source_files vega.cpp)
 target_sources(vega PRIVATE ${source_files})
 
+target_compile_features(vega PUBLIC cxx_std_20)
+
 target_link_libraries(
     vega
     PRIVATE etna

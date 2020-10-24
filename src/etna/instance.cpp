@@ -9,11 +9,6 @@
 
 namespace {
 
-struct EtnaInstance_T final {
-    VkInstance               instance;
-    VkDebugUtilsMessengerEXT debug_messenger;
-};
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT      message_severity,
     VkDebugUtilsMessageTypeFlagsEXT             message_type,
@@ -139,26 +134,19 @@ bool AreLayersAvailable(std::span<const char*> layers)
     return std::ranges::all_of(layers, is_available);
 }
 
-Instance::operator VkInstance() const noexcept
-{
-    return m_state ? m_state->instance : VkInstance{};
-}
-
-#include <algorithm>
-
 std::vector<PhysicalDevice> Instance::EnumeratePhysicalDevices() const
 {
-    assert(m_state);
+    assert(m_instance);
 
     uint32_t count = 0;
-    vkEnumeratePhysicalDevices(m_state->instance, &count, nullptr);
+    vkEnumeratePhysicalDevices(m_instance, &count, nullptr);
 
     if (count == 0) {
         throw_runtime_error("Failed to detect GPU!");
     }
 
     std::vector<VkPhysicalDevice> vk_physical_devices(count);
-    vkEnumeratePhysicalDevices(m_state->instance, &count, vk_physical_devices.data());
+    vkEnumeratePhysicalDevices(m_instance, &count, vk_physical_devices.data());
 
     std::vector<PhysicalDevice> physical_devices(count);
     for (uint32_t i = 0; i < count; ++i) {
@@ -170,8 +158,9 @@ std::vector<PhysicalDevice> Instance::EnumeratePhysicalDevices() const
 
 UniqueDevice Instance::CreateDevice(PhysicalDevice physical_device, const VkDeviceCreateInfo& device_create_info)
 {
-    assert(m_state);
-    return Device::Create(m_state->instance, physical_device, device_create_info);
+    assert(m_instance);
+
+    return Device::Create(m_instance, physical_device, device_create_info);
 }
 
 UniqueInstance Instance::Create(
@@ -215,49 +204,46 @@ UniqueInstance Instance::Create(
         .ppEnabledExtensionNames = requested_extensions.data()
     };
 
-    VkInstance instance{};
+    VkInstance vk_instance{};
 
-    if (auto result = vkCreateInstance(&instance_create_info, nullptr, &instance); result != VK_SUCCESS) {
+    if (auto result = vkCreateInstance(&instance_create_info, nullptr, &vk_instance); result != VK_SUCCESS) {
         throw_runtime_error(fmt::format("vkCreateInstance error: {}", result).c_str());
     }
 
-    spdlog::info(COMPONENT "Created VkInstance {}", fmt::ptr(instance));
+    spdlog::info(COMPONENT "Created VkInstance {}", fmt::ptr(vk_instance));
 
-    VkDebugUtilsMessengerEXT debug_messenger{};
+    VkDebugUtilsMessengerEXT vk_debug_messenger{};
 
     if (enable_debug) {
-        auto result = CreateDebugUtilsMessengerEXT(instance, debug_create_info, &debug_messenger);
+        auto result = CreateDebugUtilsMessengerEXT(vk_instance, debug_create_info, &vk_debug_messenger);
         if (result != VK_SUCCESS) {
             throw_runtime_error(fmt::format("vkCreateDebugUtilsMessengerEXT error: {}", result).c_str());
         }
-        spdlog::info(COMPONENT "Created VkDebugUtilsMessengerEXT {}", fmt::ptr(debug_messenger));
+        spdlog::info(COMPONENT "Created VkDebugUtilsMessengerEXT {}", fmt::ptr(vk_debug_messenger));
     }
 
-    return UniqueInstance(new EtnaInstance_T{ instance, debug_messenger });
+    return UniqueInstance(Instance(vk_instance, vk_debug_messenger));
 }
 
 void Instance::Destroy() noexcept
 {
-    assert(m_state);
+    assert(m_instance);
 
-    auto [instance, debug_messenger] = *m_state;
-
-    if (debug_messenger) {
+    if (m_debug_messenger) {
         auto* func_name = "vkDestroyDebugUtilsMessengerEXT";
-        auto  func_ptr  = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, func_name);
+        auto  func_ptr  = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_instance, func_name);
         if (func_ptr != nullptr) {
-            func_ptr(instance, debug_messenger, nullptr);
-            spdlog::info(COMPONENT "Destroyed vkDestroyDebugUtilsMessengerEXT {}", fmt::ptr(debug_messenger));
+            func_ptr(m_instance, m_debug_messenger, nullptr);
+            spdlog::info(COMPONENT "Destroyed vkDestroyDebugUtilsMessengerEXT {}", fmt::ptr(m_debug_messenger));
         }
     }
 
-    vkDestroyInstance(instance, nullptr);
+    vkDestroyInstance(m_instance, nullptr);
 
-    spdlog::info(COMPONENT "Destroyed VkInstance {}", fmt::ptr(instance));
+    spdlog::info(COMPONENT "Destroyed VkInstance {}", fmt::ptr(m_instance));
 
-    delete m_state;
-
-    m_state = nullptr;
+    m_instance        = nullptr;
+    m_debug_messenger = nullptr;
 }
 
 std::vector<QueueFamilyProperties> PhysicalDevice::GetPhysicalDeviceQueueFamilyProperties() const

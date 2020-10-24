@@ -1,6 +1,7 @@
 #include "core.hpp"
 #include "utils/resource.hpp"
 
+#include <cstring>
 #include <doctest/doctest.h>
 #include <string_view>
 

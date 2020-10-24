@@ -1,12 +1,8 @@
 #pragma once
 
 #include <type_traits>
+#include <utility>
 #include <vulkan/vulkan_core.h>
-
-#define ETNA_DEFINE_HANDLE(handle)                                                                                     \
-    namespace {                                                                                                        \
-    using handle = struct handle##_T*;                                                                                 \
-    }
 
 #define ETNA_DEFINE_ENUM_ANALOGUE(type)                                                                                \
     inline constexpr auto GetVk(type val) noexcept { return static_cast<Vk##type>(val); }
@@ -730,8 +726,8 @@ class Mask final {
     constexpr auto GetVk() const noexcept { return m_value; }
 
   private:
-    template <EnumClass E>
-    requires composable_flags<E>::value friend constexpr auto operator|(E, E) noexcept;
+    template <EnumClass T>
+    requires composable_flags<T>::value friend constexpr auto operator|(T, T) noexcept;
 
     explicit constexpr Mask(mask_type value) noexcept : m_value(value) {}
 

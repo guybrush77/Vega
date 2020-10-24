@@ -76,7 +76,7 @@ class Framebuffer {
 
     bool operator==(const Framebuffer&) const = default;
 
-    RenderPass RenderPass() const noexcept;
+    auto RenderPass() const noexcept -> RenderPass;
 
   private:
     template <typename>

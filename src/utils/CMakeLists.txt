@@ -5,6 +5,8 @@ add_library(utils STATIC)
 file(GLOB_RECURSE source_files *.hpp *.cpp)
 target_sources(utils PRIVATE ${source_files})
 
+target_compile_features(utils PUBLIC cxx_std_20)
+
 target_include_directories(utils PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # IDE specific

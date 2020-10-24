@@ -1,3 +1,5 @@
+#include <cstddef>
+
 struct ResourceResult {
     const unsigned char* data;
     const size_t         size;

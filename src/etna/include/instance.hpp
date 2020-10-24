@@ -5,8 +5,6 @@
 #include <span>
 #include <vector>
 
-ETNA_DEFINE_HANDLE(EtnaInstance)
-
 namespace etna {
 
 struct Version {
@@ -29,10 +27,7 @@ class PhysicalDevice {
 
     operator VkPhysicalDevice() const noexcept { return m_physical_device; }
 
-    explicit operator bool() const noexcept { return m_physical_device != nullptr; }
-
-    bool operator==(const PhysicalDevice& rhs) const noexcept { return m_physical_device == rhs.m_physical_device; }
-    bool operator!=(const PhysicalDevice& rhs) const noexcept { return m_physical_device != rhs.m_physical_device; }
+    bool operator==(const PhysicalDevice&) const = default;
 
     std::vector<QueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties() const;
     SurfaceCapabilitiesKHR             GetPhysicalDeviceSurfaceCapabilitiesKHR(SurfaceKHR surface) const;
@@ -50,12 +45,9 @@ class Instance {
     Instance() noexcept {}
     Instance(std::nullptr_t) noexcept {}
 
-    operator VkInstance() const noexcept;
+    operator VkInstance() const noexcept { return m_instance; }
 
-    explicit operator bool() const noexcept { return m_state != nullptr; }
-
-    bool operator==(const Instance& rhs) const noexcept { return m_state == rhs.m_state; }
-    bool operator!=(const Instance& rhs) const noexcept { return m_state != rhs.m_state; }
+    bool operator==(const Instance& rhs) const = default;
 
     std::vector<PhysicalDevice> EnumeratePhysicalDevices() const;
 
@@ -71,7 +63,9 @@ class Instance {
         std::span<const char*> extensions,
         std::span<const char*> layers) -> UniqueInstance;
 
-    Instance(EtnaInstance instance) : m_state(instance) {}
+    Instance(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger)
+        : m_instance(instance), m_debug_messenger(debug_messenger)
+    {}
 
     static auto Create(
         const char*            application_name,
@@ -81,9 +75,8 @@ class Instance {
 
     void Destroy() noexcept;
 
-    operator EtnaInstance() const noexcept { return m_state; }
-
-    EtnaInstance m_state{};
+    VkInstance               m_instance{};
+    VkDebugUtilsMessengerEXT m_debug_messenger{};
 };
 
 bool AreExtensionsAvailable(std::span<const char*> extensions);
