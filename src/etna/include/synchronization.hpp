@@ -34,6 +34,8 @@ class Fence {
     Fence() noexcept = default;
     Fence(std::nullptr_t) noexcept {}
 
+    static const Fence Null;
+
     operator VkFence() const noexcept { return m_fence; }
 
     bool operator==(const Fence&) const = default;
@@ -53,4 +55,7 @@ class Fence {
     VkFence  m_fence{};
     VkDevice m_device{};
 };
+
+inline const Fence Fence::Null = Fence{};
+
 } // namespace etna

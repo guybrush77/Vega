@@ -3,6 +3,7 @@
 
 layout (binding = 0) uniform MVP
 {
+    mat4 model;
     mat4 view;
     mat4 proj;
 };
@@ -13,6 +14,6 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 0) out vec3 outNormal;
 
 void main() {
-    gl_Position = proj * view * vec4(inPosition, 1.0);
+    gl_Position = proj * view * model * vec4(inPosition, 1.0);
     outNormal = inNormal;
 }

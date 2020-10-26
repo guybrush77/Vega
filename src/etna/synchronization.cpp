@@ -44,4 +44,16 @@ auto Fence::Create(VkDevice vk_device, const VkFenceCreateInfo& create_info) -> 
     return UniqueFence(Fence(vk_fence, vk_device));
 }
 
+void Fence::Destroy() noexcept
+{
+    assert(m_fence);
+
+    vkDestroyFence(m_device, m_fence, nullptr);
+
+    spdlog::info(COMPONENT "Destroyed VkFence {}", fmt::ptr(m_fence));
+
+    m_fence  = nullptr;
+    m_device = nullptr;
+}
+
 } // namespace etna

@@ -89,6 +89,29 @@ DescriptorSet DescriptorPool::AllocateDescriptorSet(DescriptorSetLayout descript
     return descriptor_set;
 }
 
+std::vector<DescriptorSet> DescriptorPool::AllocateDescriptorSets(
+    size_t              count,
+    DescriptorSetLayout descriptor_set_layout)
+{
+    assert(m_descriptor_pool);
+
+    std::vector<VkDescriptorSetLayout> vk_descriptor_set_layouts(count, descriptor_set_layout);
+
+    VkDescriptorSetAllocateInfo allocate_info = {
+
+        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext              = nullptr,
+        .descriptorPool     = m_descriptor_pool,
+        .descriptorSetCount = narrow_cast<uint32_t>(count),
+        .pSetLayouts        = vk_descriptor_set_layouts.data()
+    };
+
+    std::vector<VkDescriptorSet> vk_descriptor_sets(count);
+    vkAllocateDescriptorSets(m_device, &allocate_info, vk_descriptor_sets.data());
+
+    return std::vector<DescriptorSet>(vk_descriptor_sets.begin(), vk_descriptor_sets.end());
+}
+
 UniqueDescriptorPool DescriptorPool::Create(VkDevice vk_device, const VkDescriptorPoolCreateInfo& create_info)
 {
     VkDescriptorPool vk_descriptor_pool{};

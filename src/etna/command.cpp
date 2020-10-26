@@ -261,6 +261,13 @@ void CommandBuffer::CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size
     vkCmdCopyBuffer(m_command_buffer, src_buffer, dst_buffer, 1, &buffer_copy);
 }
 
+void CommandBuffer::ResetCommandBuffer()
+{
+    assert(m_command_buffer);
+
+    vkResetCommandBuffer(m_command_buffer, {});
+}
+
 UniqueCommandBuffer CommandBuffer::Create(VkDevice vk_device, const VkCommandBufferAllocateInfo& alloc_info)
 {
     VkCommandBuffer vk_command_buffer{};

@@ -39,10 +39,7 @@ class CommandBuffer {
 
     operator VkCommandBuffer() const noexcept { return m_command_buffer; }
 
-    explicit operator bool() const noexcept { return m_command_buffer != nullptr; }
-
-    bool operator==(const CommandBuffer& rhs) const noexcept { return m_command_buffer == rhs.m_command_buffer; }
-    bool operator!=(const CommandBuffer& rhs) const noexcept { return m_command_buffer != rhs.m_command_buffer; }
+    bool operator==(const CommandBuffer&) const = default;
 
     void Begin(CommandBufferUsage command_buffer_usage_flags = {});
 
@@ -95,6 +92,8 @@ class CommandBuffer {
         ImageAspect image_aspect_flags);
 
     void CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size);
+
+    void ResetCommandBuffer();
 
   private:
     template <typename>

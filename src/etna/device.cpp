@@ -122,6 +122,20 @@ UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsage buffer_usage_fla
     return Buffer::Create(m_allocator, create_info, memory_usage);
 }
 
+auto Device::CreateBuffers(
+    std::size_t count,
+    std::size_t size,
+    BufferUsage buffer_usage_flags,
+    MemoryUsage memory_usage) -> std::vector<UniqueBuffer>
+{
+    std::vector<UniqueBuffer> buffers;
+    buffers.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        buffers.push_back(CreateBuffer(size, buffer_usage_flags, memory_usage));
+    }
+    return buffers;
+}
+
 uint32_t Device::AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence)
 {
     assert(m_device);
@@ -318,6 +332,23 @@ auto Device::GetSwapchainImagesKHR(SwapchainKHR swapchain) const -> std::vector<
     return images;
 }
 
+void Device::ResetFence(Fence fence)
+{
+    ResetFences({ fence });
+}
+
+void Device::ResetFences(Array<Fence> fences)
+{
+    assert(m_device);
+
+    auto vk_fences = std::vector<VkFence>(fences.begin(), fences.end());
+    auto vk_size   = narrow_cast<uint32_t>(fences.size());
+
+    if (auto result = vkResetFences(m_device, vk_size, vk_fences.data()); result != VK_SUCCESS) {
+        throw_runtime_error(fmt::format("vkResetFences error: {}", result).c_str());
+    }
+}
+
 void Device::UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set)
 {
     assert(m_device);
@@ -325,6 +356,23 @@ void Device::UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set)
     VkWriteDescriptorSet vk_write_descriptor_set = write_descriptor_set;
 
     vkUpdateDescriptorSets(m_device, 1, &vk_write_descriptor_set, 0, nullptr);
+}
+
+void Device::WaitForFence(Fence fence, uint64_t timeout)
+{
+    WaitForFences({ fence }, true, timeout);
+}
+
+void Device::WaitForFences(Array<Fence> fences, bool wait_all, uint64_t timeout)
+{
+    assert(m_device);
+
+    auto vk_fences = std::vector<VkFence>(fences.begin(), fences.end());
+    auto vk_size   = narrow_cast<uint32_t>(fences.size());
+
+    if (auto result = vkWaitForFences(m_device, vk_size, vk_fences.data(), wait_all, timeout); result != VK_SUCCESS) {
+        throw_runtime_error(fmt::format("vkWaitForFences error: {}", result).c_str());
+    }
 }
 
 void Device::WaitIdle()

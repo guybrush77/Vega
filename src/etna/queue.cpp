@@ -33,14 +33,15 @@ void Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, Array<
 
 void Queue::Submit(CommandBuffer command_buffer)
 {
-    Submit(command_buffer, nullptr, nullptr, nullptr);
+    Submit(command_buffer, nullptr, nullptr, nullptr, nullptr);
 }
 
 void Queue::Submit(
     CommandBuffer        command_buffer,
     Array<Semaphore>     wait_semaphores,
     Array<PipelineStage> wait_stages,
-    Array<Semaphore>     signal_semaphores)
+    Array<Semaphore>     signal_semaphores,
+    Fence                fence)
 {
     assert(m_queue);
 
@@ -66,7 +67,7 @@ void Queue::Submit(
         .pSignalSemaphores    = signal_semaphores.empty() ? nullptr : vk_signal_semaphores.data()
     };
 
-    vkQueueSubmit(m_queue, 1, &info, {});
+    vkQueueSubmit(m_queue, 1, &info, fence);
 }
 
 } // namespace etna

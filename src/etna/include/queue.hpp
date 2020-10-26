@@ -22,7 +22,8 @@ class Queue {
         CommandBuffer        command_buffer,
         Array<Semaphore>     wait_semaphores,
         Array<PipelineStage> wait_stages,
-        Array<Semaphore>     signal_semaphores);
+        Array<Semaphore>     signal_semaphores,
+        Fence                fence);
 
   private:
     VkQueue m_queue{};

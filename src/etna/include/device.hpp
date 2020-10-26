@@ -64,6 +64,9 @@ class Device {
 
     auto CreateBuffer(std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage) -> UniqueBuffer;
 
+    auto CreateBuffers(std::size_t count, std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage)
+        -> std::vector<UniqueBuffer>;
+
     auto CreateImage(
         Format      format,
         Extent2D    extent,
@@ -79,7 +82,14 @@ class Device {
 
     auto GetSwapchainImagesKHR(SwapchainKHR swapchain) const -> std::vector<Image2D>;
 
+    void ResetFence(Fence fence);
+    void ResetFences(Array<Fence> fences);
+
     void UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set);
+
+    void WaitForFence(Fence fence, uint64_t timeout = UINT64_MAX);
+
+    void WaitForFences(Array<Fence> fences, bool wait_all, uint64_t timeout = UINT64_MAX);
 
     void WaitIdle();
 

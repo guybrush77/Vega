@@ -22,6 +22,7 @@
 DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
 
 struct MVP {
+    glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
 };
@@ -341,24 +342,24 @@ int main()
     {
         auto builder = RenderPass::Builder();
 
-        auto color_attachment = builder.AddAttachment(
+        auto color_attachment = builder.AddAttachmentDescription(
             Format::R8G8B8A8Srgb,
             AttachmentLoadOp::Clear,
             AttachmentStoreOp::Store,
             ImageLayout::Undefined,
             ImageLayout::TransferSrcOptimal);
 
-        auto depth_attachment = builder.AddAttachment(
+        auto depth_attachment = builder.AddAttachmentDescription(
             Format::D24UnormS8Uint,
             AttachmentLoadOp::Clear,
             AttachmentStoreOp::DontCare,
             ImageLayout::Undefined,
             ImageLayout::DepthStencilAttachmentOptimal);
 
-        auto color_ref = builder.AddReference(color_attachment, ImageLayout::ColorAttachmentOptimal);
-        auto depth_ref = builder.AddReference(depth_attachment, ImageLayout::DepthStencilAttachmentOptimal);
+        auto color_ref = builder.AddAttachmentReference(color_attachment, ImageLayout::ColorAttachmentOptimal);
+        auto depth_ref = builder.AddAttachmentReference(depth_attachment, ImageLayout::DepthStencilAttachmentOptimal);
 
-        auto subpass = builder.CreateSubpass();
+        auto subpass = builder.GetSubpassBuilder();
 
         subpass.AddColorAttachment(color_ref);
         subpass.SetDepthStencilAttachment(depth_ref);
@@ -452,8 +453,9 @@ int main()
 
         MVP mvp{};
 
-        mvp.view = glm::lookAtRH(eye, center, up);
-        mvp.proj = glm::perspectiveRH(45.0f, 1.0f, 0.1f, 1000.0f);
+        mvp.model = glm::identity<glm::mat4>();
+        mvp.view  = glm::lookAtRH(eye, center, up);
+        mvp.proj  = glm::perspectiveRH(45.0f, 1.0f, 0.1f, 1000.0f);
 
         void* data = mvp_buffer->MapMemory();
         memcpy(data, &mvp, sizeof(mvp));

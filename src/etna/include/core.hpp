@@ -698,6 +698,16 @@ enum class Access : VkAccessFlags {
 
 ETNA_DEFINE_FLAGS_ANALOGUE(Access, VkAccessFlags)
 
+enum class Dependency : VkDependencyFlags {
+    ByRegion       = VK_DEPENDENCY_BY_REGION_BIT,
+    DeviceGroup    = VK_DEPENDENCY_DEVICE_GROUP_BIT,
+    ViewLocal      = VK_DEPENDENCY_VIEW_LOCAL_BIT,
+    ViewLocalKHR   = VK_DEPENDENCY_VIEW_LOCAL_BIT_KHR,
+    DeviceGroupKHR = VK_DEPENDENCY_DEVICE_GROUP_BIT_KHR
+};
+
+ETNA_DEFINE_FLAGS_ANALOGUE(Dependency, VkDependencyFlags)
+
 enum class QueueFlags : VkQueueFlags {
     Graphics      = VK_QUEUE_GRAPHICS_BIT,
     Compute       = VK_QUEUE_COMPUTE_BIT,
@@ -1040,6 +1050,16 @@ struct ReferenceID final {
     explicit constexpr ReferenceID(size_t val) noexcept : value(val) {}
     size_t value;
 };
+
+struct SubpassID final {
+    static const SubpassID External;
+
+    explicit constexpr SubpassID(uint32_t val) noexcept : value(val) {}
+    explicit constexpr SubpassID(size_t val) : value(narrow_cast<uint32_t>(val)) {}
+    uint32_t value;
+};
+
+inline const SubpassID SubpassID::External = SubpassID{ VK_SUBPASS_EXTERNAL };
 
 class Buffer;
 class CommandBuffer;
