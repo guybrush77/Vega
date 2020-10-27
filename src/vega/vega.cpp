@@ -5,6 +5,7 @@
 
 #include "utils/resource.hpp"
 
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -16,6 +17,11 @@
 #include <spdlog/spdlog.h>
 #include <unordered_map>
 #include <vector>
+
+struct GLFW {
+    GLFW() { glfwInit(); }
+    ~GLFW() { glfwTerminate(); }
+} glfw;
 
 DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
 
@@ -160,7 +166,7 @@ std::vector<T> RemoveDuplicates(std::initializer_list<T> l)
 QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surface)
 {
     using namespace etna;
-    spdlog::info("Size of image {}", sizeof(Image2D));
+
     auto properties = gpu.GetPhysicalDeviceQueueFamilyProperties();
 
     constexpr auto mask = QueueFlags::Graphics | QueueFlags::Compute | QueueFlags::Transfer;
@@ -477,10 +483,6 @@ int main()
 
     using namespace etna;
 
-    if (!glfwInit()) {
-        throw std::runtime_error("GLFW initialization failed!");
-    }
-
     if (glfwVulkanSupported() == false) {
         throw std::runtime_error("GLFW Vulkan not supported!");
     }
@@ -790,7 +792,7 @@ int main()
 
     device->WaitIdle();
 
-    glfwTerminate();
+    glfwDestroyWindow(window);
 
     return 0;
 }
