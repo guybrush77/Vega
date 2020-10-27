@@ -14,15 +14,15 @@ class Queue {
 
     bool operator==(const Queue&) const = default;
 
-    void QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, Array<Semaphore> wait_semaphores);
+    void QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayView<Semaphore> wait_semaphores);
 
     void Submit(CommandBuffer command_buffer);
 
     void Submit(
         CommandBuffer        command_buffer,
-        Array<Semaphore>     wait_semaphores,
-        Array<PipelineStage> wait_stages,
-        Array<Semaphore>     signal_semaphores,
+        ArrayView<Semaphore>     wait_semaphores,
+        ArrayView<PipelineStage> wait_stages,
+        ArrayView<Semaphore>     signal_semaphores,
         Fence                fence);
 
   private:

@@ -8,7 +8,7 @@
 
 namespace etna {
 
-void Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, Array<Semaphore> wait_semaphores)
+void Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayView<Semaphore> wait_semaphores)
 {
     assert(m_queue);
 
@@ -33,14 +33,14 @@ void Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, Array<
 
 void Queue::Submit(CommandBuffer command_buffer)
 {
-    Submit(command_buffer, nullptr, nullptr, nullptr, nullptr);
+    Submit(command_buffer, {}, {}, {}, {});
 }
 
 void Queue::Submit(
     CommandBuffer        command_buffer,
-    Array<Semaphore>     wait_semaphores,
-    Array<PipelineStage> wait_stages,
-    Array<Semaphore>     signal_semaphores,
+    ArrayView<Semaphore>     wait_semaphores,
+    ArrayView<PipelineStage> wait_stages,
+    ArrayView<Semaphore>     signal_semaphores,
     Fence                fence)
 {
     assert(m_queue);

@@ -83,13 +83,13 @@ class Device {
     auto GetSwapchainImagesKHR(SwapchainKHR swapchain) const -> std::vector<Image2D>;
 
     void ResetFence(Fence fence);
-    void ResetFences(Array<Fence> fences);
+    void ResetFences(ArrayView<Fence> fences);
 
     void UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set);
 
     void WaitForFence(Fence fence, uint64_t timeout = UINT64_MAX);
 
-    void WaitForFences(Array<Fence> fences, bool wait_all, uint64_t timeout = UINT64_MAX);
+    void WaitForFences(ArrayView<Fence> fences, bool wait_all, uint64_t timeout = UINT64_MAX);
 
     void WaitIdle();
 

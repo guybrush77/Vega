@@ -957,29 +957,84 @@ constexpr DstT narrow_cast(SrcT src)
 }
 
 template <typename T>
-struct Array final {
+struct ArrayView final {
     using value_type      = T;
     using size_type       = uint32_t;
-    using const_reference = const value_type&;
-    using const_pointer   = const value_type*;
+    using pointer         = value_type*;
+    using reference       = value_type&;
+    using const_pointer   = const pointer;
+    using const_reference = const reference;
     using const_iterator  = const value_type*;
 
-    Array(const_reference item) noexcept : m_data(&item), m_size(1) {}
-    Array(nullptr_t) noexcept {}
-    Array(std::initializer_list<T> items) noexcept : m_data(items.begin()), m_size(narrow_cast<size_type>(items.size()))
+    ArrayView() noexcept {}
+
+    ArrayView(std::initializer_list<T> items) noexcept
+    {
+        if (items.size() > 0) {
+            m.free = items.size() > kBufferElems;
+            m.data = m.free ? new T[items.size()] : buffer.data;
+            m.size = narrow_cast<size_type>(items.size());
+
+            int index = 0;
+            for (const value_type& value : items) {
+                m.data[index++] = value;
+            }
+        }
+    }
+
+    template <size_t N>
+    ArrayView(T (&arr)[N]) noexcept : m{ arr, N }
     {}
 
-    const_reference operator[](size_t index) const noexcept { return *(m_data + index); }
+    ~ArrayView() noexcept
+    {
+        static_assert(sizeof(ArrayView<T>) <= kMaxTypeSize);
+        if (m.free) {
+            delete[] m.data;
+        }
+    }
 
-    const_iterator begin() const noexcept { return m_data; }
-    const_iterator end() const noexcept { return m_data + m_size; }
+    const_reference operator[](size_t index) const noexcept { return *(m.data + index); }
 
-    size_type size() const noexcept { return m_size; }
-    bool      empty() const noexcept { return m_size == 0; }
+    bool operator==(const ArrayView& rhs) const noexcept
+    {
+        if (this != &rhs) {
+            if (m.size != rhs.m.size) {
+                return false;
+            }
+            for (size_type i = 0; i < m.size; ++i) {
+                if (m.data[i] != rhs.m.data[i]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    const_iterator begin() const noexcept { return m.data; }
+    const_iterator end() const noexcept { return m.data + m.size; }
+
+    size_type size() const noexcept { return m.size; }
+    bool      empty() const noexcept { return m.size == 0; }
 
   private:
-    const_pointer m_data{};
-    size_type     m_size{};
+    template <size_t N>
+    struct Buffer {
+        value_type data[N];
+    };
+    template <>
+    struct Buffer<0> {
+        inline static const pointer data = nullptr;
+    };
+
+    static constexpr size_t kMaxTypeSize = 64; // in bytes
+    struct {
+        pointer   data{};
+        size_type size{};
+        bool      free{};
+    } m;
+    static constexpr size_t kBufferElems = (kMaxTypeSize - sizeof(m)) / sizeof(T);
+    Buffer<kBufferElems>    buffer;
 };
 
 template <typename T>

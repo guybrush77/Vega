@@ -337,7 +337,7 @@ void Device::ResetFence(Fence fence)
     ResetFences({ fence });
 }
 
-void Device::ResetFences(Array<Fence> fences)
+void Device::ResetFences(ArrayView<Fence> fences)
 {
     assert(m_device);
 
@@ -363,7 +363,7 @@ void Device::WaitForFence(Fence fence, uint64_t timeout)
     WaitForFences({ fence }, true, timeout);
 }
 
-void Device::WaitForFences(Array<Fence> fences, bool wait_all, uint64_t timeout)
+void Device::WaitForFences(ArrayView<Fence> fences, bool wait_all, uint64_t timeout)
 {
     assert(m_device);
 

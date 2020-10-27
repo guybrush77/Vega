@@ -287,7 +287,7 @@ QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surf
 etna::SurfaceFormatKHR FindOptimalSurfaceFormatKHR(
     etna::PhysicalDevice                gpu,
     etna::SurfaceKHR                    surface,
-    etna::Array<etna::SurfaceFormatKHR> preffered_formats)
+    etna::ArrayView<etna::SurfaceFormatKHR> preffered_formats)
 {
     auto available_formats = gpu.GetPhysicalDeviceSurfaceFormatsKHR(surface);
 
@@ -306,7 +306,7 @@ etna::SurfaceFormatKHR FindOptimalSurfaceFormatKHR(
 
 etna::Format FindSupportedFormat(
     etna::PhysicalDevice      gpu,
-    etna::Array<etna::Format> candidate_formats,
+    etna::ArrayView<etna::Format> candidate_formats,
     etna::ImageTiling         tiling,
     etna::FormatFeature       required_features)
 {
@@ -608,7 +608,7 @@ int main()
     SurfaceFormatKHR surface_format = FindOptimalSurfaceFormatKHR(
         gpu,
         *surface,
-        SurfaceFormatKHR{ Format::B8G8R8A8Srgb, ColorSpaceKHR::SrgbNonlinear });
+        { SurfaceFormatKHR{ Format::B8G8R8A8Srgb, ColorSpaceKHR::SrgbNonlinear } });
 
     Format depth_format = FindSupportedFormat(
         gpu,
@@ -766,9 +766,9 @@ int main()
         auto clear_color       = ClearColor::Transparent;
         auto clear_depth       = ClearDepthStencil::Default;
         auto render_area       = Rect2D{ Offset2D{ 0, 0 }, extent };
-        auto wait_semaphores   = frame.image_acquired_semaphore;
-        auto wait_stages       = PipelineStage::ColorAttachmentOutput;
-        auto signal_semaphores = frame.image_rendered_semaphore;
+        auto wait_semaphores   = { frame.image_acquired_semaphore };
+        auto wait_stages       = { PipelineStage::ColorAttachmentOutput };
+        auto signal_semaphores = { frame.image_rendered_semaphore };
         auto signal_fence      = frame.frame_available_fence;
         auto framebuffer       = swapchain_manager.Framebuffer(image_index);
         auto descriptor_set    = descriptor_manager.DescriptorSet(frame.index);
@@ -787,7 +787,7 @@ int main()
 
         queues.graphics.Submit(frame.command_buffer, wait_semaphores, wait_stages, signal_semaphores, signal_fence);
 
-        queues.presentation.QueuePresentKHR(swapchain, image_index, frame.image_rendered_semaphore);
+        queues.presentation.QueuePresentKHR(swapchain, image_index, { frame.image_rendered_semaphore });
     }
 
     device->WaitIdle();
