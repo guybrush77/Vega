@@ -49,7 +49,7 @@ class Device {
 
     auto CreateDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& create_info) -> UniqueDescriptorSetLayout;
 
-    auto CreateDescriptorPool(DescriptorType descriptor_type, uint32_t size, uint32_t max_sets = 0)
+    auto CreateDescriptorPool(DescriptorType descriptor_type, size_t size, size_t max_sets = 0)
         -> UniqueDescriptorPool;
 
     auto CreateShaderModule(const unsigned char* shader_data, size_t shader_size) -> UniqueShaderModule;

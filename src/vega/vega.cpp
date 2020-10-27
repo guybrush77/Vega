@@ -1,16 +1,14 @@
 #include "etna.hpp"
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
 #include "utils/resource.hpp"
 
+#include <GLFW/glfw3.h>
+
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/transform.hpp>
 #include <glm/matrix.hpp>
 
 #include <algorithm>
@@ -140,23 +138,38 @@ struct QueueFamilies final {
     QueueInfo graphics;
     QueueInfo compute;
     QueueInfo transfer;
+    QueueInfo presentation;
 };
 
 struct Queues final {
     etna::Queue graphics;
     etna::Queue compute;
     etna::Queue transfer;
+    etna::Queue presentation;
 };
 
-QueueFamilies GetQueueFamilies(etna::PhysicalDevice gpu)
+template <typename T>
+std::vector<T> RemoveDuplicates(std::initializer_list<T> l)
+{
+    std::vector<T> v(l.begin(), l.end());
+    std::sort(v.begin(), v.end());
+    v.erase(std::unique(v.begin(), v.end()), v.end());
+    return v;
+}
+
+QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surface)
 {
     using namespace etna;
-
+    spdlog::info("Size of image {}", sizeof(Image2D));
     auto properties = gpu.GetPhysicalDeviceQueueFamilyProperties();
 
     constexpr auto mask = QueueFlags::Graphics | QueueFlags::Compute | QueueFlags::Transfer;
 
     std::optional<QueueInfo> graphics;
+
+    std::optional<QueueInfo> presentation;
+    std::optional<QueueInfo> graphics_presentation;
+    std::optional<QueueInfo> mixed_presentation;
 
     std::optional<QueueInfo> compute;
     std::optional<QueueInfo> dedicated_compute;
@@ -212,6 +225,16 @@ QueueFamilies GetQueueFamilies(etna::PhysicalDevice gpu)
                 }
             }
         }
+
+        if (gpu.GetPhysicalDeviceSurfaceSupportKHR(family_index, surface)) {
+            if (masked_flags & QueueFlags::Graphics) {
+                if (!graphics_presentation.has_value()) {
+                    graphics_presentation = queue_info;
+                }
+            } else {
+                mixed_presentation = queue_info;
+            }
+        }
     }
 
     if (false == graphics.has_value()) {
@@ -242,7 +265,206 @@ QueueFamilies GetQueueFamilies(etna::PhysicalDevice gpu)
         throw_runtime_error("Failed to detect GPU transfer queue!");
     }
 
-    return { graphics.value(), compute.value(), transfer.value() };
+    if (graphics_presentation.has_value()) {
+        presentation = graphics_presentation;
+    } else if (mixed_presentation.has_value()) {
+        presentation = mixed_presentation;
+    }
+
+    if (false == presentation.has_value()) {
+        throw_runtime_error("Failed to detect GPU presentation queue!");
+    }
+
+    return { graphics.value(), compute.value(), transfer.value(), presentation.value() };
+}
+
+etna::SurfaceFormatKHR FindOptimalSurfaceFormatKHR(
+    etna::PhysicalDevice                gpu,
+    etna::SurfaceKHR                    surface,
+    etna::Array<etna::SurfaceFormatKHR> preffered_formats)
+{
+    auto available_formats = gpu.GetPhysicalDeviceSurfaceFormatsKHR(surface);
+
+    if (available_formats.empty()) {
+        throw std::runtime_error("Failed to find supported surface format!");
+    }
+
+    for (auto preffered_format : preffered_formats) {
+        if (std::ranges::count(available_formats, preffered_format)) {
+            return preffered_format;
+        }
+    }
+
+    return available_formats.front();
+}
+
+etna::Format FindSupportedFormat(
+    etna::PhysicalDevice      gpu,
+    etna::Array<etna::Format> candidate_formats,
+    etna::ImageTiling         tiling,
+    etna::FormatFeature       required_features)
+{
+    using namespace etna;
+
+    for (auto format : candidate_formats) {
+        auto format_features = gpu.GetPhysicalDeviceFormatProperties(format);
+        if (tiling == ImageTiling::Linear) {
+            if (required_features == (format_features.linearTilingFeatures & required_features)) {
+                return format;
+            }
+        } else if (tiling == ImageTiling::Optimal) {
+            if (required_features == (format_features.optimalTilingFeatures & required_features)) {
+                return format;
+            }
+        }
+    }
+
+    throw std::runtime_error("Failed to find supported depth format!");
+
+    return Format::Undefined;
+}
+
+struct Frame {
+    etna::CommandBuffer command_buffer;
+    etna::Semaphore     image_acquired_semaphore;
+    etna::Semaphore     image_rendered_semaphore;
+    etna::Fence         frame_available_fence;
+    uint32_t            index;
+};
+
+class FrameManager {
+  public:
+    FrameManager(etna::Device device, uint32_t queue_family_index, uint32_t max_frames)
+        : m_device(device), m_max_frames(max_frames), m_current_frame(0)
+    {
+        m_command_pool = device.CreateCommandPool(queue_family_index, etna::CommandPoolCreate::ResetCommandBuffer);
+
+        for (uint32_t frame_index = 0; frame_index < max_frames; ++frame_index) {
+            m_command_buffers.push_back(m_command_pool->AllocateCommandBuffer());
+            m_image_acquired_sempahores.push_back(device.CreateSemaphore());
+            m_image_rendered_sempahores.push_back(device.CreateSemaphore());
+            m_frame_available_fences.push_back(device.CreateFence(etna::FenceCreate::Signaled));
+            m_frames.push_back(Frame{ *m_command_buffers.back(),
+                                      *m_image_acquired_sempahores.back(),
+                                      *m_image_rendered_sempahores.back(),
+                                      *m_frame_available_fences.back(),
+                                      frame_index });
+        }
+    }
+
+    Frame NextFrame()
+    {
+        auto index      = m_current_frame;
+        m_current_frame = (m_current_frame + 1) % m_max_frames;
+        auto fence      = m_frames[index].frame_available_fence;
+
+        m_device.WaitForFence(fence);
+        m_device.ResetFence(fence);
+
+        return m_frames[index];
+    }
+
+  private:
+    etna::Device                           m_device;
+    etna::UniqueCommandPool                m_command_pool;
+    std::vector<etna::UniqueCommandBuffer> m_command_buffers;
+    std::vector<etna::UniqueSemaphore>     m_image_acquired_sempahores;
+    std::vector<etna::UniqueSemaphore>     m_image_rendered_sempahores;
+    std::vector<etna::UniqueFence>         m_frame_available_fences;
+    std::vector<Frame>                     m_frames;
+    uint32_t                               m_max_frames;
+    uint32_t                               m_current_frame;
+};
+
+class DescriptorManager {
+  public:
+    DescriptorManager(etna::Device device, size_t count, etna::DescriptorSetLayout descriptor_set_layout)
+        : m_device(device)
+    {
+        using namespace etna;
+
+        m_descriptor_pool = device.CreateDescriptorPool(DescriptorType::UniformBuffer, count);
+        m_descriptor_sets = m_descriptor_pool->AllocateDescriptorSets(count, descriptor_set_layout);
+        m_descriptor_buffers =
+            device.CreateBuffers(count, sizeof(MVP), BufferUsage::UniformBuffer, MemoryUsage::CpuToGpu);
+    }
+
+    auto DescriptorSet(size_t index) const noexcept { return m_descriptor_sets[index]; }
+
+    void UpdateDescriptorSet(size_t index, const MVP& mvp)
+    {
+        using namespace etna;
+
+        void* data = m_descriptor_buffers[index]->MapMemory();
+        memcpy(data, &mvp, sizeof(mvp));
+        m_descriptor_buffers[index]->UnmapMemory();
+
+        WriteDescriptorSet write_descriptor(m_descriptor_sets[index], Binding{ 0 }, DescriptorType::UniformBuffer);
+        write_descriptor.AddBuffer(*m_descriptor_buffers[index]);
+        m_device.UpdateDescriptorSet(write_descriptor);
+    }
+
+  private:
+    etna::Device                     m_device;
+    etna::UniqueDescriptorPool       m_descriptor_pool;
+    std::vector<etna::DescriptorSet> m_descriptor_sets;
+    std::vector<etna::UniqueBuffer>  m_descriptor_buffers;
+};
+
+class SwapchainManager {
+  public:
+    SwapchainManager(
+        etna::Device           device,
+        etna::RenderPass       renderpass,
+        etna::SurfaceKHR       surface,
+        uint32_t               image_count,
+        etna::SurfaceFormatKHR surface_format,
+        etna::Format           depth_format,
+        etna::Extent2D         extent,
+        etna::PresentModeKHR   present_mode)
+    {
+        using namespace etna;
+
+        auto usage = ImageUsage::ColorAttachment;
+
+        m_swapchain = device.CreateSwapchainKHR(surface, image_count, surface_format, extent, usage, present_mode);
+
+        auto surface_images = device.GetSwapchainImagesKHR(*m_swapchain);
+
+        for (const auto& color_image : surface_images) {
+            auto depth_image = device.CreateImage(
+                depth_format,
+                extent,
+                ImageUsage::DepthStencilAttachment,
+                MemoryUsage::GpuOnly,
+                ImageTiling::Optimal);
+
+            auto color_view  = device.CreateImageView(color_image, ImageAspect::Color);
+            auto depth_view  = device.CreateImageView(*depth_image, ImageAspect::Depth);
+            auto framebuffer = device.CreateFramebuffer(renderpass, { *color_view, *depth_view }, extent);
+
+            m_surface_views.push_back(std::move(color_view));
+            m_depth_images.push_back(std::move(depth_image));
+            m_depth_views.push_back(std::move(depth_view));
+            m_framebuffers.push_back(std::move(framebuffer));
+        }
+    }
+
+    auto ImageCount() const noexcept { return m_surface_views.size(); }
+    auto Swapchain() const noexcept { return *m_swapchain; }
+    auto Framebuffer(uint32_t image_index) const noexcept { return *m_framebuffers[image_index]; }
+
+  private:
+    etna::UniqueSwapchainKHR             m_swapchain;
+    std::vector<etna::UniqueImageView2D> m_surface_views;
+    std::vector<etna::UniqueImage2D>     m_depth_images;
+    std::vector<etna::UniqueImageView2D> m_depth_views;
+    std::vector<etna::UniqueFramebuffer> m_framebuffers;
+};
+
+void GlfwErrorCallback(int, const char* description)
+{
+    spdlog::error("GLFW: {}", description);
 }
 
 int main()
@@ -255,10 +477,27 @@ int main()
 
     using namespace etna;
 
+    if (!glfwInit()) {
+        throw std::runtime_error("GLFW initialization failed!");
+    }
+
+    if (glfwVulkanSupported() == false) {
+        throw std::runtime_error("GLFW Vulkan not supported!");
+    }
+
+    spdlog::info("GLFW {}", glfwGetVersionString());
+
+    glfwSetErrorCallback(GlfwErrorCallback);
+
     UniqueInstance instance;
     {
         std::vector<const char*> extensions;
         std::vector<const char*> layers;
+
+        auto count           = 0U;
+        auto glfw_extensions = glfwGetRequiredInstanceExtensions(&count);
+
+        extensions.insert(extensions.end(), glfw_extensions, glfw_extensions + count);
 
         if (enable_validation) {
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -272,28 +511,55 @@ int main()
     {
         auto gpus = instance->EnumeratePhysicalDevices();
         gpu       = gpus.front();
+
+        auto properties = gpu.GetPhysicalDeviceQueueFamilyProperties();
+        bool supported  = false;
+        for (uint32_t index = 0; index < properties.size(); ++index) {
+            supported |= (GLFW_TRUE == glfwGetPhysicalDevicePresentationSupport(*instance, gpu, index));
+        }
+        if (supported == false) {
+            throw std::runtime_error("No gpu queue supports presentation!");
+        }
     }
 
-    auto [graphics, compute, transfer] = GetQueueFamilies(gpu);
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    auto window = glfwCreateWindow(800, 600, "Vega Viewer", nullptr, nullptr);
+
+    UniqueSurfaceKHR surface;
+    {
+        VkSurfaceKHR vk_surface{};
+
+        if (VK_SUCCESS != glfwCreateWindowSurface(*instance, window, nullptr, &vk_surface)) {
+            throw std::runtime_error("Failed to create window surface!");
+        }
+
+        surface.reset(SurfaceKHR(*instance, vk_surface));
+    }
+
+    auto [graphics, compute, transfer, presentation] = GetQueueFamilyInfo(gpu, *surface);
 
     UniqueDevice device;
     {
+        auto queue_family_indices = RemoveDuplicates(
+            { graphics.family_index, compute.family_index, transfer.family_index, presentation.family_index });
+
         auto builder = Device::Builder();
 
-        builder.AddQueue(graphics.family_index, 1);
-        builder.AddQueue(compute.family_index, 1);
-        builder.AddQueue(transfer.family_index, 1);
+        for (auto queue_family_index : queue_family_indices) {
+            builder.AddQueue(queue_family_index, 1);
+        }
 
-        builder.AddEnabledLayer(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        builder.AddEnabledExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
         device = instance->CreateDevice(gpu, builder.state);
     }
 
     Queues queues;
     {
-        queues.graphics = device->GetQueue(graphics.family_index);
-        queues.compute  = device->GetQueue(compute.family_index);
-        queues.transfer = device->GetQueue(transfer.family_index);
+        queues.graphics     = device->GetQueue(graphics.family_index);
+        queues.compute      = device->GetQueue(compute.family_index);
+        queues.transfer     = device->GetQueue(transfer.family_index);
+        queues.presentation = device->GetQueue(presentation.family_index);
     }
 
     auto mesh = LoadMesh("C:/Users/slobodan/Documents/Programming/Vega/data/models/suzanne.obj");
@@ -337,20 +603,45 @@ int main()
         device->WaitIdle();
     }
 
+    SurfaceFormatKHR surface_format = FindOptimalSurfaceFormatKHR(
+        gpu,
+        *surface,
+        SurfaceFormatKHR{ Format::B8G8R8A8Srgb, ColorSpaceKHR::SrgbNonlinear });
+
+    Format depth_format = FindSupportedFormat(
+        gpu,
+        { Format::D24UnormS8Uint, Format::D32SfloatS8Uint, Format::D16Unorm },
+        ImageTiling::Optimal,
+        FormatFeature::DepthStencilAttachment);
+
+    Extent2D extent{ 800, 600 };
+    {
+        auto capabilities = gpu.GetPhysicalDeviceSurfaceCapabilitiesKHR(*surface);
+
+        if (capabilities.currentExtent.width != UINT32_MAX) {
+            extent = capabilities.currentExtent;
+        } else {
+            extent.width =
+                std::clamp(extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            extent.height =
+                std::clamp(extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+        }
+    }
+
     // Create pipeline renderpass
     UniqueRenderPass renderpass;
     {
         auto builder = RenderPass::Builder();
 
         auto color_attachment = builder.AddAttachmentDescription(
-            Format::R8G8B8A8Srgb,
+            surface_format.format,
             AttachmentLoadOp::Clear,
             AttachmentStoreOp::Store,
             ImageLayout::Undefined,
-            ImageLayout::TransferSrcOptimal);
+            ImageLayout::PresentSrcKHR);
 
         auto depth_attachment = builder.AddAttachmentDescription(
-            Format::D24UnormS8Uint,
+            depth_format,
             AttachmentLoadOp::Clear,
             AttachmentStoreOp::DontCare,
             ImageLayout::Undefined,
@@ -359,37 +650,23 @@ int main()
         auto color_ref = builder.AddAttachmentReference(color_attachment, ImageLayout::ColorAttachmentOptimal);
         auto depth_ref = builder.AddAttachmentReference(depth_attachment, ImageLayout::DepthStencilAttachmentOptimal);
 
-        auto subpass = builder.GetSubpassBuilder();
+        auto subpass_builder = builder.GetSubpassBuilder();
 
-        subpass.AddColorAttachment(color_ref);
-        subpass.SetDepthStencilAttachment(depth_ref);
+        subpass_builder.AddColorAttachment(color_ref);
+        subpass_builder.SetDepthStencilAttachment(depth_ref);
 
-        builder.AddSubpass(subpass.state);
+        auto subpass_id = builder.AddSubpass(subpass_builder.state);
+
+        builder.AddSubpassDependency(
+            SubpassID::External,
+            subpass_id,
+            PipelineStage::ColorAttachmentOutput,
+            PipelineStage::ColorAttachmentOutput,
+            Access{},
+            Access::ColorAttachmentWrite);
 
         renderpass = device->CreateRenderPass(builder.state);
     }
-
-    auto extent = Extent2D{ 640, 640 };
-
-    // Create render target image
-    UniqueImage2D image = device->CreateImage(
-        Format::R8G8B8A8Srgb,
-        extent,
-        ImageUsage::ColorAttachment | ImageUsage::TransferSrc,
-        MemoryUsage::GpuOnly,
-        ImageTiling::Optimal);
-
-    UniqueImage2D depth = device->CreateImage(
-        Format::D24UnormS8Uint,
-        extent,
-        ImageUsage::DepthStencilAttachment,
-        MemoryUsage::GpuOnly,
-        ImageTiling::Optimal);
-
-    // Create render target framebuffer
-    auto image_view  = device->CreateImageView(*image, ImageAspect::Color);
-    auto depth_view  = device->CreateImageView(*depth, ImageAspect::Depth);
-    auto framebuffer = device->CreateFramebuffer(*renderpass, { *image_view, *depth_view }, extent);
 
     // Create descriptor set layouts
     UniqueDescriptorSetLayout descriptor_set_layout;
@@ -440,109 +717,80 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
-    // Create and initialize descriptor sets
-    auto descriptor_pool = device->CreateDescriptorPool(DescriptorType::UniformBuffer, 1);
+    auto swapchain_manager =
+        SwapchainManager(*device, *renderpass, *surface, 3, surface_format, depth_format, extent, PresentModeKHR::Fifo);
 
-    auto descriptor_set = descriptor_pool->AllocateDescriptorSet(*descriptor_set_layout);
+    auto image_ready_fences = std::vector<Fence>(swapchain_manager.ImageCount());
 
-    auto mvp_buffer = device->CreateBuffer(sizeof(MVP), BufferUsage::UniformBuffer, MemoryUsage::CpuToGpu);
-    {
-        auto eye    = glm::vec3(1, 1, 3);
+    FrameManager frame_manager(*device, graphics.family_index, 2);
+
+    DescriptorManager descriptor_manager(*device, 2, *descriptor_set_layout);
+
+    auto t1 = glfwGetTime();
+
+    float angle = 0;
+
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+
+        auto frame       = frame_manager.NextFrame();
+        auto swapchain   = swapchain_manager.Swapchain();
+        auto image_index = device->AcquireNextImageKHR(swapchain, frame.image_acquired_semaphore, nullptr);
+
+        auto& image_fence = image_ready_fences[image_index];
+        if (image_fence != Fence::Null && image_fence != frame.frame_available_fence) {
+            device->WaitForFence(image_ready_fences[image_index]);
+        }
+        image_fence = frame.frame_available_fence;
+
+        auto t2 = glfwGetTime();
+        if (t2 - t1 > 0.02) {
+            t1 = t2;
+            angle += 2;
+            if (angle > 360)
+                angle -= 360;
+        }
+
+        auto eye    = glm::vec3(0, 0, 3 + sinf(glm::radians(angle)));
         auto center = glm::vec3(0, 0, 0);
         auto up     = glm::vec3(0, -1, 0);
+        auto model  = glm::rotate(glm::radians(angle), up);
+        auto view   = glm::lookAtRH(eye, center, up);
+        auto proj   = glm::perspectiveRH(glm::radians(45.f), float(extent.width) / float(extent.height), 0.1f, 1000.0f);
+        auto mvp    = MVP{ model, view, proj };
 
-        MVP mvp{};
+        descriptor_manager.UpdateDescriptorSet(frame.index, mvp);
 
-        mvp.model = glm::identity<glm::mat4>();
-        mvp.view  = glm::lookAtRH(eye, center, up);
-        mvp.proj  = glm::perspectiveRH(45.0f, 1.0f, 0.1f, 1000.0f);
+        auto clear_color       = ClearColor::Transparent;
+        auto clear_depth       = ClearDepthStencil::Default;
+        auto render_area       = Rect2D{ Offset2D{ 0, 0 }, extent };
+        auto wait_semaphores   = frame.image_acquired_semaphore;
+        auto wait_stages       = PipelineStage::ColorAttachmentOutput;
+        auto signal_semaphores = frame.image_rendered_semaphore;
+        auto signal_fence      = frame.frame_available_fence;
+        auto framebuffer       = swapchain_manager.Framebuffer(image_index);
+        auto descriptor_set    = descriptor_manager.DescriptorSet(frame.index);
 
-        void* data = mvp_buffer->MapMemory();
-        memcpy(data, &mvp, sizeof(mvp));
-        mvp_buffer->UnmapMemory();
+        frame.command_buffer.ResetCommandBuffer();
 
-        WriteDescriptorSet write_descriptor(descriptor_set, Binding{ 0 }, DescriptorType::UniformBuffer);
-        write_descriptor.AddBuffer(*mvp_buffer);
-        device->UpdateDescriptorSet(write_descriptor);
+        frame.command_buffer.Begin(CommandBufferUsage::OneTimeSubmit);
+        frame.command_buffer.BeginRenderPass(framebuffer, render_area, { clear_color, clear_depth });
+        frame.command_buffer.BindPipeline(PipelineBindPoint::Graphics, *pipeline);
+        frame.command_buffer.BindVertexBuffers(*vertex_buffer);
+        frame.command_buffer.BindIndexBuffer(*index_buffer, IndexType::Uint32);
+        frame.command_buffer.BindDescriptorSet(PipelineBindPoint::Graphics, *layout, descriptor_set);
+        frame.command_buffer.DrawIndexed(mesh.indices.count(), 1);
+        frame.command_buffer.EndRenderPass();
+        frame.command_buffer.End();
+
+        queues.graphics.Submit(frame.command_buffer, wait_semaphores, wait_stages, signal_semaphores, signal_fence);
+
+        queues.presentation.QueuePresentKHR(swapchain, image_index, frame.image_rendered_semaphore);
     }
 
-    // Render image
-    {
-        auto clear_color = ClearColor::Transparent;
-        auto clear_depth = ClearDepthStencil::Default;
-        auto render_area = Rect2D{ Offset2D{ 0, 0 }, extent };
+    device->WaitIdle();
 
-        auto cmd_pool   = device->CreateCommandPool(graphics.family_index, CommandPoolCreate::Transient);
-        auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
-
-        cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
-        cmd_buffer->BeginRenderPass(*framebuffer, render_area, { clear_color, clear_depth }, SubpassContents::Inline);
-        cmd_buffer->BindPipeline(PipelineBindPoint::Graphics, *pipeline);
-        cmd_buffer->BindVertexBuffers(*vertex_buffer);
-        cmd_buffer->BindIndexBuffer(*index_buffer, IndexType::Uint32);
-        cmd_buffer->BindDescriptorSet(PipelineBindPoint::Graphics, *layout, descriptor_set);
-        cmd_buffer->DrawIndexed(mesh.indices.count(), 1);
-        cmd_buffer->EndRenderPass();
-        cmd_buffer->End();
-
-        queues.graphics.Submit(*cmd_buffer);
-        device->WaitIdle();
-    }
-
-    // Transfer image to CPU
-    UniqueImage2D dst_image;
-    {
-        dst_image = device->CreateImage(
-            image->Format(),
-            extent,
-            ImageUsage::TransferDst,
-            MemoryUsage::CpuOnly,
-            ImageTiling::Linear);
-
-        auto cmd_pool   = device->CreateCommandPool(transfer.family_index, CommandPoolCreate::Transient);
-        auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
-
-        cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
-        cmd_buffer->PipelineBarrier(
-            *dst_image,
-            PipelineStage::Transfer,
-            PipelineStage::Transfer,
-            Access{},
-            Access::TransferWrite,
-            ImageLayout::Undefined,
-            ImageLayout::TransferDstOptimal,
-            ImageAspect::Color);
-        cmd_buffer->CopyImage(
-            *image,
-            ImageLayout::TransferSrcOptimal,
-            *dst_image,
-            ImageLayout::TransferDstOptimal,
-            extent,
-            ImageAspect::Color);
-        cmd_buffer->PipelineBarrier(
-            *dst_image,
-            PipelineStage::Transfer,
-            PipelineStage::Transfer,
-            Access::TransferWrite,
-            Access::MemoryRead,
-            ImageLayout::TransferDstOptimal,
-            ImageLayout::General,
-            ImageAspect::Color);
-        cmd_buffer->End();
-
-        queues.transfer.Submit(*cmd_buffer);
-        device->WaitIdle();
-    }
-
-    // Write image to file
-    {
-        auto [width, height] = extent;
-        auto stride          = 4 * width;
-
-        void* data = dst_image->MapMemory();
-        stbi_write_png("out.png", width, height, 4, data, stride);
-        dst_image->UnmapMemory();
-    }
+    glfwTerminate();
 
     return 0;
 }

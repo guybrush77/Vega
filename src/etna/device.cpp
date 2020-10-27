@@ -33,18 +33,18 @@ UniqueDescriptorSetLayout Device::CreateDescriptorSetLayout(const VkDescriptorSe
     return DescriptorSetLayout::Create(m_device, create_info);
 }
 
-UniqueDescriptorPool Device::CreateDescriptorPool(DescriptorType descriptor_type, uint32_t size, uint32_t max_sets)
+UniqueDescriptorPool Device::CreateDescriptorPool(DescriptorType descriptor_type, size_t size, size_t max_sets)
 {
     assert(m_device);
 
-    VkDescriptorPoolSize vk_pool_size = DescriptorPoolSize{ GetVk(descriptor_type), size };
+    VkDescriptorPoolSize vk_pool_size = DescriptorPoolSize{ GetVk(descriptor_type), narrow_cast<uint32_t>(size) };
 
     VkDescriptorPoolCreateInfo create_info = {
 
         .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .pNext         = nullptr,
         .flags         = {},
-        .maxSets       = max_sets == 0 ? vk_pool_size.descriptorCount : max_sets,
+        .maxSets       = max_sets == 0 ? vk_pool_size.descriptorCount : narrow_cast<uint32_t>(max_sets),
         .poolSizeCount = 1,
         .pPoolSizes    = &vk_pool_size
     };
