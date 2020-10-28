@@ -136,18 +136,24 @@ auto Device::CreateBuffers(
     return buffers;
 }
 
-uint32_t Device::AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence)
+Return<uint32_t> Device::AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence)
 {
     assert(m_device);
 
-    uint32_t image_index{};
+    auto image_index = uint32_t{};
+    auto result      = vkAcquireNextImageKHR(m_device, swapchain, UINT64_MAX, semaphore, fence, &image_index);
 
-    if (auto result = vkAcquireNextImageKHR(m_device, swapchain, UINT64_MAX, semaphore, fence, &image_index);
-        result != VK_SUCCESS) {
+    switch (result) {
+    case VK_SUCCESS:
+    case VK_TIMEOUT:
+    case VK_NOT_READY:
+    case VK_SUBOPTIMAL_KHR:
+        return Return(image_index, static_cast<Result>(result));
+    default:
         throw_runtime_error(fmt::format("vkAcquireNextImageKHR error: {}", result).c_str());
     }
 
-    return image_index;
+    return {};
 }
 
 UniqueCommandPool Device::CreateCommandPool(uint32_t queue_family_index, CommandPoolCreate command_pool_create_flags)

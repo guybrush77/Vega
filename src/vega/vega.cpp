@@ -737,7 +737,7 @@ int main()
 
         auto frame       = frame_manager.NextFrame();
         auto swapchain   = swapchain_manager.Swapchain();
-        auto image_index = device->AcquireNextImageKHR(swapchain, frame.image_acquired_semaphore, nullptr);
+        auto image_index = device->AcquireNextImageKHR(swapchain, frame.image_acquired_semaphore, nullptr).value();
 
         auto& image_fence = image_ready_fences[image_index];
         if (image_fence != Fence::Null && image_fence != frame.frame_available_fence) {

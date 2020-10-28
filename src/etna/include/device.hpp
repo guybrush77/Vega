@@ -30,7 +30,8 @@ class Device {
 
     bool operator==(const Device&) const = default;
 
-    uint32_t AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence);
+    auto AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence)
+        -> Return<uint32_t>;
 
     auto CreateCommandPool(uint32_t queue_family_index, CommandPoolCreate command_pool_create_flags = {})
         -> UniqueCommandPool;
@@ -49,8 +50,7 @@ class Device {
 
     auto CreateDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& create_info) -> UniqueDescriptorSetLayout;
 
-    auto CreateDescriptorPool(DescriptorType descriptor_type, size_t size, size_t max_sets = 0)
-        -> UniqueDescriptorPool;
+    auto CreateDescriptorPool(DescriptorType descriptor_type, size_t size, size_t max_sets = 0) -> UniqueDescriptorPool;
 
     auto CreateShaderModule(const unsigned char* shader_data, size_t shader_size) -> UniqueShaderModule;
 

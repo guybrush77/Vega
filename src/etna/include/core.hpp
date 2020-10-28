@@ -52,6 +52,57 @@ enum class AttachmentLoadOp {
 
 ETNA_DEFINE_ENUM_ANALOGUE(AttachmentLoadOp)
 
+enum class Result {
+    Success                                     = VK_SUCCESS,
+    NotReady                                    = VK_NOT_READY,
+    Timeout                                     = VK_TIMEOUT,
+    EventSet                                    = VK_EVENT_SET,
+    EventReset                                  = VK_EVENT_RESET,
+    Incomplete                                  = VK_INCOMPLETE,
+    ErrorOutOfHostMemory                        = VK_ERROR_OUT_OF_HOST_MEMORY,
+    ErrorOutOfDeviceMemory                      = VK_ERROR_OUT_OF_DEVICE_MEMORY,
+    ErrorInitializationFailed                   = VK_ERROR_INITIALIZATION_FAILED,
+    ErrorDeviceLost                             = VK_ERROR_DEVICE_LOST,
+    ErrorMemoryMapFailed                        = VK_ERROR_MEMORY_MAP_FAILED,
+    ErrorLayerNotPresent                        = VK_ERROR_LAYER_NOT_PRESENT,
+    ErrorExtensionNotPresent                    = VK_ERROR_EXTENSION_NOT_PRESENT,
+    ErrorFeatureNotPresent                      = VK_ERROR_FEATURE_NOT_PRESENT,
+    ErrorIncompatibleDriver                     = VK_ERROR_INCOMPATIBLE_DRIVER,
+    ErrorTooManyObjects                         = VK_ERROR_TOO_MANY_OBJECTS,
+    ErrorFormatNotSupported                     = VK_ERROR_FORMAT_NOT_SUPPORTED,
+    ErrorFragmentedPool                         = VK_ERROR_FRAGMENTED_POOL,
+    ErrorUnknown                                = VK_ERROR_UNKNOWN,
+    ErrorOutOfPoolMemory                        = VK_ERROR_OUT_OF_POOL_MEMORY,
+    ErrorInvalidExternalHandle                  = VK_ERROR_INVALID_EXTERNAL_HANDLE,
+    ErrorFragmentation                          = VK_ERROR_FRAGMENTATION,
+    ErrorInvalidOpaqueCaptureAddress            = VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS,
+    ErrorSurfaceLostKHR                         = VK_ERROR_SURFACE_LOST_KHR,
+    ErrorNativeWindowInUseKHR                   = VK_ERROR_NATIVE_WINDOW_IN_USE_KHR,
+    SuboptimalKHR                               = VK_SUBOPTIMAL_KHR,
+    ErrorOutOfDateKHR                           = VK_ERROR_OUT_OF_DATE_KHR,
+    ErrorIncompatibleDisplayKHR                 = VK_ERROR_INCOMPATIBLE_DISPLAY_KHR,
+    ErrorValidationFailedEXT                    = VK_ERROR_VALIDATION_FAILED_EXT,
+    ErrorInvalidShaderNV                        = VK_ERROR_INVALID_SHADER_NV,
+    ErrorIncompatibleVersionKHR                 = VK_ERROR_INCOMPATIBLE_VERSION_KHR,
+    ErrorInvalidDrmFormatModifierPlaneLayoutEXT = VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT,
+    ErrorNotPermittedEXT                        = VK_ERROR_NOT_PERMITTED_EXT,
+    ErrorFullScreenExclusiveModeLostEXT         = VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT,
+    ThreadIdleKHR                               = VK_THREAD_IDLE_KHR,
+    ThreadDoneKHR                               = VK_THREAD_DONE_KHR,
+    OperationDeferredKHR                        = VK_OPERATION_DEFERRED_KHR,
+    OperationNotDeferredKHR                     = VK_OPERATION_NOT_DEFERRED_KHR,
+    ErrorPipelineCompileRequiredEXT             = VK_ERROR_PIPELINE_COMPILE_REQUIRED_EXT,
+    ErrorOutOfPoolMemoryKHR                     = VK_ERROR_OUT_OF_POOL_MEMORY_KHR,
+    ErrorInvalidExternalHandleKHR               = VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR,
+    ErrorFragmentationEXT                       = VK_ERROR_FRAGMENTATION_EXT,
+    ErrorInvalidDeviceAddressEXT                = VK_ERROR_INVALID_DEVICE_ADDRESS_EXT,
+    ErrorInvalidOpaqueCaptureAddressKHR         = VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR
+};
+
+ETNA_DEFINE_ENUM_ANALOGUE(Result)
+
+const char* to_string(Result value);
+
 enum class AttachmentStoreOp { Store = VK_ATTACHMENT_STORE_OP_STORE, DontCare = VK_ATTACHMENT_STORE_OP_DONT_CARE };
 
 ETNA_DEFINE_ENUM_ANALOGUE(AttachmentStoreOp)
@@ -966,6 +1017,34 @@ struct ArrayViewBuffer<T, 0> {
     inline static T* data = nullptr;
 };
  } // namespace detail
+
+template <typename T>
+class Return final {
+  public:
+    constexpr Return() noexcept = default;
+    constexpr explicit Return(T value, Result result = Result::Success) : m_value(std::move(value)), m_result(result) {}
+    constexpr explicit Return(Result result) : m_result(result) {}
+
+    explicit operator bool() const noexcept { return m_result == Result::Success; }
+
+    bool operator==(const Return&) const noexcept = default;
+
+    T value() const
+    {
+        if (m_result != Result::Success) {
+            throw_runtime_error(to_string(m_result));
+        }
+        return m_value;
+    }
+
+    T value_or(const T& value) const noexcept { return m_value == Result::Success ? m_value : value; }
+
+    Result result() const noexcept { return m_result; }
+
+  private:
+    T      m_value{};
+    Result m_result{};
+};
 
 template <typename T>
 struct ArrayView final {
