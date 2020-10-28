@@ -956,6 +956,17 @@ constexpr DstT narrow_cast(SrcT src)
     return dst;
 }
 
+namespace detail {
+template <typename T, size_t N>
+struct ArrayViewBuffer {
+    T data[N];
+};
+template <typename T>
+struct ArrayViewBuffer<T, 0> {
+    inline static T* data = nullptr;
+};
+ } // namespace detail
+
 template <typename T>
 struct ArrayView final {
     using value_type      = T;
@@ -1018,15 +1029,6 @@ struct ArrayView final {
     bool      empty() const noexcept { return m.size == 0; }
 
   private:
-    template <size_t N>
-    struct Buffer {
-        value_type data[N];
-    };
-    template <>
-    struct Buffer<0> {
-        inline static const pointer data = nullptr;
-    };
-
     static constexpr size_t kMaxTypeSize = 64; // in bytes
     struct {
         pointer   data{};
@@ -1034,7 +1036,7 @@ struct ArrayView final {
         bool      free{};
     } m;
     static constexpr size_t kBufferElems = (kMaxTypeSize - sizeof(m)) / sizeof(T);
-    Buffer<kBufferElems>    buffer;
+    detail::ArrayViewBuffer<T, kBufferElems> buffer;
 };
 
 template <typename T>
