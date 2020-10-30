@@ -1,5 +1,10 @@
 #pragma once
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 26812) // Silences: The enum type 'TYPE' is unscoped. Prefer 'enum class' over 'enum'
+#endif
+
 #include <type_traits>
 #include <utility>
 #include <vulkan/vulkan_core.h>
@@ -1012,18 +1017,17 @@ struct have_same_sign : std::integral_constant<bool, std::is_signed<T>::value ==
 template <typename DstT, typename SrcT>
 constexpr DstT narrow_cast(SrcT src)
 {
-    if constexpr (std::is_same_v<SrcT, DstT>) {
-        return src;
-    }
-
     DstT dst = static_cast<DstT>(src);
 
-    if (static_cast<SrcT>(dst) != src) {
-        throw_etna_error(__FILE__, __LINE__, "narrow_cast failed");
-    }
-
-    if (!have_same_sign<DstT, SrcT>::value && ((dst < DstT{}) != (src < SrcT{}))) {
-        throw_etna_error(__FILE__, __LINE__, "narrow_cast failed");
+    if constexpr (!std::is_same_v<SrcT, DstT>) {
+        if (static_cast<SrcT>(dst) != src) {
+            throw_etna_error(__FILE__, __LINE__, "narrow_cast failed");
+        }
+        if constexpr (!have_same_sign<DstT, SrcT>::value) {
+            if ((dst < DstT{}) != (src < SrcT{})) {
+                throw_etna_error(__FILE__, __LINE__, "narrow_cast failed");
+            }
+        }
     }
 
     return dst;

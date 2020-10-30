@@ -618,7 +618,7 @@ int main()
         queues.presentation = device->GetQueue(presentation.family_index);
     }
 
-    auto mesh = LoadMesh("/home/slobo/Documents/Vega/data/models/suzanne.obj");
+    auto mesh = LoadMesh("../../../data/models/suzanne.obj");
 
     // Copy mesh data to GPU
     UniqueBuffer vertex_buffer;

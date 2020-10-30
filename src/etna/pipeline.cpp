@@ -244,7 +244,7 @@ void Pipeline::Builder::AddColorBlendAttachmentState()
     VkColorComponentFlags write_mask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
                                        VK_COLOR_COMPONENT_A_BIT;
 
-    auto state = VkPipelineColorBlendAttachmentState{
+    auto color_blend_attachment_state = VkPipelineColorBlendAttachmentState{
 
         .blendEnable         = false,
         .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
@@ -256,7 +256,7 @@ void Pipeline::Builder::AddColorBlendAttachmentState()
         .colorWriteMask      = write_mask
     };
 
-    m_color_blend_attachments.push_back(state);
+    m_color_blend_attachments.push_back(color_blend_attachment_state);
 
     m_color_blend_state.pAttachments    = m_color_blend_attachments.data();
     m_color_blend_state.attachmentCount = narrow_cast<uint32_t>(m_color_blend_attachments.size());
