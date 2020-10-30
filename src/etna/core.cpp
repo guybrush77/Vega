@@ -6,11 +6,11 @@ namespace etna {
 
 class etna_error : public std::exception {
   public:
-    etna_error(const char* file, int line, Result result) noexcept {}
+    etna_error(const char* /*file*/, int /*line*/, Result /*result*/) noexcept {}
 
-    etna_error(const char* file, int line, const char* description) noexcept {}
+    etna_error(const char* /*file*/, int /*line*/, const char* /*description*/) noexcept {}
 
-    virtual char const* what() const override { return "TODO"; }
+    virtual char const* what() const noexcept override { return "TODO"; }
 };
 
 const char* to_string(Result value)

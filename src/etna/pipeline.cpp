@@ -186,7 +186,7 @@ void Pipeline::Builder::AddShaderStage(
     m_shader_stages.push_back(shader_stage_create_info);
 
     state.pStages    = m_shader_stages.data();
-    state.stageCount = narrow_cast<std::uint32_t>(m_shader_stages.size());
+    state.stageCount = narrow_cast<uint32_t>(m_shader_stages.size());
 }
 
 void Pipeline::Builder::AddVertexInputBindingDescription(
@@ -216,7 +216,7 @@ void Pipeline::Builder::AddViewport(Viewport viewport)
 {
     m_viewports.push_back(viewport);
 
-    m_viewport_state.viewportCount = narrow_cast<std::uint32_t>(m_viewports.size());
+    m_viewport_state.viewportCount = narrow_cast<uint32_t>(m_viewports.size());
     m_viewport_state.pViewports    = m_viewports.data();
 }
 
@@ -225,7 +225,7 @@ void Pipeline::Builder::AddScissor(Rect2D scissor)
     m_scissors.push_back(scissor);
 
     m_viewport_state.pScissors    = m_scissors.data();
-    m_viewport_state.scissorCount = narrow_cast<std::uint32_t>(m_scissors.size());
+    m_viewport_state.scissorCount = narrow_cast<uint32_t>(m_scissors.size());
 }
 
 // TODO
@@ -235,7 +235,7 @@ void Pipeline::Builder::AddColorBlendAttachmentState(const VkPipelineColorBlendA
     m_color_blend_attachments.push_back(state);
 
     m_color_blend_state.pAttachments    = m_color_blend_attachments.data();
-    m_color_blend_state.attachmentCount = narrow_cast<std::uint32_t>(m_color_blend_attachments.size());
+    m_color_blend_state.attachmentCount = narrow_cast<uint32_t>(m_color_blend_attachments.size());
 }
 */
 
@@ -259,7 +259,7 @@ void Pipeline::Builder::AddColorBlendAttachmentState()
     m_color_blend_attachments.push_back(state);
 
     m_color_blend_state.pAttachments    = m_color_blend_attachments.data();
-    m_color_blend_state.attachmentCount = narrow_cast<std::uint32_t>(m_color_blend_attachments.size());
+    m_color_blend_state.attachmentCount = narrow_cast<uint32_t>(m_color_blend_attachments.size());
 }
 
 void Pipeline::Builder::AddDynamicState(DynamicState dynamic_state)
@@ -267,7 +267,7 @@ void Pipeline::Builder::AddDynamicState(DynamicState dynamic_state)
     m_dynamic_states.push_back(GetVk(dynamic_state));
 
     m_dynamic_state.pDynamicStates    = m_dynamic_states.data();
-    m_dynamic_state.dynamicStateCount = narrow_cast<std::uint32_t>(m_dynamic_states.size());
+    m_dynamic_state.dynamicStateCount = narrow_cast<uint32_t>(m_dynamic_states.size());
 }
 
 void Pipeline::Builder::SetDepthState(DepthTest depth_test, DepthWrite depth_write, CompareOp compare_op) noexcept

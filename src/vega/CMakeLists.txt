@@ -7,6 +7,8 @@ target_sources(vega PRIVATE ${source_files})
 
 target_compile_features(vega PUBLIC cxx_std_20)
 
+set_source_files_properties(${source_files} PROPERTIES COMPILE_FLAGS ${WARNING_FLAGS})
+
 target_link_libraries(
     vega
     PRIVATE etna

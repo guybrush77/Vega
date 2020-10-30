@@ -8,13 +8,25 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wvolatile"
+#endif
+
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtx/transform.hpp>
 #include <glm/matrix.hpp>
 
+#include <spdlog/spdlog.h>
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+
 #include <algorithm>
 #include <optional>
-#include <spdlog/spdlog.h>
 #include <unordered_map>
 #include <vector>
 
@@ -60,7 +72,9 @@ struct Index final {
     Index() noexcept = default;
 
     constexpr Index(tinyobj::index_t idx) noexcept
-        : vertex(idx.vertex_index), normal(idx.normal_index), texcoord(idx.texcoord_index)
+        : vertex(static_cast<uint32_t>(idx.vertex_index)),
+          normal(static_cast<uint32_t>(idx.normal_index)),
+          texcoord(static_cast<uint32_t>(idx.texcoord_index))
     {}
 
     constexpr size_t operator()(const Index& index) const noexcept
@@ -72,9 +86,9 @@ struct Index final {
         return hash;
     }
 
-    int vertex;
-    int normal;
-    int texcoord;
+    uint32_t vertex;
+    uint32_t normal;
+    uint32_t texcoord;
 };
 
 constexpr bool operator==(const Index& lhs, const Index& rhs) noexcept
@@ -90,8 +104,11 @@ Mesh LoadMesh(const char* filepath)
     std::string                      warning;
     std::string                      err;
     bool success = tinyobj::LoadObj(&attributes, &shapes, &materials, &warning, &err, filepath, nullptr, true, false);
+    if (success == false) {
+        throw std::runtime_error("Failed to load file");
+    }
 
-    auto index_map = std::unordered_map<Index, int, Index>{};
+    auto index_map = std::unordered_map<Index, uint32_t, Index>{};
     auto vertices  = std::vector<VertexPN>{};
     auto indices   = std::vector<uint32_t>{};
 
@@ -123,7 +140,7 @@ Mesh LoadMesh(const char* filepath)
 
                 vertices.push_back(vertex);
 
-                auto idx         = static_cast<int>(vertices.size() - 1);
+                auto idx         = static_cast<uint32_t>(vertices.size() - 1);
                 index_map[index] = idx;
 
                 indices.push_back(idx);
@@ -601,7 +618,7 @@ int main()
         queues.presentation = device->GetQueue(presentation.family_index);
     }
 
-    auto mesh = LoadMesh("C:/Users/slobodan/Documents/Programming/Vega/data/models/suzanne.obj");
+    auto mesh = LoadMesh("/home/slobo/Documents/Vega/data/models/suzanne.obj");
 
     // Copy mesh data to GPU
     UniqueBuffer vertex_buffer;

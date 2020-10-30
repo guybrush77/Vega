@@ -9,6 +9,8 @@ target_sources(etna PRIVATE ${source_files})
 
 target_compile_features(etna PUBLIC cxx_std_20)
 
+set_source_files_properties(${source_files} PROPERTIES COMPILE_FLAGS ${WARNING_FLAGS})
+
 target_include_directories(etna PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 target_link_libraries(

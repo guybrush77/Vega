@@ -1003,8 +1003,8 @@ struct ClearValue final {
     bool              is_color;
 };
 
-void throw_etna_error(const char* file, int line, Result result);
-void throw_etna_error(const char* file, int line, const char* description);
+void throw_etna_error(const char* /*file*/, int /*line*/, Result /*result*/);
+void throw_etna_error(const char* /*file*/, int /*line*/, const char* /*description*/);
 
 template <typename T, typename U>
 struct have_same_sign : std::integral_constant<bool, std::is_signed<T>::value == std::is_signed<U>::value> {};
