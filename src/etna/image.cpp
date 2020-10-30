@@ -1,11 +1,8 @@
 #include "image.hpp"
-
 #include "renderpass.hpp"
 
-#include <spdlog/spdlog.h>
+#include <cassert>
 #include <vk_mem_alloc.h>
-
-#define COMPONENT "Etna: "
 
 namespace etna {
 
@@ -14,8 +11,8 @@ void* Image2D::MapMemory()
     assert(m_image);
 
     void* data = nullptr;
-    if (VK_SUCCESS != vmaMapMemory(m_allocator, m_allocation, &data)) {
-        throw_runtime_error(COMPONENT "Function vmaMapMemory failed");
+    if (auto result = vmaMapMemory(m_allocator, m_allocation, &data); result != VK_SUCCESS) {
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 
     return data;
@@ -36,11 +33,10 @@ UniqueImage2D Image2D::Create(VmaAllocator allocator, const VkImageCreateInfo& c
 
     VkImage       image{};
     VmaAllocation allocation{};
-    if (VK_SUCCESS != vmaCreateImage(allocator, &create_info, &allocation_info, &image, &allocation, nullptr)) {
-        throw_runtime_error("vmaCreateImage failed");
+    if (auto result = vmaCreateImage(allocator, &create_info, &allocation_info, &image, &allocation, nullptr);
+        result != VK_SUCCESS) {
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkImage {}", fmt::ptr(image));
 
     return UniqueImage2D(Image2D(image, allocator, allocation, create_info.format));
 }
@@ -51,8 +47,6 @@ void Image2D::Destroy() noexcept
     assert(m_allocator);
 
     vmaDestroyImage(m_allocator, m_image, m_allocation);
-
-    spdlog::info(COMPONENT "Destroyed VkImage {}", fmt::ptr(m_image));
 
     m_image      = nullptr;
     m_allocator  = nullptr;
@@ -65,10 +59,8 @@ UniqueImageView2D ImageView2D::Create(VkDevice vk_device, const VkImageViewCreat
     VkImageView vk_image_view{};
 
     if (auto result = vkCreateImageView(vk_device, &create_info, nullptr, &vk_image_view); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateImageView error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkImageView {}", fmt::ptr(vk_image_view));
 
     return UniqueImageView2D(ImageView2D(vk_image_view, vk_device));
 }
@@ -78,8 +70,6 @@ void ImageView2D::Destroy() noexcept
     assert(m_image_view);
 
     vkDestroyImageView(m_device, m_image_view, nullptr);
-
-    spdlog::info(COMPONENT "Destroyed VkImageView {}", fmt::ptr(m_image_view));
 
     m_image_view = nullptr;
     m_device     = nullptr;
@@ -95,10 +85,8 @@ UniqueFramebuffer Framebuffer::Create(VkDevice device, const VkFramebufferCreate
     VkFramebuffer framebuffer{};
 
     if (auto result = vkCreateFramebuffer(device, &create_info, nullptr, &framebuffer); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateFramebuffer error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkFramebuffer {}", fmt::ptr(framebuffer));
 
     auto renderpass = create_info.renderPass;
 
@@ -110,8 +98,6 @@ void Framebuffer::Destroy() noexcept
     assert(m_renderpass);
 
     vkDestroyFramebuffer(m_device, m_framebuffer, nullptr);
-
-    spdlog::info(COMPONENT "Destroyed VkFramebuffer {}", fmt::ptr(m_framebuffer));
 
     m_framebuffer = nullptr;
     m_device      = nullptr;

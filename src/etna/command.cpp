@@ -5,9 +5,7 @@
 #include "pipeline.hpp"
 #include "renderpass.hpp"
 
-#include <spdlog/spdlog.h>
-
-#define COMPONENT "Etna: "
+#include <cassert>
 
 namespace etna {
 
@@ -32,10 +30,8 @@ UniqueCommandPool CommandPool::Create(VkDevice vk_device, const VkCommandPoolCre
     VkCommandPool vk_command_pool{};
 
     if (auto result = vkCreateCommandPool(vk_device, &create_info, nullptr, &vk_command_pool); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateCommandPool error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkCommandPool {}", fmt::ptr(vk_command_pool));
 
     return UniqueCommandPool(CommandPool(vk_command_pool, vk_device));
 }
@@ -45,8 +41,6 @@ void CommandPool::Destroy() noexcept
     assert(m_command_pool);
 
     vkDestroyCommandPool(m_device, m_command_pool, nullptr);
-
-    spdlog::info(COMPONENT "Destroyed VkCommandPool {}", fmt::ptr(m_command_pool));
 
     m_command_pool = nullptr;
     m_device       = nullptr;
@@ -65,7 +59,7 @@ void CommandBuffer::Begin(CommandBufferUsage command_buffer_usage_flags)
     };
 
     if (auto result = vkBeginCommandBuffer(m_command_buffer, &begin_info); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkBeginCommandBuffer error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 }
 
@@ -273,10 +267,8 @@ UniqueCommandBuffer CommandBuffer::Create(VkDevice vk_device, const VkCommandBuf
     VkCommandBuffer vk_command_buffer{};
 
     if (auto result = vkAllocateCommandBuffers(vk_device, &alloc_info, &vk_command_buffer); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateCommandPool error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Allocated VkCommandBuffer {}", fmt::ptr(vk_command_buffer));
 
     return UniqueCommandBuffer(CommandBuffer(vk_command_buffer, vk_device, alloc_info.commandPool));
 }
@@ -286,8 +278,6 @@ void CommandBuffer::Destroy() noexcept
     assert(m_command_buffer);
 
     vkFreeCommandBuffers(m_device, m_command_pool, 1, &m_command_buffer);
-
-    spdlog::info(COMPONENT "Destroyed VkCommandBuffer {}", fmt::ptr(m_command_buffer));
 
     m_command_buffer = nullptr;
     m_device         = nullptr;

@@ -1,9 +1,7 @@
 #include "descriptor.hpp"
 #include "buffer.hpp"
 
-#include <spdlog/spdlog.h>
-
-#define COMPONENT "Etna: "
+#include <cassert>
 
 namespace etna {
 
@@ -15,10 +13,8 @@ UniqueDescriptorSetLayout DescriptorSetLayout::Create(
 
     if (auto result = vkCreateDescriptorSetLayout(vk_device, &create_info, nullptr, &vk_descriptor_set_layout);
         result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateDescriptorSetLayout error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkDescriptorSetLayout {}", fmt::ptr(vk_descriptor_set_layout));
 
     return UniqueDescriptorSetLayout(DescriptorSetLayout(vk_descriptor_set_layout, vk_device));
 }
@@ -28,8 +24,6 @@ void DescriptorSetLayout::Destroy() noexcept
     assert(m_descriptor_set_layout);
 
     vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
-
-    spdlog::info(COMPONENT "Destroyed VkDescriptorSetLayout {}", fmt::ptr(m_descriptor_set_layout));
 
     m_descriptor_set_layout = nullptr;
     m_device                = nullptr;
@@ -118,10 +112,8 @@ UniqueDescriptorPool DescriptorPool::Create(VkDevice vk_device, const VkDescript
 
     if (auto result = vkCreateDescriptorPool(vk_device, &create_info, nullptr, &vk_descriptor_pool);
         result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateDescriptorPool error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkDescriptorPool {}", fmt::ptr(vk_descriptor_pool));
 
     return UniqueDescriptorPool(DescriptorPool(vk_descriptor_pool, vk_device));
 }
@@ -131,8 +123,6 @@ void DescriptorPool::Destroy() noexcept
     assert(m_descriptor_pool);
 
     vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
-
-    spdlog::info(COMPONENT "Destroyed VkDescriptorPool {}", fmt::ptr(m_descriptor_pool));
 
     m_descriptor_pool = nullptr;
     m_device          = nullptr;

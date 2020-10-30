@@ -3,9 +3,7 @@
 #include "renderpass.hpp"
 #include "shader.hpp"
 
-#include <spdlog/spdlog.h>
-
-#define COMPONENT "Etna: "
+#include <cassert>
 
 namespace etna {
 
@@ -285,10 +283,8 @@ UniquePipelineLayout PipelineLayout::Create(VkDevice vk_device, const VkPipeline
 
     if (auto result = vkCreatePipelineLayout(vk_device, &create_info, nullptr, &vk_pipeline_layout);
         result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreatePipelineLayout error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkPipelineLayout {}", fmt::ptr(vk_pipeline_layout));
 
     return UniquePipelineLayout(PipelineLayout(vk_pipeline_layout, vk_device));
 }
@@ -299,8 +295,6 @@ void PipelineLayout::Destroy() noexcept
 
     vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
 
-    spdlog::info(COMPONENT "Destroyed VkPipelineLayout {}", fmt::ptr(m_pipeline_layout));
-
     m_pipeline_layout = nullptr;
     m_device          = nullptr;
 }
@@ -309,12 +303,10 @@ UniquePipeline Pipeline::Create(VkDevice vk_device, const VkGraphicsPipelineCrea
 {
     VkPipeline vk_pipeline{};
 
-    if (auto res = vkCreateGraphicsPipelines(vk_device, {}, 1, &create_info, nullptr, &vk_pipeline);
-        res != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateGraphicsPipelines error: {}", res).c_str());
+    if (auto result = vkCreateGraphicsPipelines(vk_device, {}, 1, &create_info, nullptr, &vk_pipeline);
+        result != VK_SUCCESS) {
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkPipeline {}", fmt::ptr(vk_pipeline));
 
     return UniquePipeline(Pipeline(vk_pipeline, vk_device));
 }
@@ -324,8 +316,6 @@ void Pipeline::Destroy() noexcept
     assert(m_pipeline);
 
     vkDestroyPipeline(m_device, m_pipeline, nullptr);
-
-    spdlog::info(COMPONENT "Destroyed VkPipeline {}", fmt::ptr(m_pipeline));
 
     m_pipeline = nullptr;
     m_device   = nullptr;

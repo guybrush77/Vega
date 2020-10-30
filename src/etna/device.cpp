@@ -14,10 +14,6 @@
 #include "swapchain.hpp"
 #include "synchronization.hpp"
 
-#include <spdlog/spdlog.h>
-
-#define COMPONENT "Etna: "
-
 namespace etna {
 
 UniqueRenderPass Device::CreateRenderPass(const VkRenderPassCreateInfo& create_info)
@@ -150,7 +146,7 @@ Return<uint32_t> Device::AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore s
     case VK_SUBOPTIMAL_KHR:
         return Return(image_index, static_cast<Result>(result));
     default:
-        throw_runtime_error(fmt::format("vkAcquireNextImageKHR error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 
     return {};
@@ -351,7 +347,7 @@ void Device::ResetFences(ArrayView<Fence> fences)
     auto vk_size   = narrow_cast<uint32_t>(fences.size());
 
     if (auto result = vkResetFences(m_device, vk_size, vk_fences.data()); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkResetFences error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 }
 
@@ -377,7 +373,7 @@ void Device::WaitForFences(ArrayView<Fence> fences, bool wait_all, uint64_t time
     auto vk_size   = narrow_cast<uint32_t>(fences.size());
 
     if (auto result = vkWaitForFences(m_device, vk_size, vk_fences.data(), wait_all, timeout); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkWaitForFences error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 }
 
@@ -393,10 +389,8 @@ Device::Create(VkInstance instance, VkPhysicalDevice physical_device, const VkDe
     VkDevice device{};
 
     if (auto result = vkCreateDevice(physical_device, &create_info, nullptr, &device); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateDevice error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkDevice {}", fmt::ptr(device));
 
     VmaAllocatorCreateInfo allocator_create_info = {
 
@@ -416,10 +410,8 @@ Device::Create(VkInstance instance, VkPhysicalDevice physical_device, const VkDe
 
     VmaAllocator allocator{};
     if (auto result = vmaCreateAllocator(&allocator_create_info, &allocator); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vmaCreateAllocator error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VmaAllocator {}", fmt::ptr(allocator));
 
     return UniqueDevice(Device(device, allocator));
 }
@@ -429,10 +421,7 @@ void Device::Destroy() noexcept
     assert(m_device);
 
     vmaDestroyAllocator(m_allocator);
-    spdlog::info(COMPONENT "Destroyed VmaAllocator {}", fmt::ptr(m_allocator));
-
     vkDestroyDevice(m_device, nullptr);
-    spdlog::info(COMPONENT "Destroyed VkDevice {}", fmt::ptr(m_device));
 
     m_device    = nullptr;
     m_allocator = nullptr;

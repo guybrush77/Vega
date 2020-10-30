@@ -549,6 +549,27 @@ enum class PipelineBindPoint {
 
 ETNA_DEFINE_ENUM_ANALOGUE(PipelineBindPoint)
 
+enum class DebugUtilsMessageSeverity : VkDebugUtilsMessageSeverityFlagsEXT {
+    Verbose = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
+    Info    = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
+    Warning = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+    Error   = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT
+};
+
+ETNA_DEFINE_FLAGS_ANALOGUE(DebugUtilsMessageSeverity, VkDebugUtilsMessageSeverityFlagsEXT)
+
+const char* to_string(DebugUtilsMessageSeverity value) noexcept;
+
+enum class DebugUtilsMessageType : VkDebugUtilsMessageTypeFlagsEXT {
+    General     = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT,
+    Validation  = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT,
+    Performance = VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT
+};
+
+ETNA_DEFINE_FLAGS_ANALOGUE(DebugUtilsMessageType, VkDebugUtilsMessageTypeFlagsEXT)
+
+const char* to_string(DebugUtilsMessageType value) noexcept;
+
 enum class FormatFeature : VkFormatFeatureFlags {
     SampledImage                            = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
     StorageImage                            = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,
@@ -982,7 +1003,8 @@ struct ClearValue final {
     bool              is_color;
 };
 
-void throw_runtime_error(const char* description);
+void throw_etna_error(const char* file, int line, Result result);
+void throw_etna_error(const char* file, int line, const char* description);
 
 template <typename T, typename U>
 struct have_same_sign : std::integral_constant<bool, std::is_signed<T>::value == std::is_signed<U>::value> {};
@@ -997,11 +1019,11 @@ constexpr DstT narrow_cast(SrcT src)
     DstT dst = static_cast<DstT>(src);
 
     if (static_cast<SrcT>(dst) != src) {
-        throw_runtime_error("narrow_cast failed");
+        throw_etna_error(__FILE__, __LINE__, "narrow_cast failed");
     }
 
     if (!have_same_sign<DstT, SrcT>::value && ((dst < DstT{}) != (src < SrcT{}))) {
-        throw_runtime_error("narrow_cast failed");
+        throw_etna_error(__FILE__, __LINE__, "narrow_cast failed");
     }
 
     return dst;
@@ -1016,7 +1038,7 @@ template <typename T>
 struct ArrayViewBuffer<T, 0> {
     inline static T* data = nullptr;
 };
- } // namespace detail
+} // namespace detail
 
 template <typename T>
 class Return final {
@@ -1032,7 +1054,7 @@ class Return final {
     T value() const
     {
         if (m_result != Result::Success) {
-            throw_runtime_error(to_string(m_result));
+            throw_etna_error(__FILE__, __LINE__, to_string(m_result));
         }
         return m_value;
     }
@@ -1108,13 +1130,15 @@ struct ArrayView final {
     bool      empty() const noexcept { return m.size == 0; }
 
   private:
-    static constexpr size_t kMaxTypeSize = 64; // in bytes
     struct {
         pointer   data{};
         size_type size{};
         bool      free{};
     } m;
+
+    static constexpr size_t kMaxTypeSize = 64; // in bytes
     static constexpr size_t kBufferElems = (kMaxTypeSize - sizeof(m)) / sizeof(T);
+
     detail::ArrayViewBuffer<T, kBufferElems> buffer;
 };
 

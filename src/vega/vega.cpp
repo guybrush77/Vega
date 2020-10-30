@@ -163,6 +163,36 @@ std::vector<T> RemoveDuplicates(std::initializer_list<T> l)
     return v;
 }
 
+VkBool32 VulkanDebugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT vk_message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void*)
+{
+    auto message_severity = static_cast<etna::DebugUtilsMessageSeverity>(vk_message_severity);
+
+    switch (message_severity) {
+    case etna::DebugUtilsMessageSeverity::Verbose:
+        spdlog::debug(callback_data->pMessage);
+        break;
+    case etna::DebugUtilsMessageSeverity::Info:
+        spdlog::info(callback_data->pMessage);
+        break;
+    case etna::DebugUtilsMessageSeverity::Warning:
+        spdlog::warn(callback_data->pMessage);
+        break;
+    case etna::DebugUtilsMessageSeverity::Error:
+        spdlog::error(callback_data->pMessage);
+        break;
+    default:
+        spdlog::warn("Vulkan message callback message severity not recognized");
+        spdlog::error(callback_data->pMessage);
+        break;
+    }
+
+    return VK_FALSE;
+}
+
 QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surface)
 {
     using namespace etna;
@@ -244,7 +274,7 @@ QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surf
     }
 
     if (false == graphics.has_value()) {
-        throw_runtime_error("Failed to detect GPU graphics queue!");
+        throw std::runtime_error("Failed to detect GPU graphics queue!");
     }
 
     if (dedicated_compute.has_value()) {
@@ -256,7 +286,7 @@ QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surf
     }
 
     if (false == compute.has_value()) {
-        throw_runtime_error("Failed to detect GPU compute queue!");
+        throw std::runtime_error("Failed to detect GPU compute queue!");
     }
 
     if (dedicated_transfer.has_value()) {
@@ -268,7 +298,7 @@ QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surf
     }
 
     if (false == transfer.has_value()) {
-        throw_runtime_error("Failed to detect GPU transfer queue!");
+        throw std::runtime_error("Failed to detect GPU transfer queue!");
     }
 
     if (graphics_presentation.has_value()) {
@@ -278,15 +308,15 @@ QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surf
     }
 
     if (false == presentation.has_value()) {
-        throw_runtime_error("Failed to detect GPU presentation queue!");
+        throw std::runtime_error("Failed to detect GPU presentation queue!");
     }
 
     return { graphics.value(), compute.value(), transfer.value(), presentation.value() };
 }
 
 etna::SurfaceFormatKHR FindOptimalSurfaceFormatKHR(
-    etna::PhysicalDevice                gpu,
-    etna::SurfaceKHR                    surface,
+    etna::PhysicalDevice                    gpu,
+    etna::SurfaceKHR                        surface,
     etna::ArrayView<etna::SurfaceFormatKHR> preffered_formats)
 {
     auto available_formats = gpu.GetPhysicalDeviceSurfaceFormatsKHR(surface);
@@ -305,10 +335,10 @@ etna::SurfaceFormatKHR FindOptimalSurfaceFormatKHR(
 }
 
 etna::Format FindSupportedFormat(
-    etna::PhysicalDevice      gpu,
+    etna::PhysicalDevice          gpu,
     etna::ArrayView<etna::Format> candidate_formats,
-    etna::ImageTiling         tiling,
-    etna::FormatFeature       required_features)
+    etna::ImageTiling             tiling,
+    etna::FormatFeature           required_features)
 {
     using namespace etna;
 
@@ -506,7 +536,14 @@ int main()
             layers.push_back("VK_LAYER_KHRONOS_validation");
         }
 
-        instance = CreateInstance("Vega", Version{ 0, 1, 0 }, extensions, layers);
+        instance = CreateInstance(
+            "Vega",
+            Version{ 0, 1, 0 },
+            extensions,
+            layers,
+            VulkanDebugCallback,
+            DebugUtilsMessageSeverity::Warning | DebugUtilsMessageSeverity::Error,
+            DebugUtilsMessageType::General | DebugUtilsMessageType::Performance | DebugUtilsMessageType::Validation);
     }
 
     PhysicalDevice gpu;

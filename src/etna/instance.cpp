@@ -3,103 +3,28 @@
 #include "surface.hpp"
 
 #include <algorithm>
-#include <spdlog/spdlog.h>
-
-#define COMPONENT "Etna: "
-
-namespace {
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT      message_severity,
-    VkDebugUtilsMessageTypeFlagsEXT             message_type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-    void*                                       user_data)
-{
-    const char* type_string = nullptr;
-
-    switch (message_type) {
-    case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
-        type_string = "General";
-        break;
-    case VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT:
-        type_string = "Validation";
-        break;
-    case VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT:
-        type_string = "Performance";
-        break;
-    default:
-        type_string = "Unknown";
-        break;
-    }
-
-    switch (message_severity) {
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-        spdlog::debug("{}: {}", type_string, callback_data->pMessage);
-        break;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-        spdlog::info("{}: {}", type_string, callback_data->pMessage);
-        break;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-        spdlog::warn("{}: {}", type_string, callback_data->pMessage);
-        break;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-        spdlog::error("{}: {}", type_string, callback_data->pMessage);
-        break;
-    default:
-        spdlog::warn("Vulkan message callback type not recognized");
-        spdlog::error("{}: {}", type_string, callback_data->pMessage);
-        break;
-    }
-
-    return VK_FALSE;
-}
-
-static VkDebugUtilsMessengerCreateInfoEXT GetDebugUtilsMessengerCreateInfo() noexcept
-{
-    uint32_t message_severity_mask = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                                     // VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-                                     VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                     VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-
-    uint32_t message_type_mask = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-
-    return VkDebugUtilsMessengerCreateInfoEXT{
-
-        .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        .pNext           = nullptr,
-        .flags           = {},
-        .messageSeverity = message_severity_mask,
-        .messageType     = message_type_mask,
-        .pfnUserCallback = VulkanDebugCallback,
-        .pUserData       = nullptr
-    };
-}
-
-static VkResult CreateDebugUtilsMessengerEXT(
-    VkInstance                         instance,
-    VkDebugUtilsMessengerCreateInfoEXT create_info,
-    VkDebugUtilsMessengerEXT*          debug_messenger)
-{
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        return func(instance, &create_info, nullptr, debug_messenger);
-    }
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
-}
-
-} // namespace
+#include <cassert>
+#include <string_view>
 
 namespace etna {
 
 UniqueInstance CreateInstance(
-    const char*            application_name,
-    Version                application_version,
-    std::span<const char*> extensions,
-    std::span<const char*> layers)
+    const char*                          application_name,
+    Version                              application_version,
+    std::span<const char*>               extensions,
+    std::span<const char*>               layers,
+    PFN_vkDebugUtilsMessengerCallbackEXT debug_utils_messenger_callback,
+    etna::DebugUtilsMessageSeverity      debug_utils_message_severity,
+    etna::DebugUtilsMessageType          debug_utils_message_type)
 {
-    return Instance::Create(application_name, application_version, extensions, layers);
+    return Instance::Create(
+        application_name,
+        application_version,
+        extensions,
+        layers,
+        debug_utils_messenger_callback,
+        debug_utils_message_severity,
+        debug_utils_message_type);
 }
 
 bool AreExtensionsAvailable(std::span<const char*> extensions)
@@ -142,7 +67,7 @@ std::vector<PhysicalDevice> Instance::EnumeratePhysicalDevices() const
     vkEnumeratePhysicalDevices(m_instance, &count, nullptr);
 
     if (count == 0) {
-        throw_runtime_error("Failed to detect GPU!");
+        return {};
     }
 
     std::vector<VkPhysicalDevice> vk_physical_devices(count);
@@ -164,29 +89,60 @@ UniqueDevice Instance::CreateDevice(PhysicalDevice physical_device, const VkDevi
 }
 
 UniqueInstance Instance::Create(
-    const char*            app_name,
-    Version                app_version,
-    std::span<const char*> requested_extensions,
-    std::span<const char*> requested_layers)
+    const char*                          application_name,
+    Version                              application_version,
+    std::span<const char*>               requested_extensions,
+    std::span<const char*>               requested_layers,
+    PFN_vkDebugUtilsMessengerCallbackEXT debug_utils_messenger_callback,
+    DebugUtilsMessageSeverity            debug_utils_message_severity,
+    DebugUtilsMessageType                debug_utils_message_type)
 {
     if (false == AreExtensionsAvailable(requested_extensions)) {
-        throw_runtime_error("Requested Vulkan extensions are not available");
+        throw_etna_error(__FILE__, __LINE__, "Requested Vulkan extensions are not available");
     }
 
     if (false == AreLayersAvailable(requested_layers)) {
-        throw_runtime_error("Requested Vulkan layers are not available");
+        throw_etna_error(__FILE__, __LINE__, "Requested Vulkan layers are not available");
     }
 
-    auto debug_create_info = GetDebugUtilsMessengerCreateInfo();
+    auto debug_create_info = VkDebugUtilsMessengerCreateInfoEXT{
+
+        .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .pNext           = nullptr,
+        .flags           = {},
+        .messageSeverity = GetVk(debug_utils_message_severity),
+        .messageType     = GetVk(debug_utils_message_type),
+        .pfnUserCallback = debug_utils_messenger_callback,
+        .pUserData       = nullptr
+    };
 
     bool enable_debug = std::ranges::count(requested_extensions, std::string_view(VK_EXT_DEBUG_UTILS_EXTENSION_NAME));
+
+    if (enable_debug) {
+        if (debug_create_info.pfnUserCallback == nullptr) {
+            throw_etna_error(__FILE__, __LINE__, "debug_utils_messenger_callback may not be null");
+        }
+        if (debug_utils_message_severity == DebugUtilsMessageSeverity{}) {
+            debug_create_info.messageSeverity = GetVk(
+                DebugUtilsMessageSeverity::Verbose | DebugUtilsMessageSeverity::Info |
+                DebugUtilsMessageSeverity::Warning | DebugUtilsMessageSeverity::Error);
+        }
+        if (debug_utils_message_type == DebugUtilsMessageType{}) {
+            debug_create_info.messageType = GetVk(
+                DebugUtilsMessageType::General | DebugUtilsMessageType::Validation |
+                DebugUtilsMessageType::Performance);
+        }
+    }
+
+    auto vk_application_version =
+        VK_MAKE_VERSION(application_version.major, application_version.minor, application_version.patch);
 
     VkApplicationInfo app_info = {
 
         .sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pNext              = nullptr,
-        .pApplicationName   = app_name,
-        .applicationVersion = VK_MAKE_VERSION(app_version.major, app_version.minor, app_version.patch),
+        .pApplicationName   = application_name,
+        .applicationVersion = vk_application_version,
         .pEngineName        = nullptr,
         .engineVersion      = {},
         .apiVersion         = VK_API_VERSION_1_0
@@ -207,19 +163,21 @@ UniqueInstance Instance::Create(
     VkInstance vk_instance{};
 
     if (auto result = vkCreateInstance(&instance_create_info, nullptr, &vk_instance); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateInstance error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkInstance {}", fmt::ptr(vk_instance));
 
     VkDebugUtilsMessengerEXT vk_debug_messenger{};
 
     if (enable_debug) {
-        auto result = CreateDebugUtilsMessengerEXT(vk_instance, debug_create_info, &vk_debug_messenger);
-        if (result != VK_SUCCESS) {
-            throw_runtime_error(fmt::format("vkCreateDebugUtilsMessengerEXT error: {}", result).c_str());
+        using fn_type = PFN_vkCreateDebugUtilsMessengerEXT;
+        auto* fn_name = "vkCreateDebugUtilsMessengerEXT";
+        auto* fn_ptr  = (fn_type)vkGetInstanceProcAddr(vk_instance, fn_name);
+        if (fn_ptr == nullptr) {
+            throw_etna_error(__FILE__, __LINE__, Result::ErrorExtensionNotPresent);
         }
-        spdlog::info(COMPONENT "Created VkDebugUtilsMessengerEXT {}", fmt::ptr(vk_debug_messenger));
+        if (auto result = fn_ptr(vk_instance, &debug_create_info, nullptr, &vk_debug_messenger); result != VK_SUCCESS) {
+            throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
+        }
     }
 
     return UniqueInstance(Instance(vk_instance, vk_debug_messenger));
@@ -234,13 +192,10 @@ void Instance::Destroy() noexcept
         auto  func_ptr  = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_instance, func_name);
         if (func_ptr != nullptr) {
             func_ptr(m_instance, m_debug_messenger, nullptr);
-            spdlog::info(COMPONENT "Destroyed vkDestroyDebugUtilsMessengerEXT {}", fmt::ptr(m_debug_messenger));
         }
     }
 
     vkDestroyInstance(m_instance, nullptr);
-
-    spdlog::info(COMPONENT "Destroyed VkInstance {}", fmt::ptr(m_instance));
 
     m_instance        = nullptr;
     m_debug_messenger = nullptr;
@@ -289,7 +244,7 @@ SurfaceCapabilitiesKHR PhysicalDevice::GetPhysicalDeviceSurfaceCapabilitiesKHR(S
 
     if (auto result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, surface, &vk_capabilities);
         result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkGetPhysicalDeviceSurfaceCapabilitiesKHR error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 
     return SurfaceCapabilitiesKHR{
@@ -354,7 +309,7 @@ bool PhysicalDevice::GetPhysicalDeviceSurfaceSupportKHR(uint32_t queue_idx, Surf
 
     if (auto result = vkGetPhysicalDeviceSurfaceSupportKHR(m_physical_device, queue_idx, surface, &is_supported);
         result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkGetPhysicalDeviceSurfaceSupportKHR error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 
     return is_supported;

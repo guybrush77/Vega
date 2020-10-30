@@ -14,10 +14,13 @@ struct Version {
 };
 
 auto CreateInstance(
-    const char*            application_name,
-    Version                application_version,
-    std::span<const char*> extensions,
-    std::span<const char*> layers) -> UniqueInstance;
+    const char*                          application_name,
+    Version                              application_version,
+    std::span<const char*>               extensions,
+    std::span<const char*>               layers,
+    PFN_vkDebugUtilsMessengerCallbackEXT debug_utils_messenger_callback = nullptr,
+    etna::DebugUtilsMessageSeverity      debug_utils_message_severity   = {},
+    etna::DebugUtilsMessageType          debug_utils_message_type       = {}) -> UniqueInstance;
 
 class PhysicalDevice {
   public:
@@ -59,20 +62,26 @@ class Instance {
     friend class UniqueHandle;
 
     friend auto CreateInstance(
-        const char*            application_name,
-        Version                application_version,
-        std::span<const char*> extensions,
-        std::span<const char*> layers) -> UniqueInstance;
+        const char*,
+        Version,
+        std::span<const char*>,
+        std::span<const char*>,
+        PFN_vkDebugUtilsMessengerCallbackEXT,
+        etna::DebugUtilsMessageSeverity,
+        etna::DebugUtilsMessageType) -> UniqueInstance;
 
     Instance(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger)
         : m_instance(instance), m_debug_messenger(debug_messenger)
     {}
 
     static auto Create(
-        const char*            application_name,
-        Version                application_version,
-        std::span<const char*> extensions,
-        std::span<const char*> layers) -> UniqueInstance;
+        const char*                          application_name,
+        Version                              application_version,
+        std::span<const char*>               requested_extensions,
+        std::span<const char*>               requested_layers,
+        PFN_vkDebugUtilsMessengerCallbackEXT debug_utils_messenger_callback,
+        etna::DebugUtilsMessageSeverity      debug_utils_message_severity,
+        etna::DebugUtilsMessageType          debug_utils_message_type) -> UniqueInstance;
 
     void Destroy() noexcept;
 

@@ -1,8 +1,6 @@
 #include "renderpass.hpp"
 
-#include <spdlog/spdlog.h>
-
-#define COMPONENT "Etna: "
+#include <cassert>
 
 namespace etna {
 
@@ -11,10 +9,8 @@ UniqueRenderPass RenderPass::Create(VkDevice vk_device, const VkRenderPassCreate
     VkRenderPass vk_renderpass{};
 
     if (auto result = vkCreateRenderPass(vk_device, &create_info, nullptr, &vk_renderpass); result != VK_SUCCESS) {
-        throw_runtime_error(fmt::format("vkCreateRenderPass error: {}", result).c_str());
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
-
-    spdlog::info(COMPONENT "Created VkRenderPass {}", fmt::ptr(vk_renderpass));
 
     return UniqueRenderPass(RenderPass(vk_renderpass, vk_device));
 }
@@ -24,8 +20,6 @@ void RenderPass::Destroy() noexcept
     assert(m_renderpass);
 
     vkDestroyRenderPass(m_device, m_renderpass, nullptr);
-
-    spdlog::info(COMPONENT "Destroyed VkRenderPass {}", fmt::ptr(m_renderpass));
 
     m_renderpass = nullptr;
     m_device     = nullptr;

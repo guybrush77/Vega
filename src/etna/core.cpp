@@ -4,6 +4,15 @@
 
 namespace etna {
 
+class etna_error : public std::exception {
+  public:
+    etna_error(const char* file, int line, Result result) noexcept {}
+
+    etna_error(const char* file, int line, const char* description) noexcept {}
+
+    virtual char const* what() const override { return "TODO"; }
+};
+
 const char* to_string(Result value)
 {
     switch (value) {
@@ -90,9 +99,44 @@ const char* to_string(Result value)
     }
 }
 
-void throw_runtime_error(const char* description)
+const char* to_string(DebugUtilsMessageSeverity value) noexcept
 {
-    throw std::runtime_error(description);
+    switch (value) {
+    case DebugUtilsMessageSeverity::Verbose:
+        return "Verbose";
+    case DebugUtilsMessageSeverity::Info:
+        return "Info";
+    case DebugUtilsMessageSeverity::Warning:
+        return "Warning";
+    case DebugUtilsMessageSeverity::Error:
+        return "Error";
+    default:
+        return "invalid";
+    }
+}
+
+const char* to_string(DebugUtilsMessageType value) noexcept
+{
+    switch (value) {
+    case DebugUtilsMessageType::General:
+        return "General";
+    case DebugUtilsMessageType::Validation:
+        return "Validation";
+    case DebugUtilsMessageType::Performance:
+        return "Performance";
+    default:
+        return "invalid";
+    }
+}
+
+void throw_etna_error(const char* file, int line, Result result)
+{
+    throw etna_error(file, line, result);
+}
+
+void throw_etna_error(const char* file, int line, const char* description)
+{
+    throw etna_error(file, line, description);
 }
 
 } // namespace etna

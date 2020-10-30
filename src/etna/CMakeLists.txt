@@ -13,7 +13,6 @@ target_include_directories(etna PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 target_link_libraries(
     etna
-    PRIVATE spdlog
     PRIVATE vma
     PUBLIC  Vulkan::Vulkan)
 
