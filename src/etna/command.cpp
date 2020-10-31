@@ -262,6 +262,20 @@ void CommandBuffer::ResetCommandBuffer()
     vkResetCommandBuffer(m_command_buffer, {});
 }
 
+void CommandBuffer::SetViewport(Viewport viewport)
+{
+    assert(m_command_buffer);
+
+    vkCmdSetViewport(m_command_buffer, 0, 1, &viewport);
+}
+
+void CommandBuffer::SetScissor(Rect2D scissor)
+{
+    assert(m_command_buffer);
+
+    vkCmdSetScissor(m_command_buffer, 0, 1, &scissor);
+}
+
 UniqueCommandBuffer CommandBuffer::Create(VkDevice vk_device, const VkCommandBufferAllocateInfo& alloc_info)
 {
     VkCommandBuffer vk_command_buffer{};

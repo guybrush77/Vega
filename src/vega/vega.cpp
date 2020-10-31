@@ -72,8 +72,7 @@ struct Index final {
     Index() noexcept = default;
 
     constexpr Index(tinyobj::index_t idx) noexcept
-        : vertex(static_cast<uint32_t>(idx.vertex_index)),
-          normal(static_cast<uint32_t>(idx.normal_index)),
+        : vertex(static_cast<uint32_t>(idx.vertex_index)), normal(static_cast<uint32_t>(idx.normal_index)),
           texcoord(static_cast<uint32_t>(idx.texcoord_index))
     {}
 
@@ -387,12 +386,12 @@ struct Frame {
 
 class FrameManager {
   public:
-    FrameManager(etna::Device device, uint32_t queue_family_index, uint32_t max_frames)
-        : m_device(device), m_max_frames(max_frames), m_current_frame(0)
+    FrameManager(etna::Device device, uint32_t queue_family_index, uint32_t frame_count)
+        : m_device(device), m_frame_count(frame_count), m_current_frame(0)
     {
         m_command_pool = device.CreateCommandPool(queue_family_index, etna::CommandPoolCreate::ResetCommandBuffer);
 
-        for (uint32_t frame_index = 0; frame_index < max_frames; ++frame_index) {
+        for (uint32_t frame_index = 0; frame_index < frame_count; ++frame_index) {
             m_command_buffers.push_back(m_command_pool->AllocateCommandBuffer());
             m_image_acquired_sempahores.push_back(device.CreateSemaphore());
             m_image_rendered_sempahores.push_back(device.CreateSemaphore());
@@ -408,7 +407,7 @@ class FrameManager {
     Frame NextFrame()
     {
         auto index      = m_current_frame;
-        m_current_frame = (m_current_frame + 1) % m_max_frames;
+        m_current_frame = (m_current_frame + 1) % m_frame_count;
         auto fence      = m_frames[index].frame_available_fence;
 
         m_device.WaitForFence(fence);
@@ -425,14 +424,14 @@ class FrameManager {
     std::vector<etna::UniqueSemaphore>     m_image_rendered_sempahores;
     std::vector<etna::UniqueFence>         m_frame_available_fences;
     std::vector<Frame>                     m_frames;
-    uint32_t                               m_max_frames;
+    uint32_t                               m_frame_count;
     uint32_t                               m_current_frame;
 };
 
 class DescriptorManager {
   public:
     DescriptorManager(etna::Device device, size_t count, etna::DescriptorSetLayout descriptor_set_layout)
-        : m_device(device)
+        : m_device(device), m_descriptor_set_layout(descriptor_set_layout)
     {
         using namespace etna;
 
@@ -443,6 +442,7 @@ class DescriptorManager {
     }
 
     auto DescriptorSet(size_t index) const noexcept { return m_descriptor_sets[index]; }
+    auto DescriptorSetLayout() const noexcept { return m_descriptor_set_layout; }
 
     void UpdateDescriptorSet(size_t index, const MVP& mvp)
     {
@@ -459,6 +459,7 @@ class DescriptorManager {
 
   private:
     etna::Device                     m_device;
+    etna::DescriptorSetLayout        m_descriptor_set_layout;
     etna::UniqueDescriptorPool       m_descriptor_pool;
     std::vector<etna::DescriptorSet> m_descriptor_sets;
     std::vector<etna::UniqueBuffer>  m_descriptor_buffers;
@@ -474,7 +475,9 @@ class SwapchainManager {
         etna::SurfaceFormatKHR surface_format,
         etna::Format           depth_format,
         etna::Extent2D         extent,
+        etna::Queue            presentation_queue,
         etna::PresentModeKHR   present_mode)
+        : m_device(device), m_presentation_queue(presentation_queue), m_extent(extent)
     {
         using namespace etna;
 
@@ -503,7 +506,18 @@ class SwapchainManager {
         }
     }
 
+    auto AcquireNextImage(etna::Semaphore semaphore, etna::Fence fence = {}) -> etna::Return<uint32_t>
+    {
+        return m_device.AcquireNextImageKHR(*m_swapchain, semaphore, fence);
+    }
+
+    auto QueuePresent(uint32_t image_index, std::initializer_list<etna::Semaphore> wait_semaphores) -> etna::Result
+    {
+        return m_presentation_queue.QueuePresentKHR(*m_swapchain, image_index, wait_semaphores);
+    }
+
     auto ImageCount() const noexcept { return m_surface_views.size(); }
+    auto ImageExtent() const noexcept { return m_extent; }
     auto Swapchain() const noexcept { return *m_swapchain; }
     auto Framebuffer(uint32_t image_index) const noexcept { return *m_framebuffers[image_index]; }
 
@@ -513,6 +527,119 @@ class SwapchainManager {
     std::vector<etna::UniqueImage2D>     m_depth_images;
     std::vector<etna::UniqueImageView2D> m_depth_views;
     std::vector<etna::UniqueFramebuffer> m_framebuffers;
+    etna::Device                         m_device;
+    etna::Queue                          m_presentation_queue;
+    etna::Extent2D                       m_extent;
+};
+
+class RenderContext {
+  public:
+    enum Status { WindowClosed, SwapchainOutOfDate };
+
+    RenderContext(
+        etna::Device         device,
+        etna::Queue          graphics_queue,
+        etna::Pipeline       pipeline,
+        etna::PipelineLayout pipeline_layout,
+        GLFWwindow*          window,
+        SwapchainManager*    swapchain_manager,
+        FrameManager*        frame_manager,
+        DescriptorManager*   descriptor_manager)
+        : m_device(device), m_graphics_queue(graphics_queue), m_pipeline(pipeline), m_pipeline_layout(pipeline_layout),
+          m_window(window), m_swapchain_manager(swapchain_manager), m_frame_manager(frame_manager),
+          m_descriptor_manager(descriptor_manager)
+    {}
+
+    Status Draw(float& angle, double& t1, etna::Buffer vertex_buffer, etna::Buffer index_buffer, uint32_t index_count)
+    {
+        using namespace etna;
+
+        auto image_ready_fences = std::vector<Fence>(m_swapchain_manager->ImageCount());
+
+        while (!glfwWindowShouldClose(m_window)) {
+            glfwPollEvents();
+
+            auto frame               = m_frame_manager->NextFrame();
+            auto image_index_outcome = m_swapchain_manager->AcquireNextImage(frame.image_acquired_semaphore);
+
+            if (!image_index_outcome.has_value()) {
+                auto result = image_index_outcome.result();
+                if (result == Result::ErrorOutOfDateKHR) {
+                    return SwapchainOutOfDate;
+                }
+            }
+
+            auto  image_index = image_index_outcome.value();
+            auto& image_fence = image_ready_fences[image_index];
+            if (image_fence != Fence::Null && image_fence != frame.frame_available_fence) {
+                m_device.WaitForFence(image_ready_fences[image_index]);
+            }
+            image_fence = frame.frame_available_fence;
+
+            auto t2 = glfwGetTime();
+            if (t2 - t1 > 0.02) {
+                t1 = t2;
+                angle += 2;
+                if (angle > 360)
+                    angle -= 360;
+            }
+
+            auto eye    = glm::vec3(0, 0, 3 + sinf(glm::radians(angle)));
+            auto center = glm::vec3(0, 0, 0);
+            auto up     = glm::vec3(0, -1, 0);
+            auto model  = glm::rotate(glm::radians(angle), up);
+            auto view   = glm::lookAtRH(eye, center, up);
+            auto extent = m_swapchain_manager->ImageExtent();
+            auto aspect = float(extent.width) / float(extent.height);
+            auto proj   = glm::perspectiveRH(glm::radians(45.f), aspect, 0.1f, 1000.0f);
+            auto mvp    = MVP{ model, view, proj };
+
+            m_descriptor_manager->UpdateDescriptorSet(frame.index, mvp);
+
+            auto clear_color    = ClearColor::Transparent;
+            auto clear_depth    = ClearDepthStencil::Default;
+            auto render_area    = Rect2D{ Offset2D{ 0, 0 }, extent };
+            auto framebuffer    = m_swapchain_manager->Framebuffer(image_index);
+            auto descriptor_set = m_descriptor_manager->DescriptorSet(frame.index);
+            auto viewport       = Viewport{ 0, 0, (float)extent.width, (float)extent.height, 0.0f, 1.0f };
+            auto scissor        = Rect2D{ Offset2D{ 0, 0 }, extent };
+
+            frame.command_buffer.ResetCommandBuffer();
+            frame.command_buffer.Begin(CommandBufferUsage::OneTimeSubmit);
+            frame.command_buffer.BeginRenderPass(framebuffer, render_area, { clear_color, clear_depth });
+            frame.command_buffer.BindPipeline(PipelineBindPoint::Graphics, m_pipeline);
+            frame.command_buffer.SetViewport(viewport);
+            frame.command_buffer.SetScissor(scissor);
+            frame.command_buffer.BindVertexBuffers(vertex_buffer);
+            frame.command_buffer.BindIndexBuffer(index_buffer, IndexType::Uint32);
+            frame.command_buffer.BindDescriptorSet(PipelineBindPoint::Graphics, m_pipeline_layout, descriptor_set);
+            frame.command_buffer.DrawIndexed(index_count, 1);
+            frame.command_buffer.EndRenderPass();
+            frame.command_buffer.End();
+
+            auto command_buffer    = frame.command_buffer;
+            auto wait_semaphores   = { frame.image_acquired_semaphore };
+            auto wait_stages       = { PipelineStage::ColorAttachmentOutput };
+            auto signal_semaphores = { frame.image_rendered_semaphore };
+            auto signal_fence      = frame.frame_available_fence;
+
+            m_graphics_queue.Submit(command_buffer, wait_semaphores, wait_stages, signal_semaphores, signal_fence);
+
+            m_swapchain_manager->QueuePresent(image_index, signal_semaphores);
+        }
+
+        return WindowClosed;
+    }
+
+  private:
+    etna::Device         m_device;
+    etna::Queue          m_graphics_queue;
+    etna::Pipeline       m_pipeline;
+    etna::PipelineLayout m_pipeline_layout;
+    GLFWwindow*          m_window             = nullptr;
+    SwapchainManager*    m_swapchain_manager  = nullptr;
+    FrameManager*        m_frame_manager      = nullptr;
+    DescriptorManager*   m_descriptor_manager = nullptr;
 };
 
 void GlfwErrorCallback(int, const char* description)
@@ -732,18 +859,18 @@ int main()
         descriptor_set_layout = device->CreateDescriptorSetLayout(builder.state);
     }
 
-    // Create pipeline layout
-    UniquePipelineLayout layout;
+    // Create pipeline pipeline_layout
+    UniquePipelineLayout pipeline_layout;
     {
         auto builder = PipelineLayout::Builder();
         builder.AddDescriptorSetLayout(*descriptor_set_layout);
-        layout = device->CreatePipelineLayout(builder.state);
+        pipeline_layout = device->CreatePipelineLayout(builder.state);
     }
 
     // Create pipeline
     UniquePipeline pipeline;
     {
-        auto builder            = Pipeline::Builder(*layout, *renderpass);
+        auto builder            = Pipeline::Builder(*pipeline_layout, *renderpass);
         auto [vs_data, vs_size] = GetResource("shader.vert");
         auto [fs_data, fs_size] = GetResource("shader.frag");
         auto vertex_shader      = device->CreateShaderModule(vs_data, vs_size);
@@ -767,84 +894,64 @@ int main()
             offsetof(VertexPN, normal));
         builder.AddViewport(viewport);
         builder.AddScissor(scissor);
+        builder.AddDynamicStates({ DynamicState::Viewport, DynamicState::Scissor });
         builder.SetDepthState(DepthTest::Enable, DepthWrite::Enable, CompareOp::Less);
         builder.AddColorBlendAttachmentState();
 
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
-    auto swapchain_manager =
-        SwapchainManager(*device, *renderpass, *surface, 3, surface_format, depth_format, extent, PresentModeKHR::Fifo);
-
-    auto image_ready_fences = std::vector<Fence>(swapchain_manager.ImageCount());
-
-    FrameManager frame_manager(*device, graphics.family_index, 2);
-
     DescriptorManager descriptor_manager(*device, 2, *descriptor_set_layout);
 
-    auto t1 = glfwGetTime();
+    bool  running   = true;
+    auto  timestamp = glfwGetTime();
+    float angle     = 0;
 
-    float angle = 0;
+    while (running) {
+        auto swapchain_manager = SwapchainManager(
+            *device,
+            *renderpass,
+            *surface,
+            3,
+            surface_format,
+            depth_format,
+            extent,
+            queues.presentation,
+            PresentModeKHR::Fifo);
 
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
+        FrameManager frame_manager(*device, graphics.family_index, 2);
 
-        auto frame       = frame_manager.NextFrame();
-        auto swapchain   = swapchain_manager.Swapchain();
-        auto image_index = device->AcquireNextImageKHR(swapchain, frame.image_acquired_semaphore, nullptr).value();
+        auto render_context = RenderContext(
+            *device,
+            queues.graphics,
+            *pipeline,
+            *pipeline_layout,
+            window,
+            &swapchain_manager,
+            &frame_manager,
+            &descriptor_manager);
 
-        auto& image_fence = image_ready_fences[image_index];
-        if (image_fence != Fence::Null && image_fence != frame.frame_available_fence) {
-            device->WaitForFence(image_ready_fences[image_index]);
+        auto result = render_context.Draw(angle, timestamp, *vertex_buffer, *index_buffer, mesh.indices.count());
+
+        device->WaitIdle();
+
+        switch (result) {
+        case RenderContext::WindowClosed: {
+            running = false;
+            break;
         }
-        image_fence = frame.frame_available_fence;
-
-        auto t2 = glfwGetTime();
-        if (t2 - t1 > 0.02) {
-            t1 = t2;
-            angle += 2;
-            if (angle > 360)
-                angle -= 360;
+        case RenderContext::SwapchainOutOfDate: {
+            int width  = 0;
+            int height = 0;
+            glfwGetWindowSize(window, &width, &height);
+            extent.width  = static_cast<uint32_t>(width);
+            extent.height = static_cast<uint32_t>(height);
+            break;
         }
-
-        auto eye    = glm::vec3(0, 0, 3 + sinf(glm::radians(angle)));
-        auto center = glm::vec3(0, 0, 0);
-        auto up     = glm::vec3(0, -1, 0);
-        auto model  = glm::rotate(glm::radians(angle), up);
-        auto view   = glm::lookAtRH(eye, center, up);
-        auto proj   = glm::perspectiveRH(glm::radians(45.f), float(extent.width) / float(extent.height), 0.1f, 1000.0f);
-        auto mvp    = MVP{ model, view, proj };
-
-        descriptor_manager.UpdateDescriptorSet(frame.index, mvp);
-
-        auto clear_color       = ClearColor::Transparent;
-        auto clear_depth       = ClearDepthStencil::Default;
-        auto render_area       = Rect2D{ Offset2D{ 0, 0 }, extent };
-        auto wait_semaphores   = { frame.image_acquired_semaphore };
-        auto wait_stages       = { PipelineStage::ColorAttachmentOutput };
-        auto signal_semaphores = { frame.image_rendered_semaphore };
-        auto signal_fence      = frame.frame_available_fence;
-        auto framebuffer       = swapchain_manager.Framebuffer(image_index);
-        auto descriptor_set    = descriptor_manager.DescriptorSet(frame.index);
-
-        frame.command_buffer.ResetCommandBuffer();
-
-        frame.command_buffer.Begin(CommandBufferUsage::OneTimeSubmit);
-        frame.command_buffer.BeginRenderPass(framebuffer, render_area, { clear_color, clear_depth });
-        frame.command_buffer.BindPipeline(PipelineBindPoint::Graphics, *pipeline);
-        frame.command_buffer.BindVertexBuffers(*vertex_buffer);
-        frame.command_buffer.BindIndexBuffer(*index_buffer, IndexType::Uint32);
-        frame.command_buffer.BindDescriptorSet(PipelineBindPoint::Graphics, *layout, descriptor_set);
-        frame.command_buffer.DrawIndexed(mesh.indices.count(), 1);
-        frame.command_buffer.EndRenderPass();
-        frame.command_buffer.End();
-
-        queues.graphics.Submit(frame.command_buffer, wait_semaphores, wait_stages, signal_semaphores, signal_fence);
-
-        queues.presentation.QueuePresentKHR(swapchain, image_index, { frame.image_rendered_semaphore });
+        default:
+            break;
+        }
     }
-
-    device->WaitIdle();
 
     glfwDestroyWindow(window);
 

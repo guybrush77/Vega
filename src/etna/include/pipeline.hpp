@@ -71,7 +71,7 @@ class Pipeline {
 
         void AddColorBlendAttachmentState();
 
-        void AddDynamicState(DynamicState dynamic_state);
+        void AddDynamicStates(std::initializer_list<DynamicState> dynamic_states);
 
         void SetDepthState(DepthTest depth_test, DepthWrite depth_write, CompareOp compare_op) noexcept;
 

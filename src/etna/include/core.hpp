@@ -1051,9 +1051,11 @@ class Return final {
     constexpr explicit Return(T value, Result result = Result::Success) : m_value(std::move(value)), m_result(result) {}
     constexpr explicit Return(Result result) : m_result(result) {}
 
-    explicit operator bool() const noexcept { return m_result == Result::Success; }
+    explicit operator bool() const noexcept { return has_value(); }
 
     bool operator==(const Return&) const noexcept = default;
+
+    bool has_value() const noexcept { return m_result == Result::Success; }
 
     T value() const
     {

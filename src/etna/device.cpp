@@ -163,6 +163,7 @@ Return<uint32_t> Device::AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore s
     case VK_TIMEOUT:
     case VK_NOT_READY:
     case VK_SUBOPTIMAL_KHR:
+    case VK_ERROR_OUT_OF_DATE_KHR:
         return Return(image_index, static_cast<Result>(result));
     default:
         throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));

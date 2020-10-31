@@ -262,12 +262,12 @@ void Pipeline::Builder::AddColorBlendAttachmentState()
     m_color_blend_state.attachmentCount = narrow_cast<uint32_t>(m_color_blend_attachments.size());
 }
 
-void Pipeline::Builder::AddDynamicState(DynamicState dynamic_state)
+void Pipeline::Builder::AddDynamicStates(std::initializer_list<DynamicState> dynamic_states)
 {
-    m_dynamic_states.push_back(GetVk(dynamic_state));
+    auto vk_dynamic_states = reinterpret_cast<const VkDynamicState*>(dynamic_states.begin());
+    auto vk_states_size    = narrow_cast<uint32_t>(dynamic_states.size());
 
-    m_dynamic_state.pDynamicStates    = m_dynamic_states.data();
-    m_dynamic_state.dynamicStateCount = narrow_cast<uint32_t>(m_dynamic_states.size());
+    m_dynamic_states.insert(m_dynamic_states.end(), vk_dynamic_states, vk_dynamic_states + vk_states_size);
 }
 
 void Pipeline::Builder::SetDepthState(DepthTest depth_test, DepthWrite depth_write, CompareOp compare_op) noexcept

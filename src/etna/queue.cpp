@@ -8,7 +8,7 @@
 
 namespace etna {
 
-void Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayView<Semaphore> wait_semaphores)
+Result Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayView<Semaphore> wait_semaphores)
 {
     assert(m_queue);
 
@@ -28,7 +28,9 @@ void Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayV
         .pResults           = nullptr
     };
 
-    vkQueuePresentKHR(m_queue, &present_info);
+    auto vk_result = vkQueuePresentKHR(m_queue, &present_info);
+
+    return static_cast<Result>(vk_result);
 }
 
 void Queue::Submit(CommandBuffer command_buffer)

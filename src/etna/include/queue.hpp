@@ -14,7 +14,7 @@ class Queue {
 
     bool operator==(const Queue&) const = default;
 
-    void QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayView<Semaphore> wait_semaphores);
+    auto QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayView<Semaphore> wait_semaphores) -> Result;
 
     void Submit(CommandBuffer command_buffer);
 

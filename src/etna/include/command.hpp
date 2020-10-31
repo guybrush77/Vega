@@ -95,6 +95,10 @@ class CommandBuffer {
 
     void ResetCommandBuffer();
 
+    void SetViewport(Viewport viewport);
+
+    void SetScissor(Rect2D scissor);
+
   private:
     template <typename>
     friend class UniqueHandle;
