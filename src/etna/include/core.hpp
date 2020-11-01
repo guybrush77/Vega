@@ -48,6 +48,7 @@ enum class MemoryUsage { Unknown, GpuOnly, CpuOnly, CpuToGpu, GpuToCpu, CpuCopy,
 
 enum class DepthTest { Disable, Enable };
 enum class DepthWrite { Disable, Enable };
+enum class WaitAll { False, True };
 
 enum class AttachmentLoadOp {
     Load     = VK_ATTACHMENT_LOAD_OP_LOAD,
@@ -1033,17 +1034,6 @@ constexpr DstT narrow_cast(SrcT src)
     return dst;
 }
 
-namespace detail {
-template <typename T, size_t N>
-struct ArrayViewBuffer {
-    T data[N];
-};
-template <typename T>
-struct ArrayViewBuffer<T, 0> {
-    inline static T* data = nullptr;
-};
-} // namespace detail
-
 template <typename T>
 class Return final {
   public:
@@ -1072,80 +1062,6 @@ class Return final {
   private:
     T      m_value{};
     Result m_result{};
-};
-
-template <typename T>
-struct ArrayView final {
-    using value_type      = T;
-    using size_type       = uint32_t;
-    using pointer         = value_type*;
-    using reference       = value_type&;
-    using const_pointer   = const pointer;
-    using const_reference = const reference;
-    using const_iterator  = const value_type*;
-
-    ArrayView() noexcept {}
-
-    ArrayView(std::initializer_list<T> items) noexcept
-    {
-        if (items.size() > 0) {
-            m.free = items.size() > kBufferElems;
-            m.data = m.free ? new T[items.size()] : buffer.data;
-            m.size = narrow_cast<size_type>(items.size());
-
-            int index = 0;
-            for (const value_type& value : items) {
-                m.data[index++] = value;
-            }
-        }
-    }
-
-    template <size_t N>
-    ArrayView(T (&arr)[N]) noexcept : m{ arr, N }
-    {}
-
-    ~ArrayView() noexcept
-    {
-        static_assert(sizeof(ArrayView<T>) <= kMaxTypeSize);
-        if (m.free) {
-            delete[] m.data;
-        }
-    }
-
-    const_reference operator[](size_t index) const noexcept { return *(m.data + index); }
-
-    bool operator==(const ArrayView& rhs) const noexcept
-    {
-        if (this != &rhs) {
-            if (m.size != rhs.m.size) {
-                return false;
-            }
-            for (size_type i = 0; i < m.size; ++i) {
-                if (m.data[i] != rhs.m.data[i]) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    const_iterator begin() const noexcept { return m.data; }
-    const_iterator end() const noexcept { return m.data + m.size; }
-
-    size_type size() const noexcept { return m.size; }
-    bool      empty() const noexcept { return m.size == 0; }
-
-  private:
-    struct {
-        pointer   data{};
-        size_type size{};
-        bool      free{};
-    } m;
-
-    static constexpr size_t kMaxTypeSize = 64; // in bytes
-    static constexpr size_t kBufferElems = (kMaxTypeSize - sizeof(m)) / sizeof(T);
-
-    detail::ArrayViewBuffer<T, kBufferElems> buffer;
 };
 
 template <typename T>

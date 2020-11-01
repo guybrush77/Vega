@@ -3,25 +3,38 @@
 #include "swapchain.hpp"
 #include "synchronization.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cassert>
-#include <vector>
 
 namespace etna {
 
-Result Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayView<Semaphore> wait_semaphores)
+Result
+Queue::QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, std::initializer_list<Semaphore> wait_semaphores)
 {
     assert(m_queue);
 
-    VkSwapchainKHR vk_swapchain = swapchain;
+    constexpr size_t kMaxSemaphores = 16;
 
-    std::vector<VkSemaphore> vk_wait_semaphores(wait_semaphores.begin(), wait_semaphores.end());
+    std::array<VkSemaphore, kMaxSemaphores> vk_semaphores;
+
+    if (wait_semaphores.size() > vk_semaphores.size()) {
+        throw_etna_error(__FILE__, __LINE__, "Too many elements in std::initializer_list<Semaphore>");
+    }
+
+    std::transform(wait_semaphores.begin(), wait_semaphores.end(), vk_semaphores.begin(), [](Semaphore semaphore) {
+        return VkSemaphore(semaphore);
+    });
+
+    auto vk_swapchain = static_cast<VkSwapchainKHR>(swapchain);
+    auto vk_size      = narrow_cast<uint32_t>(wait_semaphores.size());
 
     auto present_info = VkPresentInfoKHR{
 
         .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .pNext              = nullptr,
-        .waitSemaphoreCount = narrow_cast<uint32_t>(vk_wait_semaphores.size()),
-        .pWaitSemaphores    = vk_wait_semaphores.data(),
+        .waitSemaphoreCount = vk_size,
+        .pWaitSemaphores    = vk_semaphores.data(),
         .swapchainCount     = 1,
         .pSwapchains        = &vk_swapchain,
         .pImageIndices      = &image_index,
@@ -39,37 +52,45 @@ void Queue::Submit(CommandBuffer command_buffer)
 }
 
 void Queue::Submit(
-    CommandBuffer        command_buffer,
-    ArrayView<Semaphore>     wait_semaphores,
-    ArrayView<PipelineStage> wait_stages,
-    ArrayView<Semaphore>     signal_semaphores,
-    Fence                fence)
+    CommandBuffer                        command_buffer,
+    std::initializer_list<Semaphore>     wait_semaphores,
+    std::initializer_list<PipelineStage> wait_stages,
+    std::initializer_list<Semaphore>     signal_semaphores,
+    Fence                                fence)
 {
     assert(m_queue);
 
-    VkCommandBuffer                   vk_command_buffer = command_buffer;
-    std::vector<VkSemaphore>          vk_wait_semaphores(wait_semaphores.begin(), wait_semaphores.end());
-    std::vector<VkPipelineStageFlags> vk_wait_stages(wait_semaphores.size());
-    std::vector<VkSemaphore>          vk_signal_semaphores(signal_semaphores.begin(), signal_semaphores.end());
+    constexpr size_t kMaxWaitSemaphores   = 16;
+    constexpr size_t kMaxSignalSemaphores = 16;
 
-    for (size_t i = 0; i < vk_wait_stages.size(); ++i) {
-        vk_wait_stages[i] = GetVk(wait_stages[i]);
+    std::array<VkSemaphore, kMaxWaitSemaphores>   vk_wait_semaphores;
+    std::array<VkSemaphore, kMaxSignalSemaphores> vk_signal_semaphores;
+
+    if (wait_semaphores.size() > vk_wait_semaphores.size() || signal_semaphores.size() > vk_signal_semaphores.size()) {
+        throw_etna_error(__FILE__, __LINE__, "Too many elements in std::initializer_list<Semaphore>");
     }
 
-    VkSubmitInfo info = {
+    auto vk_command_buffer = static_cast<VkCommandBuffer>(command_buffer);
+    auto vk_wait_stages    = reinterpret_cast<const VkPipelineStageFlags*>(wait_stages.begin());
+    auto vk_semaphore      = [](Semaphore semaphore) { return VkSemaphore(semaphore); };
+
+    std::transform(wait_semaphores.begin(), wait_semaphores.end(), vk_wait_semaphores.begin(), vk_semaphore);
+    std::transform(signal_semaphores.begin(), signal_semaphores.end(), vk_signal_semaphores.begin(), vk_semaphore);
+
+    auto submit_info = VkSubmitInfo{
 
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .pNext                = nullptr,
-        .waitSemaphoreCount   = wait_semaphores.size(),
-        .pWaitSemaphores      = wait_semaphores.empty() ? nullptr : vk_wait_semaphores.data(),
-        .pWaitDstStageMask    = wait_semaphores.empty() ? nullptr : vk_wait_stages.data(),
+        .waitSemaphoreCount   = narrow_cast<uint32_t>(wait_semaphores.size()),
+        .pWaitSemaphores      = wait_semaphores.size() ? vk_wait_semaphores.data() : nullptr,
+        .pWaitDstStageMask    = wait_stages.size() ? vk_wait_stages : nullptr,
         .commandBufferCount   = 1,
         .pCommandBuffers      = &vk_command_buffer,
-        .signalSemaphoreCount = signal_semaphores.size(),
-        .pSignalSemaphores    = signal_semaphores.empty() ? nullptr : vk_signal_semaphores.data()
+        .signalSemaphoreCount = narrow_cast<uint32_t>(signal_semaphores.size()),
+        .pSignalSemaphores    = signal_semaphores.size() ? vk_signal_semaphores.data() : nullptr
     };
 
-    vkQueueSubmit(m_queue, 1, &info, fence);
+    vkQueueSubmit(m_queue, 1, &submit_info, fence);
 }
 
 } // namespace etna

@@ -33,6 +33,9 @@
 #include "swapchain.hpp"
 #include "synchronization.hpp"
 
+#include <algorithm>
+#include <array>
+
 namespace etna {
 
 UniqueRenderPass Device::CreateRenderPass(const VkRenderPassCreateInfo& create_info)
@@ -359,12 +362,23 @@ void Device::ResetFence(Fence fence)
     ResetFences({ fence });
 }
 
-void Device::ResetFences(ArrayView<Fence> fences)
+void Device::ResetFences(std::initializer_list<Fence> fences)
 {
     assert(m_device);
 
-    auto vk_fences = std::vector<VkFence>(fences.begin(), fences.end());
-    auto vk_size   = narrow_cast<uint32_t>(fences.size());
+    constexpr size_t kMaxFences = 16;
+
+    std::array<VkFence, kMaxFences> vk_fences;
+
+    if (fences.size() > vk_fences.size()) {
+        throw_etna_error(__FILE__, __LINE__, "Too many elements in std::initializer_list<Fence>");
+    }
+
+    std::transform(fences.begin(), fences.end(), vk_fences.begin(), [](Fence fence) {
+        return static_cast<VkFence>(fence);
+    });
+
+    auto vk_size = narrow_cast<uint32_t>(fences.size());
 
     if (auto result = vkResetFences(m_device, vk_size, vk_fences.data()); result != VK_SUCCESS) {
         throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
@@ -382,17 +396,30 @@ void Device::UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set)
 
 void Device::WaitForFence(Fence fence, uint64_t timeout)
 {
-    WaitForFences({ fence }, true, timeout);
+    WaitForFences({ fence }, WaitAll::True, timeout);
 }
 
-void Device::WaitForFences(ArrayView<Fence> fences, bool wait_all, uint64_t timeout)
+void Device::WaitForFences(std::initializer_list<Fence> fences, WaitAll wait_all, uint64_t timeout)
 {
     assert(m_device);
 
-    auto vk_fences = std::vector<VkFence>(fences.begin(), fences.end());
-    auto vk_size   = narrow_cast<uint32_t>(fences.size());
+    constexpr size_t kMaxFences = 16;
 
-    if (auto result = vkWaitForFences(m_device, vk_size, vk_fences.data(), wait_all, timeout); result != VK_SUCCESS) {
+    std::array<VkFence, kMaxFences> vk_fences;
+
+    if (fences.size() > vk_fences.size()) {
+        throw_etna_error(__FILE__, __LINE__, "Too many elements in std::initializer_list<Fence>");
+    }
+
+    std::transform(fences.begin(), fences.end(), vk_fences.begin(), [](Fence fence) {
+        return static_cast<VkFence>(fence);
+    });
+
+    auto vk_size     = narrow_cast<uint32_t>(fences.size());
+    auto vk_wait_all = (wait_all == WaitAll::True) ? VK_TRUE : VK_FALSE;
+
+    if (auto result = vkWaitForFences(m_device, vk_size, vk_fences.data(), vk_wait_all, timeout);
+        result != VK_SUCCESS) {
         throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 }

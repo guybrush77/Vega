@@ -14,16 +14,17 @@ class Queue {
 
     bool operator==(const Queue&) const = default;
 
-    auto QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, ArrayView<Semaphore> wait_semaphores) -> Result;
+    auto QueuePresentKHR(SwapchainKHR swapchain, uint32_t image_index, std::initializer_list<Semaphore> wait_semaphores)
+        -> Result;
 
     void Submit(CommandBuffer command_buffer);
 
     void Submit(
-        CommandBuffer        command_buffer,
-        ArrayView<Semaphore>     wait_semaphores,
-        ArrayView<PipelineStage> wait_stages,
-        ArrayView<Semaphore>     signal_semaphores,
-        Fence                fence);
+        CommandBuffer                        command_buffer,
+        std::initializer_list<Semaphore>     wait_semaphores,
+        std::initializer_list<PipelineStage> wait_stages,
+        std::initializer_list<Semaphore>     signal_semaphores,
+        Fence                                fence);
 
   private:
     VkQueue m_queue{};

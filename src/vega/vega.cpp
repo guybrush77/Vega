@@ -331,9 +331,9 @@ QueueFamilies GetQueueFamilyInfo(etna::PhysicalDevice gpu, etna::SurfaceKHR surf
 }
 
 etna::SurfaceFormatKHR FindOptimalSurfaceFormatKHR(
-    etna::PhysicalDevice                    gpu,
-    etna::SurfaceKHR                        surface,
-    etna::ArrayView<etna::SurfaceFormatKHR> preffered_formats)
+    etna::PhysicalDevice                          gpu,
+    etna::SurfaceKHR                              surface,
+    std::initializer_list<etna::SurfaceFormatKHR> preffered_formats)
 {
     auto available_formats = gpu.GetPhysicalDeviceSurfaceFormatsKHR(surface);
 
@@ -351,10 +351,10 @@ etna::SurfaceFormatKHR FindOptimalSurfaceFormatKHR(
 }
 
 etna::Format FindSupportedFormat(
-    etna::PhysicalDevice          gpu,
-    etna::ArrayView<etna::Format> candidate_formats,
-    etna::ImageTiling             tiling,
-    etna::FormatFeature           required_features)
+    etna::PhysicalDevice                gpu,
+    std::initializer_list<etna::Format> candidate_formats,
+    etna::ImageTiling                   tiling,
+    etna::FormatFeature                 required_features)
 {
     using namespace etna;
 
