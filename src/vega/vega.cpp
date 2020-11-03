@@ -1,5 +1,7 @@
 #include "etna.hpp"
 
+#include "gui.hpp"
+
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
@@ -372,70 +374,84 @@ etna::Format FindSupportedFormat(
     }
 
     throw std::runtime_error("Failed to find supported depth format!");
-
-    return Format::Undefined;
 }
 
-struct Frame {
-    etna::CommandBuffer command_buffer;
-    etna::Semaphore     image_acquired_semaphore;
-    etna::Semaphore     image_rendered_semaphore;
-    etna::Fence         frame_available_fence;
-    uint32_t            index;
+struct FrameInfo {
+    uint32_t index;
+    struct {
+        etna::CommandBuffer draw;
+        etna::CommandBuffer gui;
+    } cmd_buffers;
+    struct {
+        etna::Semaphore image_acquired;
+        etna::Semaphore draw_completed;
+        etna::Semaphore gui_completed;
+    } semaphores;
+    struct {
+        etna::Fence image_ready;
+    } fence;
 };
 
 class FrameManager {
   public:
     FrameManager(etna::Device device, uint32_t queue_family_index, uint32_t frame_count)
-        : m_device(device), m_frame_count(frame_count), m_current_frame(0)
+        : m_device(device), m_frame_count(frame_count), m_next_frame(0)
     {
         m_command_pool = device.CreateCommandPool(queue_family_index, etna::CommandPoolCreate::ResetCommandBuffer);
 
         for (uint32_t frame_index = 0; frame_index < frame_count; ++frame_index) {
-            m_command_buffers.push_back(m_command_pool->AllocateCommandBuffer());
+            m_draw_command_buffers.push_back(m_command_pool->AllocateCommandBuffer());
+            m_gui_command_buffers.push_back(m_command_pool->AllocateCommandBuffer());
             m_image_acquired_sempahores.push_back(device.CreateSemaphore());
-            m_image_rendered_sempahores.push_back(device.CreateSemaphore());
+            m_draw_completed_sempahores.push_back(device.CreateSemaphore());
+            m_gui_completed_sempahores.push_back(device.CreateSemaphore());
             m_frame_available_fences.push_back(device.CreateFence(etna::FenceCreate::Signaled));
-            m_frames.push_back(Frame{ *m_command_buffers.back(),
-                                      *m_image_acquired_sempahores.back(),
-                                      *m_image_rendered_sempahores.back(),
-                                      *m_frame_available_fences.back(),
-                                      frame_index });
+            m_frame_info.push_back(FrameInfo{
+                frame_index,
+                { *m_draw_command_buffers.back(), *m_gui_command_buffers.back() },
+                { *m_image_acquired_sempahores.back(),
+                  *m_draw_completed_sempahores.back(),
+                  *m_gui_completed_sempahores.back() },
+                { *m_frame_available_fences.back() },
+            });
         }
     }
 
-    Frame NextFrame()
+    const FrameInfo NextFrame()
     {
-        auto index      = m_current_frame;
-        m_current_frame = (m_current_frame + 1) % m_frame_count;
-        auto fence      = m_frames[index].frame_available_fence;
+        auto frame_index       = m_next_frame;
+        auto image_ready_fence = m_frame_info[frame_index].fence.image_ready;
 
-        m_device.WaitForFence(fence);
-        m_device.ResetFence(fence);
+        m_next_frame = (m_next_frame + 1) % m_frame_count;
 
-        return m_frames[index];
+        m_device.WaitForFence(image_ready_fence);
+        m_device.ResetFence(image_ready_fence);
+
+        return m_frame_info[frame_index];
     }
 
   private:
     etna::Device                           m_device;
     etna::UniqueCommandPool                m_command_pool;
-    std::vector<etna::UniqueCommandBuffer> m_command_buffers;
+    std::vector<etna::UniqueCommandBuffer> m_draw_command_buffers;
+    std::vector<etna::UniqueCommandBuffer> m_gui_command_buffers;
     std::vector<etna::UniqueSemaphore>     m_image_acquired_sempahores;
-    std::vector<etna::UniqueSemaphore>     m_image_rendered_sempahores;
+    std::vector<etna::UniqueSemaphore>     m_draw_completed_sempahores;
+    std::vector<etna::UniqueSemaphore>     m_gui_completed_sempahores;
     std::vector<etna::UniqueFence>         m_frame_available_fences;
-    std::vector<Frame>                     m_frames;
+    std::vector<FrameInfo>                 m_frame_info;
     uint32_t                               m_frame_count;
-    uint32_t                               m_current_frame;
+    uint32_t                               m_next_frame;
 };
 
 class DescriptorManager {
   public:
-    DescriptorManager(etna::Device device, size_t count, etna::DescriptorSetLayout descriptor_set_layout)
+    DescriptorManager(etna::Device device, uint32_t count, etna::DescriptorSetLayout descriptor_set_layout)
         : m_device(device), m_descriptor_set_layout(descriptor_set_layout)
     {
         using namespace etna;
 
-        m_descriptor_pool = device.CreateDescriptorPool(DescriptorType::UniformBuffer, count);
+        m_descriptor_pool = device.CreateDescriptorPool({ DescriptorPoolSize{ DescriptorType::UniformBuffer, count } });
         m_descriptor_sets = m_descriptor_pool->AllocateDescriptorSets(count, descriptor_set_layout);
         m_descriptor_buffers =
             device.CreateBuffers(count, sizeof(MVP), BufferUsage::UniformBuffer, MemoryUsage::CpuToGpu);
@@ -465,25 +481,33 @@ class DescriptorManager {
     std::vector<etna::UniqueBuffer>  m_descriptor_buffers;
 };
 
+struct FramebufferInfo {
+    etna::Framebuffer draw;
+    etna::Framebuffer gui;
+    etna::Extent2D    extent;
+};
+
 class SwapchainManager {
   public:
     SwapchainManager(
         etna::Device           device,
         etna::RenderPass       renderpass,
+        etna::RenderPass       gui_renderpass,
         etna::SurfaceKHR       surface,
-        uint32_t               image_count,
+        uint32_t               min_image_count,
         etna::SurfaceFormatKHR surface_format,
         etna::Format           depth_format,
         etna::Extent2D         extent,
         etna::Queue            presentation_queue,
         etna::PresentModeKHR   present_mode)
-        : m_device(device), m_presentation_queue(presentation_queue), m_extent(extent)
+        : m_device(device), m_presentation_queue(presentation_queue), m_extent(extent),
+          m_min_image_count(min_image_count)
     {
         using namespace etna;
 
         auto usage = ImageUsage::ColorAttachment;
 
-        m_swapchain = device.CreateSwapchainKHR(surface, image_count, surface_format, extent, usage, present_mode);
+        m_swapchain = device.CreateSwapchainKHR(surface, min_image_count, surface_format, extent, usage, present_mode);
 
         auto surface_images = device.GetSwapchainImagesKHR(*m_swapchain);
 
@@ -495,14 +519,16 @@ class SwapchainManager {
                 MemoryUsage::GpuOnly,
                 ImageTiling::Optimal);
 
-            auto color_view  = device.CreateImageView(color_image, ImageAspect::Color);
-            auto depth_view  = device.CreateImageView(*depth_image, ImageAspect::Depth);
-            auto framebuffer = device.CreateFramebuffer(renderpass, { *color_view, *depth_view }, extent);
+            auto color_view      = device.CreateImageView(color_image, ImageAspect::Color);
+            auto depth_view      = device.CreateImageView(*depth_image, ImageAspect::Depth);
+            auto framebuffer     = device.CreateFramebuffer(renderpass, { *color_view, *depth_view }, extent);
+            auto gui_framebuffer = device.CreateFramebuffer(gui_renderpass, { *color_view }, extent);
 
             m_surface_views.push_back(std::move(color_view));
             m_depth_images.push_back(std::move(depth_image));
             m_depth_views.push_back(std::move(depth_view));
             m_framebuffers.push_back(std::move(framebuffer));
+            m_gui_framebuffers.push_back(std::move(gui_framebuffer));
         }
     }
 
@@ -516,10 +542,14 @@ class SwapchainManager {
         return m_presentation_queue.QueuePresentKHR(*m_swapchain, image_index, wait_semaphores);
     }
 
-    auto ImageCount() const noexcept { return m_surface_views.size(); }
-    auto ImageExtent() const noexcept { return m_extent; }
-    auto Swapchain() const noexcept { return *m_swapchain; }
-    auto Framebuffer(uint32_t image_index) const noexcept { return *m_framebuffers[image_index]; }
+    uint32_t ImageCount() const noexcept { return etna::narrow_cast<uint32_t>(m_surface_views.size()); }
+
+    uint32_t MinImageCount() const noexcept { return m_min_image_count; }
+
+    FramebufferInfo GetFramebufferInfo(uint32_t image_index) const noexcept
+    {
+        return FramebufferInfo{ *m_framebuffers[image_index], *m_gui_framebuffers[image_index], m_extent };
+    }
 
   private:
     etna::UniqueSwapchainKHR             m_swapchain;
@@ -527,9 +557,11 @@ class SwapchainManager {
     std::vector<etna::UniqueImage2D>     m_depth_images;
     std::vector<etna::UniqueImageView2D> m_depth_views;
     std::vector<etna::UniqueFramebuffer> m_framebuffers;
+    std::vector<etna::UniqueFramebuffer> m_gui_framebuffers;
     etna::Device                         m_device;
     etna::Queue                          m_presentation_queue;
     etna::Extent2D                       m_extent;
+    uint32_t                             m_min_image_count;
 };
 
 class RenderContext {
@@ -544,10 +576,11 @@ class RenderContext {
         GLFWwindow*          window,
         SwapchainManager*    swapchain_manager,
         FrameManager*        frame_manager,
-        DescriptorManager*   descriptor_manager)
+        DescriptorManager*   descriptor_manager,
+        Gui*                 gui)
         : m_device(device), m_graphics_queue(graphics_queue), m_pipeline(pipeline), m_pipeline_layout(pipeline_layout),
           m_window(window), m_swapchain_manager(swapchain_manager), m_frame_manager(frame_manager),
-          m_descriptor_manager(descriptor_manager)
+          m_descriptor_manager(descriptor_manager), m_gui(gui)
     {}
 
     Status Draw(float& angle, double& t1, etna::Buffer vertex_buffer, etna::Buffer index_buffer, uint32_t index_count)
@@ -559,22 +592,23 @@ class RenderContext {
         while (!glfwWindowShouldClose(m_window)) {
             glfwPollEvents();
 
-            auto frame               = m_frame_manager->NextFrame();
-            auto image_index_outcome = m_swapchain_manager->AcquireNextImage(frame.image_acquired_semaphore);
+            auto frame       = m_frame_manager->NextFrame();
+            auto image_index = uint32_t{};
 
-            if (!image_index_outcome.has_value()) {
-                auto result = image_index_outcome.result();
-                if (result == Result::ErrorOutOfDateKHR) {
-                    return SwapchainOutOfDate;
+            if (auto next_image = m_swapchain_manager->AcquireNextImage(frame.semaphores.image_acquired); next_image) {
+                image_index = next_image.value();
+                if (image_ready_fences[image_index] != Fence::Null &&
+                    image_ready_fences[image_index] != frame.fence.image_ready) {
+                    m_device.WaitForFence(image_ready_fences[image_index]);
                 }
+                image_ready_fences[image_index] = frame.fence.image_ready;
+            } else if (next_image.result() == Result::ErrorOutOfDateKHR) {
+                return SwapchainOutOfDate;
+            } else {
+                throw std::runtime_error("AcquireNextImage failed!");
             }
 
-            auto  image_index = image_index_outcome.value();
-            auto& image_fence = image_ready_fences[image_index];
-            if (image_fence != Fence::Null && image_fence != frame.frame_available_fence) {
-                m_device.WaitForFence(image_ready_fences[image_index]);
-            }
-            image_fence = frame.frame_available_fence;
+            auto framebuffers = m_swapchain_manager->GetFramebufferInfo(image_index);
 
             auto t2 = glfwGetTime();
             if (t2 - t1 > 0.02) {
@@ -589,7 +623,7 @@ class RenderContext {
             auto up     = glm::vec3(0, -1, 0);
             auto model  = glm::rotate(glm::radians(angle), up);
             auto view   = glm::lookAtRH(eye, center, up);
-            auto extent = m_swapchain_manager->ImageExtent();
+            auto extent = framebuffers.extent;
             auto aspect = float(extent.width) / float(extent.height);
             auto proj   = glm::perspectiveRH(glm::radians(45.f), aspect, 0.1f, 1000.0f);
             auto mvp    = MVP{ model, view, proj };
@@ -599,33 +633,39 @@ class RenderContext {
             auto clear_color    = ClearColor::Transparent;
             auto clear_depth    = ClearDepthStencil::Default;
             auto render_area    = Rect2D{ Offset2D{ 0, 0 }, extent };
-            auto framebuffer    = m_swapchain_manager->Framebuffer(image_index);
+            auto framebuffer    = framebuffers.draw;
             auto descriptor_set = m_descriptor_manager->DescriptorSet(frame.index);
             auto viewport       = Viewport{ 0, 0, (float)extent.width, (float)extent.height, 0.0f, 1.0f };
             auto scissor        = Rect2D{ Offset2D{ 0, 0 }, extent };
 
-            frame.command_buffer.ResetCommandBuffer();
-            frame.command_buffer.Begin(CommandBufferUsage::OneTimeSubmit);
-            frame.command_buffer.BeginRenderPass(framebuffer, render_area, { clear_color, clear_depth });
-            frame.command_buffer.BindPipeline(PipelineBindPoint::Graphics, m_pipeline);
-            frame.command_buffer.SetViewport(viewport);
-            frame.command_buffer.SetScissor(scissor);
-            frame.command_buffer.BindVertexBuffers(vertex_buffer);
-            frame.command_buffer.BindIndexBuffer(index_buffer, IndexType::Uint32);
-            frame.command_buffer.BindDescriptorSet(PipelineBindPoint::Graphics, m_pipeline_layout, descriptor_set);
-            frame.command_buffer.DrawIndexed(index_count, 1);
-            frame.command_buffer.EndRenderPass();
-            frame.command_buffer.End();
+            frame.cmd_buffers.draw.ResetCommandBuffer();
+            frame.cmd_buffers.draw.Begin(CommandBufferUsage::OneTimeSubmit);
+            frame.cmd_buffers.draw.BeginRenderPass(framebuffer, render_area, { clear_color, clear_depth });
+            frame.cmd_buffers.draw.BindPipeline(PipelineBindPoint::Graphics, m_pipeline);
+            frame.cmd_buffers.draw.SetViewport(viewport);
+            frame.cmd_buffers.draw.SetScissor(scissor);
+            frame.cmd_buffers.draw.BindVertexBuffers(vertex_buffer);
+            frame.cmd_buffers.draw.BindIndexBuffer(index_buffer, IndexType::Uint32);
+            frame.cmd_buffers.draw.BindDescriptorSet(PipelineBindPoint::Graphics, m_pipeline_layout, descriptor_set);
+            frame.cmd_buffers.draw.DrawIndexed(index_count, 1);
+            frame.cmd_buffers.draw.EndRenderPass();
+            frame.cmd_buffers.draw.End();
 
-            auto command_buffer    = frame.command_buffer;
-            auto wait_semaphores   = { frame.image_acquired_semaphore };
-            auto wait_stages       = { PipelineStage::ColorAttachmentOutput };
-            auto signal_semaphores = { frame.image_rendered_semaphore };
-            auto signal_fence      = frame.frame_available_fence;
+            m_graphics_queue.Submit(
+                frame.cmd_buffers.draw,
+                { frame.semaphores.image_acquired },
+                { PipelineStage::ColorAttachmentOutput },
+                { frame.semaphores.draw_completed },
+                {});
 
-            m_graphics_queue.Submit(command_buffer, wait_semaphores, wait_stages, signal_semaphores, signal_fence);
+            m_gui->Draw(
+                frame.cmd_buffers.gui,
+                framebuffers.gui,
+                frame.semaphores.draw_completed,
+                frame.semaphores.gui_completed,
+                frame.fence.image_ready);
 
-            m_swapchain_manager->QueuePresent(image_index, signal_semaphores);
+            m_swapchain_manager->QueuePresent(image_index, { frame.semaphores.gui_completed });
         }
 
         return WindowClosed;
@@ -640,6 +680,7 @@ class RenderContext {
     SwapchainManager*    m_swapchain_manager  = nullptr;
     FrameManager*        m_frame_manager      = nullptr;
     DescriptorManager*   m_descriptor_manager = nullptr;
+    Gui*                 m_gui                = nullptr;
 };
 
 void GlfwErrorCallback(int, const char* description)
@@ -821,7 +862,7 @@ int main()
             AttachmentLoadOp::Clear,
             AttachmentStoreOp::Store,
             ImageLayout::Undefined,
-            ImageLayout::PresentSrcKHR);
+            ImageLayout::ColorAttachmentOptimal);
 
         auto depth_attachment = builder.AddAttachmentDescription(
             depth_format,
@@ -849,6 +890,37 @@ int main()
             Access::ColorAttachmentWrite);
 
         renderpass = device->CreateRenderPass(builder.state);
+    }
+
+    // Create gui pipeline renderpass
+    UniqueRenderPass gui_renderpass;
+    {
+        auto builder = RenderPass::Builder();
+
+        auto color_attachment = builder.AddAttachmentDescription(
+            surface_format.format,
+            AttachmentLoadOp::Load,
+            AttachmentStoreOp::Store,
+            ImageLayout::ColorAttachmentOptimal,
+            ImageLayout::PresentSrcKHR);
+
+        auto color_ref = builder.AddAttachmentReference(color_attachment, ImageLayout::ColorAttachmentOptimal);
+
+        auto subpass_builder = builder.GetSubpassBuilder();
+
+        subpass_builder.AddColorAttachment(color_ref);
+
+        auto subpass_id = builder.AddSubpass(subpass_builder.state);
+
+        builder.AddSubpassDependency(
+            SubpassID::External,
+            subpass_id,
+            PipelineStage::ColorAttachmentOutput,
+            PipelineStage::ColorAttachmentOutput,
+            Access::ColorAttachmentRead,
+            Access::ColorAttachmentWrite);
+
+        gui_renderpass = device->CreateRenderPass(builder.state);
     }
 
     // Create descriptor set layouts
@@ -901,7 +973,22 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
-    DescriptorManager descriptor_manager(*device, 2, *descriptor_set_layout);
+    auto image_count = 3;
+    auto frame_count = 2;
+
+    DescriptorManager descriptor_manager(*device, frame_count, *descriptor_set_layout);
+
+    Gui gui(
+        *instance,
+        gpu,
+        *device,
+        graphics.family_index,
+        queues.graphics,
+        *gui_renderpass,
+        window,
+        extent,
+        image_count,
+        image_count);
 
     bool  running   = true;
     auto  timestamp = glfwGetTime();
@@ -911,15 +998,16 @@ int main()
         auto swapchain_manager = SwapchainManager(
             *device,
             *renderpass,
+            *gui_renderpass,
             *surface,
-            3,
+            image_count,
             surface_format,
             depth_format,
             extent,
             queues.presentation,
             PresentModeKHR::Fifo);
 
-        FrameManager frame_manager(*device, graphics.family_index, 2);
+        FrameManager frame_manager(*device, graphics.family_index, frame_count);
 
         auto render_context = RenderContext(
             *device,
@@ -929,7 +1017,8 @@ int main()
             window,
             &swapchain_manager,
             &frame_manager,
-            &descriptor_manager);
+            &descriptor_manager,
+            &gui);
 
         auto result = render_context.Draw(angle, timestamp, *vertex_buffer, *index_buffer, mesh.indices.count());
 
@@ -944,9 +1033,9 @@ int main()
             int width  = 0;
             int height = 0;
             glfwGetWindowSize(window, &width, &height);
-            extent.width  = static_cast<uint32_t>(width);
-            extent.height = static_cast<uint32_t>(height);
-            break;
+            extent.width  = narrow_cast<uint32_t>(width);
+            extent.height = narrow_cast<uint32_t>(height);
+            gui.Update(extent, swapchain_manager.MinImageCount());
         }
         default:
             break;

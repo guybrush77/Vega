@@ -36,6 +36,62 @@
 #include <algorithm>
 #include <array>
 
+namespace {
+
+static etna::UniqueDescriptorPool CreateDescriptorPool(
+    VkDevice                        device,
+    etna::DescriptorPoolFlags       flags,
+    const etna::DescriptorPoolSize* pool_sizes,
+    size_t                          pool_size_count,
+    size_t                          max_sets)
+{
+    using namespace etna;
+
+    assert(device);
+
+    constexpr size_t kMaxPoolSizes = 16;
+
+    std::array<VkDescriptorPoolSize, kMaxPoolSizes> vk_pool_sizes;
+
+    if (pool_size_count > vk_pool_sizes.size()) {
+        throw_etna_error(__FILE__, __LINE__, "Too many elements in std::container<DescriptorPoolSize>");
+    }
+
+    auto vk_descriptor_pool_size = [](DescriptorPoolSize dps) { return static_cast<VkDescriptorPoolSize>(dps); };
+
+    std::transform(pool_sizes, pool_sizes + pool_size_count, vk_pool_sizes.begin(), vk_descriptor_pool_size);
+
+    if (max_sets == 0) {
+        for (size_t i = 0; i != pool_size_count; ++i) {
+            max_sets += pool_sizes[i].descriptorCount;
+        }
+    }
+
+    auto vk_flags           = GetVk(flags);
+    auto vk_pool_size_count = narrow_cast<uint32_t>(pool_size_count);
+
+    VkDescriptorPoolCreateInfo create_info = {
+
+        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext         = nullptr,
+        .flags         = vk_flags,
+        .maxSets       = narrow_cast<uint32_t>(max_sets),
+        .poolSizeCount = vk_pool_size_count,
+        .pPoolSizes    = pool_size_count ? vk_pool_sizes.data() : nullptr
+    };
+
+    VkDescriptorPool vk_descriptor_pool{};
+
+    if (auto result = vkCreateDescriptorPool(device, &create_info, nullptr, &vk_descriptor_pool);
+        result != VK_SUCCESS) {
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
+    }
+
+    return UniqueDescriptorPool(DescriptorPool(vk_descriptor_pool, device));
+}
+
+} // namespace
+
 namespace etna {
 
 UniqueRenderPass Device::CreateRenderPass(const VkRenderPassCreateInfo& create_info)
@@ -51,23 +107,28 @@ UniqueDescriptorSetLayout Device::CreateDescriptorSetLayout(const VkDescriptorSe
     return DescriptorSetLayout::Create(m_device, create_info);
 }
 
-UniqueDescriptorPool Device::CreateDescriptorPool(DescriptorType descriptor_type, size_t size, size_t max_sets)
+UniqueDescriptorPool
+Device::CreateDescriptorPool(DescriptorPoolFlags flags, std::span<DescriptorPoolSize> pool_sizes, size_t max_sets)
 {
-    assert(m_device);
+    return ::CreateDescriptorPool(m_device, flags, pool_sizes.data(), pool_sizes.size(), max_sets);
+}
 
-    VkDescriptorPoolSize vk_pool_size = DescriptorPoolSize{ GetVk(descriptor_type), narrow_cast<uint32_t>(size) };
+UniqueDescriptorPool Device::CreateDescriptorPool(
+    DescriptorPoolFlags                       flags,
+    std::initializer_list<DescriptorPoolSize> pool_sizes,
+    size_t                                    max_sets)
+{
+    return ::CreateDescriptorPool(m_device, flags, pool_sizes.begin(), pool_sizes.size(), max_sets);
+}
 
-    VkDescriptorPoolCreateInfo create_info = {
+UniqueDescriptorPool Device::CreateDescriptorPool(std::span<DescriptorPoolSize> pool_sizes, size_t max_sets)
+{
+    return CreateDescriptorPool({}, pool_sizes, max_sets);
+}
 
-        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .pNext         = nullptr,
-        .flags         = {},
-        .maxSets       = max_sets == 0 ? vk_pool_size.descriptorCount : narrow_cast<uint32_t>(max_sets),
-        .poolSizeCount = 1,
-        .pPoolSizes    = &vk_pool_size
-    };
-
-    return DescriptorPool::Create(m_device, create_info);
+UniqueDescriptorPool Device::CreateDescriptorPool(std::initializer_list<DescriptorPoolSize> pool_sizes, size_t max_sets)
+{
+    return CreateDescriptorPool({}, pool_sizes, max_sets);
 }
 
 UniqueShaderModule Device::CreateShaderModule(const unsigned char* shader_data, size_t shader_size)

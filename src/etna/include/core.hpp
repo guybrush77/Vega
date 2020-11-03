@@ -796,6 +796,16 @@ enum class QueueFlags : VkQueueFlags {
 
 ETNA_DEFINE_FLAGS_ANALOGUE(QueueFlags, VkQueueFlags)
 
+enum class DescriptorPoolFlags : VkDescriptorPoolCreateFlags {
+    FreeDescriptorSet  = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+    UpdateAfterBind    = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+    UpdateAfterBindEXT = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT
+};
+
+ETNA_DEFINE_FLAGS_ANALOGUE(DescriptorPoolFlags, VkDescriptorPoolCreateFlags)
+
+const char* to_string(DescriptorPoolFlags value);
+
 enum class ImageAspect : VkImageAspectFlags {
     Color           = VK_IMAGE_ASPECT_COLOR_BIT,
     Depth           = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -906,7 +916,13 @@ using Extent3D            = VkExtent3D;
 using Rect2D              = VkRect2D;
 using Viewport            = VkViewport;
 using ExtensionProperties = VkExtensionProperties;
-using DescriptorPoolSize  = VkDescriptorPoolSize;
+
+struct DescriptorPoolSize final {
+    DescriptorType type;
+    uint32_t       descriptorCount;
+
+    constexpr operator VkDescriptorPoolSize() const noexcept { return { GetVk(type), descriptorCount }; };
+};
 
 struct QueueFamilyProperties final {
     QueueFlags queueFlags;

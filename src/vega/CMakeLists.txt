@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 
 add_executable(vega)
 
-set(source_files vega.cpp)
+file(GLOB source_files *.hpp *.cpp)
 target_sources(vega PRIVATE ${source_files})
 
 target_compile_features(vega PUBLIC cxx_std_20)
@@ -14,6 +14,7 @@ target_link_libraries(
     PRIVATE etna
     PRIVATE glfw
     PRIVATE glm
+    PRIVATE imgui
     PRIVATE shaders
     PRIVATE spdlog
     PRIVATE utils

@@ -129,6 +129,18 @@ const char* to_string(DebugUtilsMessageType value) noexcept
     }
 }
 
+const char* to_string(DescriptorPoolFlags value)
+{
+    switch (value) {
+    case DescriptorPoolFlags::FreeDescriptorSet:
+        return "FreeDescriptorSet";
+    case DescriptorPoolFlags::UpdateAfterBind:
+        return "UpdateAfterBind";
+    default:
+        return "invalid";
+    }
+}
+
 void throw_etna_error(const char* file, int line, Result result)
 {
     throw etna_error(file, line, result);

@@ -81,25 +81,20 @@ class DescriptorPool {
   public:
     DescriptorPool() noexcept {}
     DescriptorPool(std::nullptr_t) noexcept {}
+    DescriptorPool(VkDescriptorPool descriptor_pool, VkDevice device)
+        : m_descriptor_pool(descriptor_pool), m_device(device)
+    {}
 
     operator VkDescriptorPool() const noexcept { return m_descriptor_pool; }
 
     bool operator==(const DescriptorPool& rhs) const = default;
 
-    DescriptorSet AllocateDescriptorSet(DescriptorSetLayout descriptor_set_layout);
-    std::vector<DescriptorSet> AllocateDescriptorSets(size_t count, DescriptorSetLayout descriptor_set_layout);
+    auto AllocateDescriptorSet(DescriptorSetLayout descriptor_set_layout) -> DescriptorSet;
+    auto AllocateDescriptorSets(size_t count, DescriptorSetLayout descriptor_set_layout)->std::vector<DescriptorSet>;
 
   private:
     template <typename>
     friend class UniqueHandle;
-
-    friend class Device;
-
-    DescriptorPool(VkDescriptorPool descriptor_pool, VkDevice device)
-        : m_descriptor_pool(descriptor_pool), m_device(device)
-    {}
-
-    static auto Create(VkDevice vk_device, const VkDescriptorPoolCreateInfo& create_info) -> UniqueDescriptorPool;
 
     void Destroy() noexcept;
 

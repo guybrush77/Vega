@@ -2,6 +2,9 @@
 
 #include "core.hpp"
 
+#include <span>
+#include <vector>
+
 VK_DEFINE_HANDLE(VmaAllocator)
 
 namespace etna {
@@ -30,8 +33,7 @@ class Device {
 
     bool operator==(const Device&) const = default;
 
-    auto AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence)
-        -> Return<uint32_t>;
+    auto AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore semaphore, Fence fence) -> Return<uint32_t>;
 
     auto CreateCommandPool(uint32_t queue_family_index, CommandPoolCreate command_pool_create_flags = {})
         -> UniqueCommandPool;
@@ -50,7 +52,18 @@ class Device {
 
     auto CreateDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& create_info) -> UniqueDescriptorSetLayout;
 
-    auto CreateDescriptorPool(DescriptorType descriptor_type, size_t size, size_t max_sets = 0) -> UniqueDescriptorPool;
+    auto CreateDescriptorPool(DescriptorPoolFlags flags, std::span<DescriptorPoolSize> pool_sizes, size_t max_sets = 0)
+        -> UniqueDescriptorPool;
+
+    auto CreateDescriptorPool(
+        DescriptorPoolFlags                       flags,
+        std::initializer_list<DescriptorPoolSize> pool_sizes,
+        size_t                                    max_sets = 0) -> UniqueDescriptorPool;
+
+    auto CreateDescriptorPool(std::span<DescriptorPoolSize> pool_sizes, size_t max_sets = 0) -> UniqueDescriptorPool;
+
+    auto CreateDescriptorPool(std::initializer_list<DescriptorPoolSize> pool_sizes, size_t max_sets = 0)
+        -> UniqueDescriptorPool;
 
     auto CreateShaderModule(const unsigned char* shader_data, size_t shader_size) -> UniqueShaderModule;
 

@@ -106,18 +106,6 @@ std::vector<DescriptorSet> DescriptorPool::AllocateDescriptorSets(
     return std::vector<DescriptorSet>(vk_descriptor_sets.begin(), vk_descriptor_sets.end());
 }
 
-UniqueDescriptorPool DescriptorPool::Create(VkDevice vk_device, const VkDescriptorPoolCreateInfo& create_info)
-{
-    VkDescriptorPool vk_descriptor_pool{};
-
-    if (auto result = vkCreateDescriptorPool(vk_device, &create_info, nullptr, &vk_descriptor_pool);
-        result != VK_SUCCESS) {
-        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
-    }
-
-    return UniqueDescriptorPool(DescriptorPool(vk_descriptor_pool, vk_device));
-}
-
 void DescriptorPool::Destroy() noexcept
 {
     assert(m_descriptor_pool);

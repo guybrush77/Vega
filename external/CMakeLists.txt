@@ -88,6 +88,23 @@ FetchContent_MakeAvailable(glm)
 
 
 #------------------------------------------------------------------------------------
+# Fetch imgui
+#------------------------------------------------------------------------------------
+
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY  https://github.com/ocornut/imgui
+    GIT_TAG         v1.79
+)
+
+FetchContent_MakeAvailable(imgui)
+
+include(imgui.cmake)
+
+set_target_properties(imgui PROPERTIES FOLDER "external")
+
+
+#------------------------------------------------------------------------------------
 # Fetch spdlog
 #------------------------------------------------------------------------------------
 
@@ -117,5 +134,4 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(vma)
 FetchContent_GetProperties(vma)
 
-add_library(vma INTERFACE)
-target_include_directories(vma INTERFACE "${vma_SOURCE_DIR}/src")
+include(vma.cmake)
