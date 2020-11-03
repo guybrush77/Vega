@@ -477,7 +477,7 @@ void Device::WaitForFences(std::initializer_list<Fence> fences, WaitAll wait_all
     });
 
     auto vk_size     = narrow_cast<uint32_t>(fences.size());
-    auto vk_wait_all = (wait_all == WaitAll::True) ? VK_TRUE : VK_FALSE;
+    auto vk_wait_all = (wait_all == WaitAll::True) ? VkBool32(1) : VkBool32(0);
 
     if (auto result = vkWaitForFences(m_device, vk_size, vk_fences.data(), vk_wait_all, timeout);
         result != VK_SUCCESS) {

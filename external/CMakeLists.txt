@@ -99,7 +99,7 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(imgui)
 
-include(imgui.cmake)
+include(imgui/imgui.cmake)
 
 set_target_properties(imgui PROPERTIES FOLDER "external")
 
@@ -134,4 +134,4 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(vma)
 FetchContent_GetProperties(vma)
 
-include(vma.cmake)
+include(vma/vma.cmake)

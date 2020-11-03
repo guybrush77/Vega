@@ -973,8 +973,8 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
-    auto image_count = 3;
-    auto frame_count = 2;
+    uint32_t image_count = 3;
+    uint32_t frame_count = 2;
 
     DescriptorManager descriptor_manager(*device, frame_count, *descriptor_set_layout);
 
