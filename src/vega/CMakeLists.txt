@@ -12,6 +12,7 @@ set_source_files_properties(${source_files} PROPERTIES COMPILE_FLAGS ${WARNING_F
 target_link_libraries(
     vega
     PRIVATE etna
+    PRIVATE fonts
     PRIVATE glfw
     PRIVATE glm
     PRIVATE imgui

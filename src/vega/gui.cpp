@@ -3,6 +3,8 @@
 #include "command.hpp"
 #include "synchronization.hpp"
 
+#include "utils/resource.hpp"
+
 #include "examples/imgui_impl_glfw.h"
 #include "examples/imgui_impl_vulkan.h"
 #include "imgui.h"
@@ -77,6 +79,21 @@ Gui::Gui(
             .CheckVkResultFn = nullptr
         };
         ImGui_ImplVulkan_Init(&init_info, renderpass);
+    }
+
+    // Set Style
+    ImGui::StyleColorsDark();
+
+    // Add fonts
+    {
+        auto font      = GetResource("fonts/Roboto-Regular.ttf");
+        auto font_data = const_cast<unsigned char*>(font.data);
+        auto font_size = narrow_cast<int>(font.size);
+
+        ImFontConfig font_config;
+        font_config.FontDataOwnedByAtlas = false;
+
+        ImGui::GetIO().Fonts->AddFontFromMemoryTTF(font_data, font_size, 24.0f, &font_config);
     }
 
     // Upload Fonts

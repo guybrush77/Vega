@@ -1,4 +1,4 @@
-function(compile_shaders glsl_files output)
+function(compile_shaders glsl_files prefix output)
     find_program(Vulkan_GLSLC_EXECUTABLE NAMES glslc PATHS "$ENV{VULKAN_SDK}/Bin" REQUIRED)
     foreach(glsl_file ${glsl_files})
         set(glsl_binary ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${glsl_file}.spv)
@@ -11,7 +11,7 @@ function(compile_shaders glsl_files output)
         set(glsl_resource ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${glsl_file}.cpp)
         add_custom_command(
             OUTPUT ${glsl_resource}
-            COMMAND make-resource --resource ${glsl_file} --input ${glsl_binary} --output ${glsl_resource}
+            COMMAND make-resource --resource ${prefix}${glsl_file} --input ${glsl_binary} --output ${glsl_resource}
             DEPENDS make-resource ${glsl_binary}
             COMMENT "Making resource ${glsl_resource}"
         )

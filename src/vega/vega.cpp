@@ -943,8 +943,8 @@ int main()
     UniquePipeline pipeline;
     {
         auto builder            = Pipeline::Builder(*pipeline_layout, *renderpass);
-        auto [vs_data, vs_size] = GetResource("shader.vert");
-        auto [fs_data, fs_size] = GetResource("shader.frag");
+        auto [vs_data, vs_size] = GetResource("shaders/shader.vert");
+        auto [fs_data, fs_size] = GetResource("shaders/shader.frag");
         auto vertex_shader      = device->CreateShaderModule(vs_data, vs_size);
         auto fragment_shader    = device->CreateShaderModule(fs_data, fs_size);
         auto [width, height]    = extent;
@@ -1032,7 +1032,12 @@ int main()
         case RenderContext::SwapchainOutOfDate: {
             int width  = 0;
             int height = 0;
-            glfwGetWindowSize(window, &width, &height);
+            while (width == 0 && height == 0) {
+                glfwGetWindowSize(window, &width, &height);
+                if (width == 0 && height == 0) {
+                    glfwWaitEvents();
+                }
+            }
             extent.width  = narrow_cast<uint32_t>(width);
             extent.height = narrow_cast<uint32_t>(height);
             gui.Update(extent, swapchain_manager.MinImageCount());

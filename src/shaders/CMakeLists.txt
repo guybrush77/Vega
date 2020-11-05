@@ -2,7 +2,9 @@ include(CompileShaders)
 
 file(GLOB_RECURSE glsl_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.vert *.frag)
 
-compile_shaders("${glsl_files}" resource_files)
+get_filename_component(prefix ${CMAKE_CURRENT_SOURCE_DIR} NAME)
+
+compile_shaders("${glsl_files}" "${prefix}/" resource_files)
 
 add_library(shaders OBJECT)
 
