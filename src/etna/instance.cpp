@@ -145,7 +145,7 @@ UniqueInstance Instance::Create(
         .applicationVersion = vk_application_version,
         .pEngineName        = nullptr,
         .engineVersion      = {},
-        .apiVersion         = VK_API_VERSION_1_0
+        .apiVersion         = VK_API_VERSION_1_1
     };
 
     VkInstanceCreateInfo instance_create_info = {

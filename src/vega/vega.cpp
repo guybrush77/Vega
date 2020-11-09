@@ -1,5 +1,6 @@
 #include "etna.hpp"
 
+#include "camera.hpp"
 #include "gui.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -33,7 +34,11 @@
 #include <vector>
 
 struct GLFW {
-    GLFW() { glfwInit(); }
+    GLFW()
+    {
+        glfwInit();
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    }
     ~GLFW() { glfwTerminate(); }
 } glfw;
 
@@ -52,6 +57,8 @@ struct VertexPN {
 
 struct Mesh final {
     std::string name;
+
+    AABB aabb{};
 
     struct {
         std::vector<VertexPN> array;
@@ -115,6 +122,7 @@ Mesh LoadMesh(const char* filepath)
 
     auto shape       = shapes[0];
     auto num_indices = shape.mesh.indices.size();
+    auto aabb        = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
 
     assert(num_indices % 3 == 0);
 
@@ -139,6 +147,13 @@ Mesh LoadMesh(const char* filepath)
                     vertex.normal.z = attributes.normals[normal_idx + 2];
                 }
 
+                aabb.min.x = std::min(aabb.min.x, vertex.position.x);
+                aabb.min.y = std::min(aabb.min.y, vertex.position.y);
+                aabb.min.z = std::min(aabb.min.z, vertex.position.z);
+                aabb.max.x = std::max(aabb.max.x, vertex.position.x);
+                aabb.max.y = std::max(aabb.max.y, vertex.position.y);
+                aabb.max.z = std::max(aabb.max.z, vertex.position.z);
+
                 vertices.push_back(vertex);
 
                 auto idx         = static_cast<uint32_t>(vertices.size() - 1);
@@ -149,7 +164,7 @@ Mesh LoadMesh(const char* filepath)
         }
     }
 
-    return { std::move(shape.name), { std::move(vertices) }, { std::move(indices) } };
+    return { std::move(shape.name), aabb, { std::move(vertices) }, { std::move(indices) } };
 }
 
 struct QueueInfo final {
@@ -190,18 +205,10 @@ VkBool32 VulkanDebugCallback(
     auto message_severity = static_cast<etna::DebugUtilsMessageSeverity>(vk_message_severity);
 
     switch (message_severity) {
-    case etna::DebugUtilsMessageSeverity::Verbose:
-        spdlog::debug(callback_data->pMessage);
-        break;
-    case etna::DebugUtilsMessageSeverity::Info:
-        spdlog::info(callback_data->pMessage);
-        break;
-    case etna::DebugUtilsMessageSeverity::Warning:
-        spdlog::warn(callback_data->pMessage);
-        break;
-    case etna::DebugUtilsMessageSeverity::Error:
-        spdlog::error(callback_data->pMessage);
-        break;
+    case etna::DebugUtilsMessageSeverity::Verbose: spdlog::debug(callback_data->pMessage); break;
+    case etna::DebugUtilsMessageSeverity::Info: spdlog::info(callback_data->pMessage); break;
+    case etna::DebugUtilsMessageSeverity::Warning: spdlog::warn(callback_data->pMessage); break;
+    case etna::DebugUtilsMessageSeverity::Error: spdlog::error(callback_data->pMessage); break;
     default:
         spdlog::warn("Vulkan message callback message severity not recognized");
         spdlog::error(callback_data->pMessage);
@@ -577,10 +584,11 @@ class RenderContext {
         SwapchainManager*    swapchain_manager,
         FrameManager*        frame_manager,
         DescriptorManager*   descriptor_manager,
-        Gui*                 gui)
+        Gui*                 gui,
+        Camera*              camera)
         : m_device(device), m_graphics_queue(graphics_queue), m_pipeline(pipeline), m_pipeline_layout(pipeline_layout),
           m_window(window), m_swapchain_manager(swapchain_manager), m_frame_manager(frame_manager),
-          m_descriptor_manager(descriptor_manager), m_gui(gui)
+          m_descriptor_manager(descriptor_manager), m_gui(gui), m_camera(camera)
     {}
 
     Status Draw(float& angle, double& t1, etna::Buffer vertex_buffer, etna::Buffer index_buffer, uint32_t index_count)
@@ -618,15 +626,9 @@ class RenderContext {
                     angle -= 360;
             }
 
-            auto eye    = glm::vec3(0, 0, 3 + sinf(glm::radians(angle)));
-            auto center = glm::vec3(0, 0, 0);
-            auto up     = glm::vec3(0, -1, 0);
-            auto model  = glm::rotate(glm::radians(angle), up);
-            auto view   = glm::lookAtRH(eye, center, up);
             auto extent = framebuffers.extent;
-            auto aspect = float(extent.width) / float(extent.height);
-            auto proj   = glm::perspectiveRH(glm::radians(45.f), aspect, 0.1f, 1000.0f);
-            auto mvp    = MVP{ model, view, proj };
+            auto model  = glm::identity<glm::mat4>();
+            auto mvp    = MVP{ model, m_camera->View(), m_camera->Perspective() };
 
             m_descriptor_manager->UpdateDescriptorSet(frame.index, mvp);
 
@@ -635,7 +637,9 @@ class RenderContext {
             auto render_area    = Rect2D{ Offset2D{ 0, 0 }, extent };
             auto framebuffer    = framebuffers.draw;
             auto descriptor_set = m_descriptor_manager->DescriptorSet(frame.index);
-            auto viewport       = Viewport{ 0, 0, (float)extent.width, (float)extent.height, 0.0f, 1.0f };
+            auto width          = narrow_cast<float>(extent.width);
+            auto height         = narrow_cast<float>(extent.height);
+            auto viewport       = Viewport{ 0, height, width, -height, 0, 1 };
             auto scissor        = Rect2D{ Offset2D{ 0, 0 }, extent };
 
             frame.cmd_buffers.draw.ResetCommandBuffer();
@@ -681,11 +685,45 @@ class RenderContext {
     FrameManager*        m_frame_manager      = nullptr;
     DescriptorManager*   m_descriptor_manager = nullptr;
     Gui*                 m_gui                = nullptr;
+    Camera*              m_camera             = nullptr;
 };
+
+struct GlfwWindowDeleter {
+    void operator()(GLFWwindow* window) { glfwDestroyWindow(window); }
+};
+
+using GlfwWindow = std::unique_ptr<GLFWwindow, GlfwWindowDeleter>;
 
 void GlfwErrorCallback(int, const char* description)
 {
     spdlog::error("GLFW: {}", description);
+}
+
+GlfwWindow CreateWindow(const char* window_name)
+{
+    GLFWmonitor* primary_monitor = glfwGetPrimaryMonitor();
+
+    int window_width  = 0;
+    int window_height = 0;
+    int window_pos_x  = 0;
+    int window_pos_y  = 0;
+    {
+        int xpos{}, ypos{}, width{}, height{};
+        glfwGetMonitorWorkarea(primary_monitor, &xpos, &ypos, &width, &height);
+        window_width  = width * 3 / 4;
+        window_height = height * 3 / 4;
+        window_pos_x  = (width - window_width) / 2;
+        window_pos_y  = (height - window_height) / 2;
+    }
+
+    auto window = glfwCreateWindow(window_width, window_height, window_name, nullptr, nullptr);
+    if (!window) {
+        throw std::runtime_error("Failed to create GLFW window");
+    }
+
+    glfwSetWindowPos(window, window_pos_x, window_pos_y);
+
+    return GlfwWindow(window);
 }
 
 int main()
@@ -746,14 +784,13 @@ int main()
         }
     }
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    auto window = glfwCreateWindow(800, 600, "Vega Viewer", nullptr, nullptr);
+    auto window = CreateWindow("Vega Viewer");
 
     UniqueSurfaceKHR surface;
     {
         VkSurfaceKHR vk_surface{};
 
-        if (VK_SUCCESS != glfwCreateWindowSurface(*instance, window, nullptr, &vk_surface)) {
+        if (VK_SUCCESS != glfwCreateWindowSurface(*instance, window.get(), nullptr, &vk_surface)) {
             throw std::runtime_error("Failed to create window surface!");
         }
 
@@ -838,8 +875,12 @@ int main()
         ImageTiling::Optimal,
         FormatFeature::DepthStencilAttachment);
 
-    Extent2D extent{ 800, 600 };
+    Extent2D extent{};
     {
+        int width{}, height{};
+        glfwGetWindowSize(window.get(), &width, &height);
+        extent = Extent2D{ narrow_cast<uint32_t>(width), narrow_cast<uint32_t>(height) };
+
         auto capabilities = gpu.GetPhysicalDeviceSurfaceCapabilitiesKHR(*surface);
 
         if (capabilities.currentExtent.width != UINT32_MAX) {
@@ -947,9 +988,10 @@ int main()
         auto [fs_data, fs_size] = GetResource("shaders/shader.frag");
         auto vertex_shader      = device->CreateShaderModule(vs_data, vs_size);
         auto fragment_shader    = device->CreateShaderModule(fs_data, fs_size);
-        auto [width, height]    = extent;
-        auto viewport           = Viewport{ 0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1 };
-        auto scissor            = Rect2D{ Offset2D{ 0, 0 }, Extent2D{ width, height } };
+        auto width              = narrow_cast<float>(extent.width);
+        auto height             = narrow_cast<float>(extent.height);
+        auto viewport           = Viewport{ 0, height, width, -height, 0, 1 };
+        auto scissor            = Rect2D{ Offset2D{ 0, 0 }, Extent2D{ extent } };
 
         builder.AddShaderStage(*vertex_shader, ShaderStage::Vertex);
         builder.AddShaderStage(*fragment_shader, ShaderStage::Fragment);
@@ -978,6 +1020,15 @@ int main()
 
     DescriptorManager descriptor_manager(*device, frame_count, *descriptor_set_layout);
 
+    auto camera = Camera::Create(
+        Orientation::RightHanded,
+        CameraForward::PositiveY,
+        CameraUp::PositiveZ,
+        ObjectView::Front,
+        extent,
+        mesh.aabb,
+        Degrees{ 45 });
+
     Gui gui(
         *instance,
         gpu,
@@ -985,7 +1036,7 @@ int main()
         graphics.family_index,
         queues.graphics,
         *gui_renderpass,
-        window,
+        window.get(),
         extent,
         image_count,
         image_count);
@@ -1014,11 +1065,12 @@ int main()
             queues.graphics,
             *pipeline,
             *pipeline_layout,
-            window,
+            window.get(),
             &swapchain_manager,
             &frame_manager,
             &descriptor_manager,
-            &gui);
+            &gui,
+            &camera);
 
         auto result = render_context.Draw(angle, timestamp, *vertex_buffer, *index_buffer, mesh.indices.count());
 
@@ -1033,7 +1085,7 @@ int main()
             int width  = 0;
             int height = 0;
             while (width == 0 && height == 0) {
-                glfwGetWindowSize(window, &width, &height);
+                glfwGetWindowSize(window.get(), &width, &height);
                 if (width == 0 && height == 0) {
                     glfwWaitEvents();
                 }
@@ -1041,13 +1093,11 @@ int main()
             extent.width  = narrow_cast<uint32_t>(width);
             extent.height = narrow_cast<uint32_t>(height);
             gui.Update(extent, swapchain_manager.MinImageCount());
+            // camera = CreateCamera(Orientation::RightHanded, Up::Z, View::Front, extent, mesh.aabb, 45.0f);
         }
-        default:
-            break;
+        default: break;
         }
     }
-
-    glfwDestroyWindow(window);
 
     return 0;
 }

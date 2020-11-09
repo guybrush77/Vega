@@ -513,7 +513,7 @@ Device::Create(VkInstance instance, VkPhysicalDevice physical_device, const VkDe
         .pVulkanFunctions            = nullptr,
         .pRecordSettings             = nullptr,
         .instance                    = instance,
-        .vulkanApiVersion            = {}
+        .vulkanApiVersion            = VK_API_VERSION_1_1
     };
 
     VmaAllocator allocator{};
