@@ -7,10 +7,42 @@
 #include "queue.hpp"
 #include "renderpass.hpp"
 
+#include <memory>
+
 struct GLFWwindow;
+struct ImFont;
+
+class Camera;
+
+struct Fonts {
+    ImFont* regular   = nullptr;
+    ImFont* monospace = nullptr;
+};
+
+class Window {
+  public:
+    virtual void Draw() = 0;
+    virtual ~Window()   = default;
+
+  protected:
+    friend class Gui;
+    Fonts m_fonts;
+};
+
+class CameraWindow : public Window {
+  public:
+    CameraWindow(Camera* camera) : m_camera(camera) {}
+
+    void Draw() override;
+
+  private:
+    Camera* m_camera = nullptr;
+};
 
 class Gui {
   public:
+    using UniqueWindow = std::unique_ptr<Window>;
+
     Gui(etna::Instance       instance,
         etna::PhysicalDevice gpu,
         etna::Device         device,
@@ -29,7 +61,21 @@ class Gui {
 
     ~Gui() noexcept;
 
-    void Update(etna::Extent2D extent, uint32_t min_image_count);
+    void OnKey(int key, int scancode, int action, int mods);
+    void OnCursorPosition(double xpos, double ypos);
+    void OnMouseButton(int button, int action, int mods);
+    void OnScroll(double xoffset, double yoffset);
+    void OnFramebufferSize(int width, int height);
+    void OnContentScale(float xscale, float yscale);
+
+    template <typename T, typename... Args>
+    void AddWindow(Args... args)
+    {
+        m_windows.push_back(UniqueWindow(new T(std::forward<Args...>(args...))));
+        m_windows.back()->m_fonts = m_fonts;
+    }
+
+    void UpdateViewport(etna::Extent2D extent, uint32_t min_image_count);
 
     void Draw(
         etna::CommandBuffer cmd_buffer,
@@ -38,8 +84,43 @@ class Gui {
         etna::Semaphore     signal_semaphore,
         etna::Fence         finished_fence);
 
+    auto GetMouseState() const noexcept { return m_mouse_state; }
+    bool IsAnyWindowHovered() const noexcept;
+
+    struct MouseState final {
+        struct Cursor final {
+            struct Position final {
+                float x;
+                float y;
+            } position;
+            struct Delta final {
+                float x;
+                float y;
+            } delta;
+        } cursor;
+        struct Buttons final {
+            struct Left final {
+                bool is_pressed = false;
+            } left;
+
+            struct Right final {
+                bool is_pressed = false;
+            } right;
+
+            struct Middle final {
+                bool is_pressed = false;
+            } middle;
+
+            bool IsAnyPressed() const noexcept { return left.is_pressed || right.is_pressed || middle.is_pressed; }
+            bool IsNonePressed() const noexcept { return !left.is_pressed && !right.is_pressed && !middle.is_pressed; }
+        } buttons;
+    };
+
   private:
+    Fonts                      m_fonts;
+    MouseState                 m_mouse_state;
     etna::UniqueDescriptorPool m_descriptor_pool;
     etna::Queue                m_graphics_queue;
     etna::Extent2D             m_extent;
+    std::vector<UniqueWindow>  m_windows;
 };

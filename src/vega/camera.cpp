@@ -1,5 +1,7 @@
 #include "camera.hpp"
 
+#include <glm/gtc/matrix_access.hpp>
+#include <glm/gtx/transform.hpp>
 #include <stdexcept>
 
 namespace {
@@ -110,17 +112,49 @@ Camera Camera::Create(
     auto fovy_rad = radians(fovy.value);
     auto fovx_rad = aspect * fovy_rad;
     auto center   = aabb.Center();
+    auto distance = 0.0f;
 
     if (auto obj_aspect = obj_width / obj_height; obj_aspect > aspect) {
-        eye *= (0.5f * obj_depth) + (0.5f * obj_width) / tanf(0.5f * fovx_rad);
+        distance = (0.5f * obj_depth) + (0.5f * obj_width) / tanf(0.5f * fovx_rad);
     } else {
-        eye *= (0.5f * obj_depth) + (0.5f * obj_height) / tanf(0.5f * fovy_rad);
+        distance = (0.5f * obj_depth) + (0.5f * obj_height) / tanf(0.5f * fovy_rad);
     }
 
-    eye = eye + center;
+    eye = distance * eye + center;
 
     auto view        = lookAtRH(eye, center, vec_up);
     auto perspective = glm::perspectiveRH(fovy_rad, aspect, 1.0f, 1000.0f);
 
-    return Camera(view, perspective);
+    return Camera(fovy_rad, distance, center, view, perspective);
+}
+
+glm::vec3 Camera::Position() const noexcept
+{
+    using namespace glm;
+
+    auto up      = vec3(row(m_view, 1));
+    auto forward = vec3(row(m_view, 2));
+    return m_distance * forward + m_center;
+}
+
+void Camera::Orbit(Degrees horizontal, Degrees vertical) noexcept
+{
+    using namespace glm;
+
+    auto right = vec3(row(m_view, 0));
+    auto up    = vec3(row(m_view, 1));
+
+    m_view = rotate(m_view, radians(horizontal.value), up);
+    m_view = rotate(m_view, radians(vertical.value), right);
+
+    auto eye = Position();
+
+    m_view = lookAtRH(eye, m_center, up);
+}
+
+void Camera::UpdateExtent(etna::Extent2D extent) noexcept
+{
+    auto aspect = etna::narrow_cast<float>(extent.width) / extent.height;
+
+    m_perspective = glm::perspectiveRH(m_fovy, aspect, 1.0f, 1000.0f);
 }

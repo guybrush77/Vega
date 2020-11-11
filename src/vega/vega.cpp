@@ -574,6 +574,7 @@ class SwapchainManager {
 class RenderContext {
   public:
     enum Status { WindowClosed, SwapchainOutOfDate };
+    enum class MouseLook { None, Orbit, Zoom, Pan };
 
     RenderContext(
         etna::Device         device,
@@ -591,7 +592,42 @@ class RenderContext {
           m_descriptor_manager(descriptor_manager), m_gui(gui), m_camera(camera)
     {}
 
-    Status Draw(float& angle, double& t1, etna::Buffer vertex_buffer, etna::Buffer index_buffer, uint32_t index_count)
+    void ProcessUserInput()
+    {
+        auto mouse_state = m_gui->GetMouseState();
+
+        if (mouse_state.buttons.IsNonePressed()) {
+            if (m_mouse_look != MouseLook::None) {
+                glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            }
+            m_is_any_window_hovered = false;
+            m_mouse_look            = MouseLook::None;
+            return;
+        }
+
+        if (m_mouse_look == MouseLook::None) {
+            if (m_is_any_window_hovered || m_gui->IsAnyWindowHovered()) {
+                m_is_any_window_hovered = true;
+                return;
+            }
+            if (mouse_state.buttons.left.is_pressed) {
+                m_mouse_look = MouseLook::Orbit;
+            } else if (mouse_state.buttons.right.is_pressed) {
+                m_mouse_look = MouseLook::Pan;
+            } else if (mouse_state.buttons.middle.is_pressed) {
+                m_mouse_look = MouseLook::Zoom;
+            }
+            glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        }
+
+        if (m_mouse_look == MouseLook::Orbit) {
+            auto rot_x = Degrees(mouse_state.cursor.delta.x);
+            auto rot_y = Degrees(mouse_state.cursor.delta.y);
+            m_camera->Orbit(rot_x, rot_y);
+        }
+    }
+
+    Status Draw(etna::Buffer vertex_buffer, etna::Buffer index_buffer, uint32_t index_count)
     {
         using namespace etna;
 
@@ -618,13 +654,7 @@ class RenderContext {
 
             auto framebuffers = m_swapchain_manager->GetFramebufferInfo(image_index);
 
-            auto t2 = glfwGetTime();
-            if (t2 - t1 > 0.02) {
-                t1 = t2;
-                angle += 2;
-                if (angle > 360)
-                    angle -= 360;
-            }
+            ProcessUserInput();
 
             auto extent = framebuffers.extent;
             auto model  = glm::identity<glm::mat4>();
@@ -680,12 +710,14 @@ class RenderContext {
     etna::Queue          m_graphics_queue;
     etna::Pipeline       m_pipeline;
     etna::PipelineLayout m_pipeline_layout;
-    GLFWwindow*          m_window             = nullptr;
-    SwapchainManager*    m_swapchain_manager  = nullptr;
-    FrameManager*        m_frame_manager      = nullptr;
-    DescriptorManager*   m_descriptor_manager = nullptr;
-    Gui*                 m_gui                = nullptr;
-    Camera*              m_camera             = nullptr;
+    GLFWwindow*          m_window                = nullptr;
+    SwapchainManager*    m_swapchain_manager     = nullptr;
+    FrameManager*        m_frame_manager         = nullptr;
+    DescriptorManager*   m_descriptor_manager    = nullptr;
+    Gui*                 m_gui                   = nullptr;
+    Camera*              m_camera                = nullptr;
+    MouseLook            m_mouse_look            = MouseLook::None;
+    bool                 m_is_any_window_hovered = false;
 };
 
 struct GlfwWindowDeleter {
@@ -1027,7 +1059,7 @@ int main()
         ObjectView::Front,
         extent,
         mesh.aabb,
-        Degrees{ 45 });
+        45_deg);
 
     Gui gui(
         *instance,
@@ -1041,9 +1073,9 @@ int main()
         image_count,
         image_count);
 
-    bool  running   = true;
-    auto  timestamp = glfwGetTime();
-    float angle     = 0;
+    gui.AddWindow<CameraWindow>(&camera);
+
+    bool running = true;
 
     while (running) {
         auto swapchain_manager = SwapchainManager(
@@ -1072,7 +1104,7 @@ int main()
             &gui,
             &camera);
 
-        auto result = render_context.Draw(angle, timestamp, *vertex_buffer, *index_buffer, mesh.indices.count());
+        auto result = render_context.Draw(*vertex_buffer, *index_buffer, mesh.indices.count());
 
         device->WaitIdle();
 
@@ -1092,8 +1124,8 @@ int main()
             }
             extent.width  = narrow_cast<uint32_t>(width);
             extent.height = narrow_cast<uint32_t>(height);
-            gui.Update(extent, swapchain_manager.MinImageCount());
-            // camera = CreateCamera(Orientation::RightHanded, Up::Z, View::Front, extent, mesh.aabb, 45.0f);
+            gui.UpdateViewport(extent, swapchain_manager.MinImageCount());
+            camera.UpdateExtent(extent);
         }
         default: break;
         }

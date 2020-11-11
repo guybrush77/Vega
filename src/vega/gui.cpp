@@ -1,5 +1,6 @@
 #include "gui.hpp"
 
+#include "camera.hpp"
 #include "command.hpp"
 #include "synchronization.hpp"
 
@@ -9,16 +10,29 @@
 #include "examples/imgui_impl_vulkan.h"
 #include "imgui.h"
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #endif
+
+#include <glm/gtc/matrix_access.hpp>
 
 #include <spdlog/spdlog.h>
 
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
+
+namespace {
+static Gui& Self(GLFWwindow* window)
+{
+    return *static_cast<Gui*>(glfwGetWindowUserPointer(window));
+}
+
+} // namespace
 
 Gui::Gui(
     etna::Instance       instance,
@@ -35,9 +49,45 @@ Gui::Gui(
 {
     using namespace etna;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    spdlog::info("ImGui {}", ImGui::GetVersion());
+    // Setup GLFW callbacks
+    {
+        glfwSetWindowUserPointer(window, this);
+
+        glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+            Self(window).OnKey(key, scancode, action, mods);
+        });
+
+        glfwSetCursorPosCallback(window, [](GLFWwindow* window, double xpos, double ypos) {
+            Self(window).OnCursorPosition(xpos, ypos);
+        });
+
+        glfwSetMouseButtonCallback(window, [](GLFWwindow* window, int button, int action, int mods) {
+            Self(window).OnMouseButton(button, action, mods);
+        });
+
+        glfwSetScrollCallback(window, [](GLFWwindow* window, double xoffset, double yoffset) {
+            Self(window).OnScroll(xoffset, yoffset);
+        });
+
+        glfwSetFramebufferSizeCallback(window, [](GLFWwindow* window, int width, int height) {
+            Self(window).OnFramebufferSize(width, height);
+        });
+
+        glfwSetWindowContentScaleCallback(window, [](GLFWwindow* window, float xscale, float yscale) {
+            Self(window).OnContentScale(xscale, yscale);
+        });
+
+        if (glfwRawMouseMotionSupported()) {
+            glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        }
+    }
+
+    // ImGui Init
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        spdlog::info("ImGui {}", ImGui::GetVersion());
+    }
 
     // Create Descriptor Pool
     {
@@ -58,9 +108,6 @@ Gui::Gui(
         m_descriptor_pool = device.CreateDescriptorPool(pool_sizes);
     }
 
-    // Init glfw
-    ImGui_ImplGlfw_InitForVulkan(window, true);
-
     // Init Vulkan
     {
         auto init_info = ImGui_ImplVulkan_InitInfo{
@@ -78,6 +125,7 @@ Gui::Gui(
             .Allocator       = nullptr,
             .CheckVkResultFn = nullptr
         };
+        ImGui_ImplGlfw_InitForVulkan(window, true);
         ImGui_ImplVulkan_Init(&init_info, renderpass);
     }
 
@@ -86,14 +134,23 @@ Gui::Gui(
 
     // Add fonts
     {
-        auto font      = GetResource("fonts/Roboto-Regular.ttf");
-        auto font_data = const_cast<unsigned char*>(font.data);
-        auto font_size = narrow_cast<int>(font.size);
+        auto font_config = ImFontConfig();
 
-        ImFontConfig font_config;
         font_config.FontDataOwnedByAtlas = false;
 
-        ImGui::GetIO().Fonts->AddFontFromMemoryTTF(font_data, font_size, 24.0f, &font_config);
+        auto regular = GetResource("fonts/Roboto-Regular.ttf");
+        auto data    = const_cast<unsigned char*>(regular.data);
+        auto size    = narrow_cast<int>(regular.size);
+
+        m_fonts.regular = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, 24.0f, &font_config);
+
+        auto monospace = GetResource("fonts/RobotoMono-Regular.ttf");
+        data           = const_cast<unsigned char*>(monospace.data);
+        size           = narrow_cast<int>(monospace.size);
+
+        font_config.FontDataOwnedByAtlas = false;
+
+        m_fonts.monospace = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, 24.0f, &font_config);
     }
 
     // Upload Fonts
@@ -119,7 +176,45 @@ Gui::~Gui() noexcept
     ImGui::DestroyContext();
 }
 
-void Gui::Update(etna::Extent2D extent, uint32_t min_image_count)
+void Gui::OnKey(int /*key*/, int /*scancode*/, int /*action*/, int /*mods*/)
+{}
+
+void Gui::OnCursorPosition(double xpos, double ypos)
+{
+    auto xposf = etna::narrow_cast<float>(xpos);
+    auto yposf = etna::narrow_cast<float>(ypos);
+
+    if (m_mouse_state.cursor.position.x >= 0.0f) {
+        m_mouse_state.cursor.delta.x = xposf - m_mouse_state.cursor.position.x;
+        m_mouse_state.cursor.delta.y = yposf - m_mouse_state.cursor.position.y;
+    }
+    m_mouse_state.cursor.position.x = xposf;
+    m_mouse_state.cursor.position.y = yposf;
+}
+
+void Gui::OnMouseButton(int button, int action, int /*mods*/)
+{
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        m_mouse_state.buttons.left.is_pressed = action == GLFW_PRESS;
+    }
+    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        m_mouse_state.buttons.right.is_pressed = action == GLFW_PRESS;
+    }
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+        m_mouse_state.buttons.middle.is_pressed = action == GLFW_PRESS;
+    }
+}
+
+void Gui::OnScroll(double /*xoffset*/, double /*yoffset*/)
+{}
+
+void Gui::OnFramebufferSize(int /*width*/, int /*height*/)
+{}
+
+void Gui::OnContentScale(float /*xscale*/, float /*yscale*/)
+{}
+
+void Gui::UpdateViewport(etna::Extent2D extent, uint32_t min_image_count)
 {
     ImGui_ImplVulkan_SetMinImageCount(min_image_count);
     m_extent = extent;
@@ -138,9 +233,9 @@ void Gui::Draw(
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::Begin("Hello, world!");
-    ImGui::Text("This is some useful text.");
-    ImGui::End();
+    for (auto& window : m_windows) {
+        window->Draw();
+    }
 
     ImGui::Render();
 
@@ -161,4 +256,74 @@ void Gui::Draw(
         { PipelineStage::ColorAttachmentOutput },
         { signal_semaphore },
         finished_fence);
+
+    m_mouse_state.cursor.delta.x = 0;
+    m_mouse_state.cursor.delta.y = 0;
+}
+
+bool Gui::IsAnyWindowHovered() const noexcept
+{
+    return ImGui::IsAnyWindowHovered();
+}
+
+void CameraWindow::Draw()
+{
+    using namespace ImGui;
+
+    Begin("Camera");
+
+    {
+        const auto view = m_camera->View();
+        const auto row0 = glm::row(view, 0);
+        const auto row1 = glm::row(view, 1);
+        const auto row2 = glm::row(view, 2);
+        const auto row3 = glm::row(view, 3);
+
+        Text("View");
+        PushFont(m_fonts.monospace);
+        Text("  % f % f % f % f", row0.x, row0.y, row0.z, row0.w);
+        Text("  % f % f % f % f", row1.x, row1.y, row1.z, row1.w);
+        Text("  % f % f % f % f", row2.x, row2.y, row2.z, row2.w);
+        Text("  % f % f % f % f", row3.x, row3.y, row3.z, row3.w);
+        PopFont();
+        Separator();
+    }
+
+    {
+        const auto view = m_camera->Perspective();
+        const auto row0 = glm::row(view, 0);
+        const auto row1 = glm::row(view, 1);
+        const auto row2 = glm::row(view, 2);
+        const auto row3 = glm::row(view, 3);
+
+        Text("Perspective");
+        PushFont(m_fonts.monospace);
+        Text("  % f % f % f % f", row0.x, row0.y, row0.z, row0.w);
+        Text("  % f % f % f % f", row1.x, row1.y, row1.z, row1.w);
+        Text("  % f % f % f % f", row2.x, row2.y, row2.z, row2.w);
+        Text("  % f % f % f % f", row3.x, row3.y, row3.z, row3.w);
+        PopFont();
+        Separator();
+    }
+
+    {
+        const auto position = m_camera->Position();
+
+        Text("Position");
+        PushFont(m_fonts.monospace);
+        Text("  % f % f % f", position.x, position.y, position.z);
+        PopFont();
+        Separator();
+    }
+
+    {
+        const auto center = m_camera->Center();
+
+        Text("Center");
+        PushFont(m_fonts.monospace);
+        Text("  % f % f % f", center.x, center.y, center.z);
+        PopFont();
+    }
+
+    End();
 }

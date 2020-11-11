@@ -39,14 +39,22 @@ enum class CameraUp {
 enum class ObjectView { Front, Back, Left, Right, Top, Bottom };
 
 struct Degrees final {
-    explicit Degrees(float value) noexcept : value(value) {}
+    explicit Degrees(long double value) noexcept : value(static_cast<float>(value)) {}
     float value;
 };
 
+inline Degrees operator"" _deg(long double value) noexcept
+{
+    return Degrees(value);
+}
+
+inline Degrees operator"" _deg(unsigned long long value) noexcept
+{
+    return Degrees(static_cast<long double>(value));
+}
+
 class Camera {
   public:
-    Camera(glm::mat4 view, glm::mat4 perspective) : m_view(view), m_perspective(perspective) {}
-
     static Camera Create(
         Orientation    orientation,
         CameraForward  forward,
@@ -58,8 +66,21 @@ class Camera {
 
     auto View() const noexcept { return m_view; }
     auto Perspective() const noexcept { return m_perspective; }
+    auto Center() const noexcept { return m_center; }
+    auto Position() const noexcept -> glm::vec3;
+
+    void Orbit(Degrees horizontal, Degrees vertical) noexcept;
+
+    void UpdateExtent(etna::Extent2D extent) noexcept;
 
   private:
+    Camera(float fovy, float distance, glm::vec3 center, glm::mat4 view, glm::mat4 perspective)
+        : m_fovy(fovy), m_distance(distance), m_center(center), m_view(view), m_perspective(perspective)
+    {}
+
+    float     m_fovy;
+    float     m_distance;
+    glm::vec3 m_center;
     glm::mat4 m_view;
     glm::mat4 m_perspective;
 };
