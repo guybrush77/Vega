@@ -110,8 +110,8 @@ UniqueInstance Instance::Create(
         .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
         .pNext           = nullptr,
         .flags           = {},
-        .messageSeverity = GetVk(debug_utils_message_severity),
-        .messageType     = GetVk(debug_utils_message_type),
+        .messageSeverity = VkEnum(debug_utils_message_severity),
+        .messageType     = VkEnum(debug_utils_message_type),
         .pfnUserCallback = debug_utils_messenger_callback,
         .pUserData       = nullptr
     };
@@ -123,12 +123,12 @@ UniqueInstance Instance::Create(
             throw_etna_error(__FILE__, __LINE__, "debug_utils_messenger_callback may not be null");
         }
         if (debug_utils_message_severity == DebugUtilsMessageSeverity{}) {
-            debug_create_info.messageSeverity = GetVk(
+            debug_create_info.messageSeverity = VkEnum(
                 DebugUtilsMessageSeverity::Verbose | DebugUtilsMessageSeverity::Info |
                 DebugUtilsMessageSeverity::Warning | DebugUtilsMessageSeverity::Error);
         }
         if (debug_utils_message_type == DebugUtilsMessageType{}) {
-            debug_create_info.messageType = GetVk(
+            debug_create_info.messageType = VkEnum(
                 DebugUtilsMessageType::General | DebugUtilsMessageType::Validation |
                 DebugUtilsMessageType::Performance);
         }
@@ -205,7 +205,7 @@ FormatProperties PhysicalDevice::GetPhysicalDeviceFormatProperties(Format format
 {
     assert(m_physical_device);
 
-    VkFormat           vk_format = GetVk(format);
+    VkFormat           vk_format = VkEnum(format);
     VkFormatProperties vk_format_properties{};
 
     vkGetPhysicalDeviceFormatProperties(m_physical_device, vk_format, &vk_format_properties);

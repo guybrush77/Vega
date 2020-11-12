@@ -18,7 +18,7 @@ UniqueCommandBuffer CommandPool::AllocateCommandBuffer(CommandBufferLevel level)
         .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext              = nullptr,
         .commandPool        = m_command_pool,
-        .level              = GetVk(level),
+        .level              = VkEnum(level),
         .commandBufferCount = 1
     };
 
@@ -54,7 +54,7 @@ void CommandBuffer::Begin(CommandBufferUsage command_buffer_usage_flags)
 
         .sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext            = nullptr,
-        .flags            = GetVk(command_buffer_usage_flags),
+        .flags            = VkEnum(command_buffer_usage_flags),
         .pInheritanceInfo = nullptr
     };
 
@@ -84,7 +84,7 @@ void CommandBuffer::BeginRenderPass(
         .pClearValues    = vk_clear_values.data()
     };
 
-    vkCmdBeginRenderPass(m_command_buffer, &begin_info, GetVk(subpass_contents));
+    vkCmdBeginRenderPass(m_command_buffer, &begin_info, VkEnum(subpass_contents));
 }
 
 void CommandBuffer::EndRenderPass()
@@ -102,7 +102,7 @@ void CommandBuffer::End()
 void CommandBuffer::BindPipeline(PipelineBindPoint pipeline_bind_point, Pipeline pipeline)
 {
     assert(m_command_buffer);
-    vkCmdBindPipeline(m_command_buffer, GetVk(pipeline_bind_point), pipeline);
+    vkCmdBindPipeline(m_command_buffer, VkEnum(pipeline_bind_point), pipeline);
 }
 
 void CommandBuffer::BindVertexBuffers(Buffer buffer)
@@ -122,7 +122,7 @@ void CommandBuffer::BindIndexBuffer(Buffer buffer, IndexType index_type, size_t 
     VkBuffer     vk_buffer = buffer;
     VkDeviceSize vk_offset = narrow_cast<VkDeviceSize>(offset);
 
-    vkCmdBindIndexBuffer(m_command_buffer, vk_buffer, vk_offset, GetVk(index_type));
+    vkCmdBindIndexBuffer(m_command_buffer, vk_buffer, vk_offset, VkEnum(index_type));
 }
 
 void CommandBuffer::BindDescriptorSet(
@@ -136,7 +136,7 @@ void CommandBuffer::BindDescriptorSet(
 
     vkCmdBindDescriptorSets(
         m_command_buffer,
-        GetVk(pipeline_bind_point),
+        VkEnum(pipeline_bind_point),
         pipeline_layout,
         0,
         1,
@@ -178,7 +178,7 @@ void CommandBuffer::PipelineBarrier(
 
     VkImageSubresourceRange subresource_range = {
 
-        .aspectMask     = GetVk(aspect_flags),
+        .aspectMask     = VkEnum(aspect_flags),
         .baseMipLevel   = 0,
         .levelCount     = 1,
         .baseArrayLayer = 0,
@@ -189,10 +189,10 @@ void CommandBuffer::PipelineBarrier(
 
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .pNext               = nullptr,
-        .srcAccessMask       = GetVk(src_access_flags),
-        .dstAccessMask       = GetVk(dst_access_flags),
-        .oldLayout           = GetVk(old_layout),
-        .newLayout           = GetVk(new_layout),
+        .srcAccessMask       = VkEnum(src_access_flags),
+        .dstAccessMask       = VkEnum(dst_access_flags),
+        .oldLayout           = VkEnum(old_layout),
+        .newLayout           = VkEnum(new_layout),
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = image,
@@ -201,8 +201,8 @@ void CommandBuffer::PipelineBarrier(
 
     vkCmdPipelineBarrier(
         m_command_buffer,
-        GetVk(src_stage_flags),
-        GetVk(dst_stage_flags),
+        VkEnum(src_stage_flags),
+        VkEnum(dst_stage_flags),
         {},
         0,
         nullptr,
@@ -224,9 +224,9 @@ void CommandBuffer::CopyImage(
 
     VkImageCopy image_copy = {
 
-        .srcSubresource = { GetVk(image_aspect_flags), 0, 0, 1 },
+        .srcSubresource = { VkEnum(image_aspect_flags), 0, 0, 1 },
         .srcOffset      = { 0, 0, 0 },
-        .dstSubresource = { GetVk(image_aspect_flags), 0, 0, 1 },
+        .dstSubresource = { VkEnum(image_aspect_flags), 0, 0, 1 },
         .dstOffset      = { 0, 0, 0 },
         .extent         = VkExtent3D{ extent.width, extent.height, 1 }
     };
@@ -234,9 +234,9 @@ void CommandBuffer::CopyImage(
     vkCmdCopyImage(
         m_command_buffer,
         src_image,
-        GetVk(src_image_layout),
+        VkEnum(src_image_layout),
         dst_image,
-        GetVk(dst_image_layout),
+        VkEnum(dst_image_layout),
         1,
         &image_copy);
 }

@@ -56,14 +56,14 @@ AttachmentID RenderPass::Builder::AddAttachmentDescription(
     VkAttachmentDescription description = {
 
         .flags          = {},
-        .format         = GetVk(format),
+        .format         = VkEnum(format),
         .samples        = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp         = GetVk(load_op),
-        .storeOp        = GetVk(store_op),
+        .loadOp         = VkEnum(load_op),
+        .storeOp        = VkEnum(store_op),
         .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout  = GetVk(initial_layout),
-        .finalLayout    = GetVk(final_layout)
+        .initialLayout  = VkEnum(initial_layout),
+        .finalLayout    = VkEnum(final_layout)
     };
 
     m_attachment_descriptions.push_back(description);
@@ -76,7 +76,7 @@ AttachmentID RenderPass::Builder::AddAttachmentDescription(
 
 ReferenceID RenderPass::Builder::AddAttachmentReference(AttachmentID attachment_id, ImageLayout image_layout)
 {
-    m_references.push_back({ attachment_id.value, GetVk(image_layout) });
+    m_references.push_back({ attachment_id.value, VkEnum(image_layout) });
     return ReferenceID(m_references.size() - 1);
 }
 
@@ -102,11 +102,11 @@ void RenderPass::Builder::AddSubpassDependency(
 
         .srcSubpass      = src_subpass.value,
         .dstSubpass      = dst_subpass.value,
-        .srcStageMask    = GetVk(src_stage_mask),
-        .dstStageMask    = GetVk(dst_stage_mask),
-        .srcAccessMask   = GetVk(src_access_mask),
-        .dstAccessMask   = GetVk(dst_access_mask),
-        .dependencyFlags = GetVk(dependency_flags)
+        .srcStageMask    = VkEnum(src_stage_mask),
+        .dstStageMask    = VkEnum(dst_stage_mask),
+        .srcAccessMask   = VkEnum(src_access_mask),
+        .dstAccessMask   = VkEnum(dst_access_mask),
+        .dependencyFlags = VkEnum(dependency_flags)
     };
 
     m_subpass_dependencies.push_back(dependency);

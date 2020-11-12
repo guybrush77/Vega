@@ -50,9 +50,9 @@ void DescriptorSetLayout::Builder::AddDescriptorSetLayoutBinding(
     VkDescriptorSetLayoutBinding descriptor_set_layout_binding = {
 
         .binding            = binding,
-        .descriptorType     = GetVk(descriptor_type),
+        .descriptorType     = VkEnum(descriptor_type),
         .descriptorCount    = descriptor_count,
-        .stageFlags         = GetVk(shader_stage_flags),
+        .stageFlags         = VkEnum(shader_stage_flags),
         .pImmutableSamplers = nullptr
     };
 
@@ -129,7 +129,7 @@ WriteDescriptorSet::WriteDescriptorSet(
         .dstBinding       = binding,
         .dstArrayElement  = 0,
         .descriptorCount  = 0,
-        .descriptorType   = GetVk(descriptor_type),
+        .descriptorType   = VkEnum(descriptor_type),
         .pImageInfo       = nullptr,
         .pBufferInfo      = nullptr,
         .pTexelBufferView = nullptr

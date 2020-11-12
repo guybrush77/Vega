@@ -21,7 +21,6 @@ BraceWrapping:
     SplitEmptyRecord: false
 BreakBeforeBraces: Custom
 ColumnLimit: 120
-ContinuationIndentWidth: 0
 Cpp11BracedListStyle: false
 FixNamespaceComments: true
 IndentWidth: 4

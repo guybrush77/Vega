@@ -16,6 +16,7 @@
 #pragma warning(push)           // store current warning state
 #pragma warning(disable : 4100) // unreferenced formal parameter
 #pragma warning(disable : 4127) // conditional expression is constant
+#pragma warning(disable : 4189) // local variable is initialized but not referenced
 #pragma warning(disable : 4324) // structure was padded due to alignment specifier
 
 #elif defined(__GNUC__)
@@ -85,7 +86,7 @@ static etna::UniqueDescriptorPool CreateDescriptorPool(
         }
     }
 
-    auto vk_flags           = GetVk(flags);
+    auto vk_flags           = VkEnum(flags);
     auto vk_pool_size_count = narrow_cast<uint32_t>(pool_size_count);
 
     VkDescriptorPoolCreateInfo create_info = {
@@ -182,17 +183,17 @@ UniqueSwapchainKHR Device::CreateSwapchainKHR(
         .flags                 = {},
         .surface               = surface,
         .minImageCount         = min_image_count,
-        .imageFormat           = GetVk(surface_format.format),
-        .imageColorSpace       = GetVk(surface_format.colorSpace),
+        .imageFormat           = VkEnum(surface_format.format),
+        .imageColorSpace       = VkEnum(surface_format.colorSpace),
         .imageExtent           = extent,
         .imageArrayLayers      = 1,
-        .imageUsage            = GetVk(image_usage),
+        .imageUsage            = VkEnum(image_usage),
         .imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices   = nullptr,
         .preTransform          = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
         .compositeAlpha        = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode           = GetVk(present_mode),
+        .presentMode           = VkEnum(present_mode),
         .clipped               = VK_TRUE,
         .oldSwapchain          = nullptr
     };
@@ -210,7 +211,7 @@ UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsage buffer_usage_fla
         .pNext                 = nullptr,
         .flags                 = {},
         .size                  = narrow_cast<VkDeviceSize>(size),
-        .usage                 = GetVk(buffer_usage_flags),
+        .usage                 = VkEnum(buffer_usage_flags),
         .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices   = nullptr
@@ -260,7 +261,7 @@ UniqueCommandPool Device::CreateCommandPool(uint32_t queue_family_index, Command
 
         .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .pNext            = nullptr,
-        .flags            = GetVk(command_pool_create_flags),
+        .flags            = VkEnum(command_pool_create_flags),
         .queueFamilyIndex = queue_family_index
     };
 
@@ -275,7 +276,7 @@ auto Device::CreateFence(FenceCreate fence_flags) -> UniqueFence
 
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .pNext = nullptr,
-        .flags = GetVk(fence_flags)
+        .flags = VkEnum(fence_flags)
     };
 
     return Fence::Create(m_device, create_info);
@@ -354,13 +355,13 @@ UniqueImage2D Device::CreateImage(
         .pNext                 = nullptr,
         .flags                 = {},
         .imageType             = VK_IMAGE_TYPE_2D,
-        .format                = GetVk(format),
+        .format                = VkEnum(format),
         .extent                = { extent.width, extent.height, 1 },
         .mipLevels             = 1,
         .arrayLayers           = 1,
         .samples               = VK_SAMPLE_COUNT_1_BIT,
-        .tiling                = GetVk(image_tiling),
-        .usage                 = GetVk(image_usage_flags),
+        .tiling                = VkEnum(image_tiling),
+        .usage                 = VkEnum(image_usage_flags),
         .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices   = nullptr,
@@ -374,7 +375,7 @@ UniqueImageView2D Device::CreateImageView(Image2D image, ImageAspect image_aspec
 {
     assert(m_device);
 
-    auto vk_aspect_flags = GetVk(image_aspect_flags);
+    auto vk_aspect_flags = VkEnum(image_aspect_flags);
 
     auto create_info = VkImageViewCreateInfo{
 
@@ -383,7 +384,7 @@ UniqueImageView2D Device::CreateImageView(Image2D image, ImageAspect image_aspec
         .flags            = {},
         .image            = image,
         .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-        .format           = GetVk(image.Format()),
+        .format           = VkEnum(image.Format()),
         .components       = {},
         .subresourceRange = { vk_aspect_flags, 0, 1, 0, 1 }
     };
@@ -428,7 +429,7 @@ auto Device::GetSwapchainImagesKHR(SwapchainKHR swapchain) const -> std::vector<
 
     std::vector<Image2D> images(count);
     for (uint32_t i = 0; i < count; ++i) {
-        images[i] = Image2D(vk_images[i], nullptr, nullptr, GetVk(swapchain.Format()));
+        images[i] = Image2D(vk_images[i], nullptr, nullptr, VkEnum(swapchain.Format()));
     }
 
     return images;

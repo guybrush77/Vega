@@ -177,7 +177,7 @@ void Pipeline::Builder::AddShaderStage(
         .sType               = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .pNext               = nullptr,
         .flags               = {},
-        .stage               = static_cast<VkShaderStageFlagBits>(GetVk(shader_stage_flags)),
+        .stage               = static_cast<VkShaderStageFlagBits>(VkEnum(shader_stage_flags)),
         .module              = shader_module,
         .pName               = entry_function,
         .pSpecializationInfo = nullptr
@@ -194,7 +194,7 @@ void Pipeline::Builder::AddVertexInputBindingDescription(
     size_t          stride,
     VertexInputRate vertex_input_rate)
 {
-    m_binding_descriptions.push_back({ binding, narrow_cast<uint32_t>(stride), GetVk(vertex_input_rate) });
+    m_binding_descriptions.push_back({ binding, narrow_cast<uint32_t>(stride), VkEnum(vertex_input_rate) });
 
     m_vertex_input_state.vertexBindingDescriptionCount = narrow_cast<uint32_t>(m_binding_descriptions.size());
     m_vertex_input_state.pVertexBindingDescriptions    = m_binding_descriptions.data();
@@ -206,7 +206,7 @@ void Pipeline::Builder::AddVertexInputAttributeDescription(
     Format   format,
     size_t   offset)
 {
-    m_attribute_descriptions.push_back({ location, binding, GetVk(format), narrow_cast<uint32_t>(offset) });
+    m_attribute_descriptions.push_back({ location, binding, VkEnum(format), narrow_cast<uint32_t>(offset) });
 
     m_vertex_input_state.vertexAttributeDescriptionCount = narrow_cast<uint32_t>(m_attribute_descriptions.size());
     m_vertex_input_state.pVertexAttributeDescriptions    = m_attribute_descriptions.data();
@@ -274,7 +274,7 @@ void Pipeline::Builder::SetDepthState(DepthTest depth_test, DepthWrite depth_wri
 {
     m_depth_stencil_state.depthTestEnable  = depth_test == DepthTest::Enable;
     m_depth_stencil_state.depthWriteEnable = depth_write == DepthWrite::Enable;
-    m_depth_stencil_state.depthCompareOp   = GetVk(compare_op);
+    m_depth_stencil_state.depthCompareOp   = VkEnum(compare_op);
 }
 
 UniquePipelineLayout PipelineLayout::Create(VkDevice vk_device, const VkPipelineLayoutCreateInfo& create_info)

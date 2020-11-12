@@ -8,25 +8,25 @@
 #include <utility>
 #include <vulkan/vulkan_core.h>
 
-#define ETNA_DEFINE_ENUM_ANALOGUE(type)                                                                                \
-    inline constexpr auto GetVk(type val) noexcept { return static_cast<Vk##type>(val); }
+#define ETNA_DEFINE_ENUM_ANALOGUE(type) \
+    inline constexpr auto VkEnum(type val) noexcept { return static_cast<Vk##type>(val); }
 
-#define ETNA_DEFINE_FLAGS_ANALOGUE(type, vk_type)                                                                      \
-    inline constexpr auto GetVk(type val) noexcept { return static_cast<vk_type>(val); }                               \
-    template <>                                                                                                        \
-    struct composable_flags<type> : std::true_type {};                                                                 \
+#define ETNA_DEFINE_FLAGS_ANALOGUE(type, vk_type) \
+    inline constexpr auto VkEnum(type val) noexcept { return static_cast<vk_type>(val); } \
+    template <> \
+    struct composable_flags<type> : std::true_type {}; \
     using type##Mask = Mask<type>;
 
 template <typename>
 struct etna_vertex_attribute_type_trait;
 
-#define DECLARE_VERTEX_ATTRIBUTE_TYPE(attribute_type, vulkan_type)                                                     \
-    template <>                                                                                                        \
-    struct etna_vertex_attribute_type_trait<attribute_type> {                                                          \
-        static constexpr etna::Format value = vulkan_type;                                                             \
+#define DECLARE_VERTEX_ATTRIBUTE_TYPE(attribute_type, vulkan_type) \
+    template <> \
+    struct etna_vertex_attribute_type_trait<attribute_type> { \
+        static constexpr etna::Format value = vulkan_type; \
     };
 
-#define formatof(vertex_type, field)                                                                                   \
+#define formatof(vertex_type, field) \
     etna_vertex_attribute_type_trait<decltype(std::declval<vertex_type>().field)>::value
 
 namespace etna {
@@ -868,7 +868,7 @@ class Mask final {
 
     constexpr operator E() const noexcept { return static_cast<E>(m_value); }
 
-    constexpr auto GetVk() const noexcept { return m_value; }
+    constexpr auto VkEnum() const noexcept { return m_value; }
 
   private:
     template <EnumClass T>
@@ -880,9 +880,9 @@ class Mask final {
 };
 
 template <EnumClass E>
-inline auto GetVk(Mask<E> mask) noexcept
+inline auto VkEnum(Mask<E> mask) noexcept
 {
-    return mask.GetVk();
+    return mask.VkEnum();
 }
 
 template <EnumClass E>
@@ -920,7 +920,7 @@ struct DescriptorPoolSize final {
     DescriptorType type;
     uint32_t       descriptorCount;
 
-    constexpr operator VkDescriptorPoolSize() const noexcept { return { GetVk(type), descriptorCount }; };
+    constexpr operator VkDescriptorPoolSize() const noexcept { return { VkEnum(type), descriptorCount }; };
 };
 
 struct QueueFamilyProperties final {
@@ -931,7 +931,7 @@ struct QueueFamilyProperties final {
 
     constexpr operator VkQueueFamilyProperties() const noexcept
     {
-        return { GetVk(queueFlags), queueCount, timestampValidBits, minImageTransferGranularity };
+        return { VkEnum(queueFlags), queueCount, timestampValidBits, minImageTransferGranularity };
     }
 };
 
@@ -941,7 +941,7 @@ struct SurfaceFormatKHR final {
 
     bool operator==(const SurfaceFormatKHR&) const = default;
 
-    constexpr operator VkSurfaceFormatKHR() const noexcept { return { GetVk(format), GetVk(colorSpace) }; }
+    constexpr operator VkSurfaceFormatKHR() const noexcept { return { VkEnum(format), VkEnum(colorSpace) }; }
 };
 
 struct FormatProperties {
@@ -953,7 +953,7 @@ struct FormatProperties {
 
     constexpr operator VkFormatProperties() const noexcept
     {
-        return { GetVk(linearTilingFeatures), GetVk(optimalTilingFeatures), GetVk(bufferFeatures) };
+        return { VkEnum(linearTilingFeatures), VkEnum(optimalTilingFeatures), VkEnum(bufferFeatures) };
     }
 };
 

@@ -90,7 +90,7 @@ class DescriptorPool {
     bool operator==(const DescriptorPool& rhs) const = default;
 
     auto AllocateDescriptorSet(DescriptorSetLayout descriptor_set_layout) -> DescriptorSet;
-    auto AllocateDescriptorSets(size_t count, DescriptorSetLayout descriptor_set_layout)->std::vector<DescriptorSet>;
+    auto AllocateDescriptorSets(size_t count, DescriptorSetLayout descriptor_set_layout) -> std::vector<DescriptorSet>;
 
   private:
     template <typename>
