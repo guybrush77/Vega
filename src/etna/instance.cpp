@@ -1,6 +1,6 @@
-#include "instance.hpp"
-#include "device.hpp"
-#include "surface.hpp"
+#include "etna/instance.hpp"
+#include "etna/device.hpp"
+#include "etna/surface.hpp"
 
 #include <algorithm>
 #include <cassert>

@@ -1,4 +1,4 @@
-#include "core.hpp"
+#include "etna/core.hpp"
 
 #include <array>
 #include <doctest/doctest.h>

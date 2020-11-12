@@ -1,11 +1,11 @@
 #pragma once
 
-#include "descriptor.hpp"
-#include "device.hpp"
-#include "image.hpp"
-#include "instance.hpp"
-#include "queue.hpp"
-#include "renderpass.hpp"
+#include "etna/descriptor.hpp"
+#include "etna/device.hpp"
+#include "etna/image.hpp"
+#include "etna/instance.hpp"
+#include "etna/queue.hpp"
+#include "etna/renderpass.hpp"
 
 #include <memory>
 

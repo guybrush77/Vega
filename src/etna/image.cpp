@@ -1,5 +1,5 @@
-#include "image.hpp"
-#include "renderpass.hpp"
+#include "etna/image.hpp"
+#include "etna/renderpass.hpp"
 
 #include <cassert>
 #include <vk_mem_alloc.h>

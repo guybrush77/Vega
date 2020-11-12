@@ -1,4 +1,4 @@
-#include "etna.hpp"
+#include "etna/etna.hpp"
 
 #include "camera.hpp"
 #include "gui.hpp"

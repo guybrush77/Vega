@@ -1,4 +1,4 @@
-#include "shader.hpp"
+#include "etna/shader.hpp"
 
 #include <cassert>
 

@@ -1,4 +1,4 @@
-#include "renderpass.hpp"
+#include "etna/renderpass.hpp"
 
 #include <cassert>
 

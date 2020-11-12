@@ -1,4 +1,4 @@
-#include "synchronization.hpp"
+#include "etna/synchronization.hpp"
 
 #include <cassert>
 

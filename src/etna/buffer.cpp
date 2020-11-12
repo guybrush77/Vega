@@ -1,4 +1,4 @@
-#include "buffer.hpp"
+#include "etna/buffer.hpp"
 
 #include <cassert>
 #include <vk_mem_alloc.h>

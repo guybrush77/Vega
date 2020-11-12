@@ -1,4 +1,4 @@
-#include "include/core.hpp"
+#include "etna/core.hpp"
 
 #include <stdexcept>
 

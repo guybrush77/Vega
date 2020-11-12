@@ -1,8 +1,8 @@
 #include "gui.hpp"
-
 #include "camera.hpp"
-#include "command.hpp"
-#include "synchronization.hpp"
+
+#include "etna/command.hpp"
+#include "etna/synchronization.hpp"
 
 #include "utils/resource.hpp"
 

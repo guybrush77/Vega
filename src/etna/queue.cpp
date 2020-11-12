@@ -1,7 +1,7 @@
-#include "queue.hpp"
-#include "command.hpp"
-#include "swapchain.hpp"
-#include "synchronization.hpp"
+#include "etna/queue.hpp"
+#include "etna/command.hpp"
+#include "etna/swapchain.hpp"
+#include "etna/synchronization.hpp"
 
 #include <algorithm>
 #include <array>

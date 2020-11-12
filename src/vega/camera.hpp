@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core.hpp"
+#include "etna/core.hpp"
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtx/transform.hpp>
