@@ -1,9 +1,12 @@
 #include "gui.hpp"
 #include "camera.hpp"
+#include "platform.hpp"
+#include "utils/resource.hpp"
 
 #include "etna/command.hpp"
 #include "etna/synchronization.hpp"
-#include "utils/resource.hpp"
+
+BEGIN_DISABLE_WARNINGS
 
 #include "examples/imgui_impl_glfw.h"
 #include "examples/imgui_impl_vulkan.h"
@@ -15,6 +18,8 @@
 #include <glm/gtc/matrix_access.hpp>
 
 #include <spdlog/spdlog.h>
+
+END_DISABLE_WARNINGS
 
 namespace {
 

@@ -108,7 +108,7 @@ Camera Camera::Create(
         obj_depth  = dimensions.height;
     }
 
-    auto aspect   = etna::narrow_cast<float>(extent.width) / extent.height;
+    auto aspect   = etna::narrow_cast<float>(extent.width) / etna::narrow_cast<float>(extent.height);
     auto fovy_rad = radians(fovy.value);
     auto fovx_rad = aspect * fovy_rad;
     auto center   = aabb.Center();
@@ -130,10 +130,8 @@ Camera Camera::Create(
 
 glm::vec3 Camera::Position() const noexcept
 {
-    using namespace glm;
+    auto forward = glm::vec3(glm::row(m_view, 2));
 
-    auto up      = vec3(row(m_view, 1));
-    auto forward = vec3(row(m_view, 2));
     return m_distance * forward + m_center;
 }
 
@@ -154,7 +152,7 @@ void Camera::Orbit(Degrees horizontal, Degrees vertical) noexcept
 
 void Camera::UpdateExtent(etna::Extent2D extent) noexcept
 {
-    auto aspect = etna::narrow_cast<float>(extent.width) / extent.height;
+    auto aspect = etna::narrow_cast<float>(extent.width) / etna::narrow_cast<float>(extent.height);
 
     m_perspective = glm::perspectiveRH(m_fovy, aspect, 1.0f, 1000.0f);
 }

@@ -2,7 +2,10 @@
 
 #include "camera.hpp"
 #include "gui.hpp"
+#include "platform.hpp"
 #include "utils/resource.hpp"
+
+BEGIN_DISABLE_WARNINGS
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -15,6 +18,8 @@
 #include <glm/matrix.hpp>
 
 #include <spdlog/spdlog.h>
+
+END_DISABLE_WARNINGS
 
 #include <algorithm>
 #include <optional>

@@ -1,10 +1,16 @@
 #pragma once
 
+#include "platform.hpp"
+
 #include "etna/core.hpp"
+
+BEGIN_DISABLE_WARNINGS
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtx/transform.hpp>
 #include <glm/matrix.hpp>
+
+END_DISABLE_WARNINGS
 
 struct AABB final {
     glm::vec3 min;
