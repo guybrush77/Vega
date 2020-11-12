@@ -1,7 +1,6 @@
 #pragma once
 
 #if defined(_MSC_VER)
-#pragma warning(push)
 #pragma warning(disable : 26812) // Silences: The enum type 'TYPE' is unscoped. Prefer 'enum class' over 'enum'
 #endif
 

@@ -3,7 +3,6 @@
 
 #include "etna/command.hpp"
 #include "etna/synchronization.hpp"
-
 #include "utils/resource.hpp"
 
 #include "examples/imgui_impl_glfw.h"
@@ -13,20 +12,12 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#endif
-
 #include <glm/gtc/matrix_access.hpp>
 
 #include <spdlog/spdlog.h>
 
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-
 namespace {
+
 static Gui& Self(GLFWwindow* window)
 {
     return *static_cast<Gui*>(glfwGetWindowUserPointer(window));

@@ -1,29 +1,7 @@
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4100 4127 6386 26495 26812 26819 4324 6011 6387 26110)
-#elif defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wtype-limits"
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#pragma GCC diagnostic ignored "-Wconversion"
-#endif
-
-#define VMA_IMPLEMENTATION
-#include <vk_mem_alloc.h>
-
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#elif defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-
+#include "etna/device.hpp"
 #include "etna/buffer.hpp"
 #include "etna/command.hpp"
 #include "etna/descriptor.hpp"
-#include "etna/device.hpp"
 #include "etna/image.hpp"
 #include "etna/pipeline.hpp"
 #include "etna/queue.hpp"
@@ -32,6 +10,47 @@
 #include "etna/surface.hpp"
 #include "etna/swapchain.hpp"
 #include "etna/synchronization.hpp"
+
+#if defined(_MSC_VER)
+
+#pragma warning(push)
+#pragma warning(push)           // store current warning state
+#pragma warning(disable : 4100) // unreferenced formal parameter
+#pragma warning(disable : 4127) // conditional expression is constant
+#pragma warning(disable : 4324) // structure was padded due to alignment specifier
+
+#elif defined(__GNUC__)
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wtype-limits"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#pragma GCC diagnostic ignored "-Wconversion"
+
+#elif defined(__clang__)
+
+// TODO
+
+#endif
+
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
+
+#if defined(_MSC_VER)
+
+#pragma warning(pop)
+
+#elif defined(__GNUC__)
+
+#pragma GCC diagnostic pop
+
+#elif defined(__clang__)
+
+// TODO
+
+#endif
 
 #include <algorithm>
 #include <array>
@@ -227,10 +246,8 @@ Return<uint32_t> Device::AcquireNextImageKHR(SwapchainKHR swapchain, Semaphore s
     case VK_TIMEOUT:
     case VK_NOT_READY:
     case VK_SUBOPTIMAL_KHR:
-    case VK_ERROR_OUT_OF_DATE_KHR:
-        return Return(image_index, static_cast<Result>(result));
-    default:
-        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
+    case VK_ERROR_OUT_OF_DATE_KHR: return Return(image_index, static_cast<Result>(result));
+    default: throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 
     return {};

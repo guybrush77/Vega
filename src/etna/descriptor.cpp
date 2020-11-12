@@ -1,5 +1,5 @@
-#include "descriptor.hpp"
-#include "buffer.hpp"
+#include "etna/descriptor.hpp"
+#include "etna/buffer.hpp"
 
 #include <cassert>
 

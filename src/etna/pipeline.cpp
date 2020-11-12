@@ -1,7 +1,7 @@
-#include "pipeline.hpp"
-#include "descriptor.hpp"
-#include "renderpass.hpp"
-#include "shader.hpp"
+#include "etna/pipeline.hpp"
+#include "etna/descriptor.hpp"
+#include "etna/renderpass.hpp"
+#include "etna/shader.hpp"
 
 #include <cassert>
 

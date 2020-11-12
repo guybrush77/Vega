@@ -2,31 +2,19 @@
 
 #include "camera.hpp"
 #include "gui.hpp"
+#include "utils/resource.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
-#include "utils/resource.hpp"
-
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#pragma GCC diagnostic ignored "-Wconversion"
-#pragma GCC diagnostic ignored "-Wvolatile"
-#endif
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtx/transform.hpp>
 #include <glm/matrix.hpp>
 
 #include <spdlog/spdlog.h>
-
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
 
 #include <algorithm>
 #include <optional>
