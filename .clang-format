@@ -4,6 +4,7 @@ AlignConsecutiveAssignments: true
 AlignConsecutiveMacros: true
 AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: true
+AlignEscapedNewlines: DontAlign
 AlignTrailingComments: true
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
@@ -20,7 +21,7 @@ BraceWrapping:
     SplitEmptyRecord: false
 BreakBeforeBraces: Custom
 ColumnLimit: 120
-ContinuationIndentWidth: 4
+ContinuationIndentWidth: 0
 Cpp11BracedListStyle: false
 FixNamespaceComments: true
 IndentWidth: 4

@@ -13,7 +13,6 @@
 
 #if defined(_MSC_VER)
 
-#pragma warning(push)
 #pragma warning(push)           // store current warning state
 #pragma warning(disable : 4100) // unreferenced formal parameter
 #pragma warning(disable : 4127) // conditional expression is constant
