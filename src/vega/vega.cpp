@@ -189,6 +189,11 @@ std::vector<T> RemoveDuplicates(std::initializer_list<T> l)
     return v;
 }
 
+constexpr float ComputeAspect(etna::Extent2D extent)
+{
+    return etna::narrow_cast<float>(extent.width) / etna::narrow_cast<float>(extent.height);
+}
+
 VkBool32 VulkanDebugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT vk_message_severity,
     VkDebugUtilsMessageTypeFlagsEXT,
@@ -616,7 +621,7 @@ class RenderContext {
         if (m_mouse_look == MouseLook::Orbit) {
             auto rot_x = Degrees(mouse_state.cursor.delta.x);
             auto rot_y = Degrees(mouse_state.cursor.delta.y);
-            m_camera->Orbit(rot_x, rot_y);
+            m_camera->Orbit(rot_y, rot_x);
         }
     }
 
@@ -651,7 +656,7 @@ class RenderContext {
 
             auto extent = framebuffers.extent;
             auto model  = glm::identity<glm::mat4>();
-            auto mvp    = MVP{ model, m_camera->View(), m_camera->Perspective() };
+            auto mvp    = MVP{ model, m_camera->GetViewMatrix(), m_camera->GetPerspectiveMatrix() };
 
             m_descriptor_manager->UpdateDescriptorSet(frame.index, mvp);
 
@@ -1047,12 +1052,12 @@ int main()
 
     auto camera = Camera::Create(
         Orientation::RightHanded,
-        CameraForward::PositiveY,
-        CameraUp::PositiveZ,
+        ForwardAxis::PositiveY,
+        UpAxis::PositiveZ,
         ObjectView::Front,
-        extent,
         mesh.aabb,
-        45_deg);
+        Degrees(45),
+        ComputeAspect(extent));
 
     Gui gui(
         *instance,
@@ -1118,7 +1123,7 @@ int main()
             extent.width  = narrow_cast<uint32_t>(width);
             extent.height = narrow_cast<uint32_t>(height);
             gui.UpdateViewport(extent, swapchain_manager.MinImageCount());
-            camera.UpdateExtent(extent);
+            camera.UpdateAspect(ComputeAspect(extent));
         }
         default: break;
         }

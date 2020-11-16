@@ -2,7 +2,7 @@
 
 #include "platform.hpp"
 
-#include "etna/core.hpp"
+#include "utils/math.hpp"
 
 BEGIN_DISABLE_WARNINGS
 
@@ -12,81 +12,65 @@ BEGIN_DISABLE_WARNINGS
 
 END_DISABLE_WARNINGS
 
-struct AABB final {
-    glm::vec3 min;
-    glm::vec3 max;
-
-    auto Center() const noexcept { return 0.5f * (min + max); }
-    auto ExtentX() const noexcept { return max.x - min.x; }
-    auto ExtentY() const noexcept { return max.y - min.y; }
-    auto ExtentZ() const noexcept { return max.z - min.z; }
-};
+enum class CameraUp { Normal, Inverted };
 
 enum class Orientation { RightHanded, LeftHanded };
 
-enum class CameraForward {
-    PositiveX,
-    NegativeX,
-    PositiveY,
-    NegativeY,
-    PositiveZ,
-    NegativeZ,
-};
+enum class ForwardAxis { PositiveX, NegativeX, PositiveY, NegativeY, PositiveZ, NegativeZ };
 
-enum class CameraUp {
-    PositiveX,
-    NegativeX,
-    PositiveY,
-    NegativeY,
-    PositiveZ,
-    NegativeZ,
-};
+enum class UpAxis { PositiveX, NegativeX, PositiveY, NegativeY, PositiveZ, NegativeZ };
 
 enum class ObjectView { Front, Back, Left, Right, Top, Bottom };
 
-struct Degrees final {
-    explicit Degrees(long double value) noexcept : value(static_cast<float>(value)) {}
-    float value;
+struct SphericalCoordinates {
+    Radians  elevation;
+    Radians  azimuth;
+    CameraUp camera_up;
 };
-
-inline Degrees operator"" _deg(long double value) noexcept
-{
-    return Degrees(value);
-}
-
-inline Degrees operator"" _deg(unsigned long long value) noexcept
-{
-    return Degrees(static_cast<long double>(value));
-}
 
 class Camera {
   public:
     static Camera Create(
-        Orientation    orientation,
-        CameraForward  forward,
-        CameraUp       up,
-        ObjectView     camera_view,
-        etna::Extent2D extent,
-        AABB           aabb,
-        Degrees        fovy);
+        Orientation orientation,
+        ForwardAxis forward,
+        UpAxis      up,
+        ObjectView  camera_view,
+        AABB        aabb,
+        Degrees     fovy,
+        float       aspect);
 
-    auto View() const noexcept { return m_view; }
-    auto Perspective() const noexcept { return m_perspective; }
-    auto Center() const noexcept { return m_center; }
-    auto Position() const noexcept -> glm::vec3;
+    auto GetViewMatrix() const noexcept -> glm::mat4;
+    auto GetPerspectiveMatrix() const noexcept { return m_perspective; }
+    auto GetSphericalCoordinates() const noexcept -> SphericalCoordinates;
 
-    void Orbit(Degrees horizontal, Degrees vertical) noexcept;
-
-    void UpdateExtent(etna::Extent2D extent) noexcept;
+    void Orbit(Degrees elevation_delta, Degrees azimuth_delta) noexcept;
+    void UpdateAspect(float aspect) noexcept;
+    void UpdateView(Radians elevation, Radians azimuth, CameraUp camera_up) noexcept;
 
   private:
-    Camera(float fovy, float distance, glm::vec3 center, glm::mat4 view, glm::mat4 perspective)
-        : m_fovy(fovy), m_distance(distance), m_center(center), m_view(view), m_perspective(perspective)
+    Camera(
+        Radians   elevation,
+        Radians   azimuth,
+        float     distance,
+        Radians   fovy,
+        float     aspect,
+        glm::vec3 forward,
+        glm::vec3 up,
+        glm::vec3 right,
+        glm::vec3 center,
+        glm::mat4 perspective)
+        : m_elevation(elevation), m_azimuth(azimuth), m_distance(distance), m_fovy(fovy), m_aspect(aspect),
+          m_forward(forward), m_up(up), m_right(right), m_center(center), m_perspective(perspective)
     {}
 
-    float     m_fovy;
+    Radians   m_elevation;
+    Radians   m_azimuth;
     float     m_distance;
+    Radians   m_fovy;
+    float     m_aspect;
+    glm::vec3 m_forward;
+    glm::vec3 m_up;
+    glm::vec3 m_right;
     glm::vec3 m_center;
-    glm::mat4 m_view;
     glm::mat4 m_perspective;
 };

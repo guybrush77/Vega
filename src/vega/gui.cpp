@@ -269,7 +269,24 @@ void CameraWindow::Draw()
     Begin("Camera");
 
     {
-        const auto view = m_camera->View();
+        const char* up_labels[] = { "Normal", "Inverted" };
+
+        auto coordinates = m_camera->GetSphericalCoordinates();
+        auto elevation   = coordinates.elevation;
+        auto azimuth     = coordinates.azimuth;
+        auto camera_up   = coordinates.camera_up == CameraUp::Normal ? 0 : 1;
+
+        bool elevation_changed = SliderAngle("Elevation", &elevation.value, -90, 90);
+        bool azimuth_changed   = SliderAngle("Azimuth", &azimuth.value, -180, 180);
+        bool camera_up_changed = SliderInt("Camera Up", &camera_up, 0, 1, up_labels[camera_up]);
+
+        if (elevation_changed || azimuth_changed || camera_up_changed) {
+            m_camera->UpdateView(elevation, azimuth, camera_up == 0 ? CameraUp::Normal : CameraUp::Inverted);
+        }
+    }
+
+    {
+        const auto view = m_camera->GetViewMatrix();
         const auto row0 = glm::row(view, 0);
         const auto row1 = glm::row(view, 1);
         const auto row2 = glm::row(view, 2);
@@ -286,7 +303,7 @@ void CameraWindow::Draw()
     }
 
     {
-        const auto view = m_camera->Perspective();
+        const auto view = m_camera->GetPerspectiveMatrix();
         const auto row0 = glm::row(view, 0);
         const auto row1 = glm::row(view, 1);
         const auto row2 = glm::row(view, 2);
@@ -300,25 +317,6 @@ void CameraWindow::Draw()
         Text("  % f % f % f % f", row3.x, row3.y, row3.z, row3.w);
         PopFont();
         Separator();
-    }
-
-    {
-        const auto position = m_camera->Position();
-
-        Text("Position");
-        PushFont(m_fonts.monospace);
-        Text("  % f % f % f", position.x, position.y, position.z);
-        PopFont();
-        Separator();
-    }
-
-    {
-        const auto center = m_camera->Center();
-
-        Text("Center");
-        PushFont(m_fonts.monospace);
-        Text("  % f % f % f", center.x, center.y, center.z);
-        PopFont();
     }
 
     End();
