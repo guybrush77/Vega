@@ -276,6 +276,7 @@ void CameraWindow::Draw()
     Begin("Camera");
 
     auto coordinates = m_camera->GetSphericalCoordinates();
+    auto offset      = m_camera->GetOffset();
     auto limits      = m_camera->GetLimits();
     auto labels      = std::array{ "Normal", "Inverted" };
     auto label_index = static_cast<int>(coordinates.camera_up);
@@ -306,9 +307,16 @@ void CameraWindow::Draw()
 
     bool camera_up_changed = SliderInt("Camera Up", &label_index, 0, 1, labels[label_index]);
 
-    if (elevation_changed || azimuth_changed || camera_up_changed || distance_changed) {
+    if (elevation_changed || azimuth_changed || distance_changed || camera_up_changed) {
         coordinates.camera_up = static_cast<CameraUp>(label_index);
         m_camera->UpdateSphericalCoordinates(coordinates);
+    }
+
+    bool offset_h_changed = SliderFloat("Track H", &offset.horizontal, limits.offset_x.min, limits.offset_x.max);
+    bool offset_v_changed = SliderFloat("Track V", &offset.vertical, limits.offset_y.min, limits.offset_y.max);
+
+    if (offset_h_changed || offset_v_changed) {
+        m_camera->UpdateOffset(offset);
     }
 
     {

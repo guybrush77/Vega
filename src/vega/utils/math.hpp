@@ -7,9 +7,9 @@ BEGIN_DISABLE_WARNINGS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/vec3.hpp>
 
-#include <compare>
-
 END_DISABLE_WARNINGS
+
+#include <compare>
 
 struct AABB final {
     glm::vec3 min;

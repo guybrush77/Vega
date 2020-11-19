@@ -29,6 +29,11 @@ struct SphericalCoordinates {
     float    distance;
 };
 
+struct Offset final {
+    float horizontal;
+    float vertical;
+};
+
 struct CameraLimits {
     struct {
         Degrees min;
@@ -42,6 +47,14 @@ struct CameraLimits {
         float min;
         float max;
     } distance;
+    struct {
+        float min;
+        float max;
+    } offset_x;
+    struct {
+        float min;
+        float max;
+    } offset_y;
 };
 
 class Camera {
@@ -58,15 +71,18 @@ class Camera {
         float       far  = FLT_MAX);
 
     auto GetViewMatrix() const noexcept -> glm::mat4;
-    auto GetPerspectiveMatrix() const noexcept { return m_perspective.matrix; }
+    auto GetPerspectiveMatrix() const noexcept -> glm::mat4;
     auto GetSphericalCoordinates() const noexcept -> SphericalCoordinates;
+    auto GetOffset() const noexcept -> Offset;
     auto GetLimits() const noexcept -> const CameraLimits&;
 
-    void Orbit(Degrees elevation_delta, Degrees azimuth_delta) noexcept;
+    void Orbit(Degrees delta_elevation, Degrees delta_azimuth) noexcept;
     void Zoom(float delta) noexcept;
+    void Track(float delta_x, float delta_y) noexcept;
 
     void UpdateAspect(float aspect) noexcept;
     void UpdateSphericalCoordinates(const SphericalCoordinates& coordinates) noexcept;
+    void UpdateOffset(Offset offset) noexcept;
 
   private:
     Camera(
@@ -77,38 +93,37 @@ class Camera {
         glm::vec3    up,
         glm::vec3    right,
         Radians      fovy,
-        glm::mat4    perspective,
         float        aspect,
         float        near,
         float        far,
         AABB         object,
         CameraLimits limits)
-        : m_coords{ elevation, azimuth, distance }, m_basis{ forward, up, right },
-          m_perspective{ fovy, aspect, near, far, perspective }, m_object{ object }, m_limits{ limits }
+        : m_coords{ elevation, azimuth, distance }, m_basis{ forward, up, right }, m_offset{},
+          m_perspective{ fovy, aspect, near, far }, m_object{ object }, m_limits{ limits }
     {}
 
-    struct Coords {
-        Radians elevation;
-        Radians azimuth;
-        float   distance;
+    struct Coords final {
+        Radians elevation{};
+        Radians azimuth{};
+        float   distance{};
     };
 
-    struct Basis {
-        glm::vec3 forward;
-        glm::vec3 up;
-        glm::vec3 right;
+    struct Basis final {
+        glm::vec3 forward{};
+        glm::vec3 up{};
+        glm::vec3 right{};
     };
 
-    struct Perspective {
-        Radians   fovy;
-        float     aspect;
-        float     near;
-        float     far;
-        glm::mat4 matrix;
+    struct Perspective final {
+        Radians fovy{};
+        float   aspect{};
+        float   near{};
+        float   far{};
     };
 
     Coords       m_coords;
     Basis        m_basis;
+    Offset       m_offset;
     Perspective  m_perspective;
     AABB         m_object;
     CameraLimits m_limits;

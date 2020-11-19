@@ -119,12 +119,14 @@ Camera Camera::Create(
         obj_depth  = dimensions.height;
     }
 
-    auto fovy_rad     = ToRadians(fovy);
-    auto fovx_rad     = aspect * fovy_rad;
-    auto distance     = 0.0f;
-    auto min_distance = std::min(std::min(obj_width, obj_height), obj_depth);
-    auto max_distance = 500 * min_distance;
-    auto perspective  = perspectiveRH(fovy_rad.value, aspect, near, far);
+    auto fovy_rad      = ToRadians(fovy);
+    auto fovx_rad      = aspect * fovy_rad;
+    auto distance      = 0.0f;
+    auto min_dimension = std::min({ obj_width, obj_height, obj_depth });
+    auto min_distance  = min_dimension;
+    auto max_distance  = 1000 * min_dimension;
+    auto min_offset    = -10 * min_dimension;
+    auto max_offset    = +10 * min_dimension;
 
     if (auto obj_aspect = obj_width / obj_height; obj_aspect > aspect) {
         distance = (0.5f * obj_depth) + (0.5f * obj_width) / tanf(0.5f * fovx_rad.value);
@@ -136,23 +138,12 @@ Camera Camera::Create(
 
         .elevation = { -90_deg, 90_deg },
         .azimuth   = { -180_deg, 180_deg },
-        .distance  = { min_distance, max_distance }
+        .distance  = { min_distance, max_distance },
+        .offset_x  = { min_offset, max_offset },
+        .offset_y  = { min_offset, max_offset }
     };
 
-    return Camera(
-        elevation,
-        azimuth,
-        distance,
-        forward,
-        up,
-        right,
-        fovy_rad,
-        perspective,
-        aspect,
-        near,
-        far,
-        object,
-        limits);
+    return Camera(elevation, azimuth, distance, forward, up, right, fovy_rad, aspect, near, far, object, limits);
 }
 
 glm::mat4 Camera::GetViewMatrix() const noexcept
@@ -160,13 +151,20 @@ glm::mat4 Camera::GetViewMatrix() const noexcept
     using namespace glm;
 
     bool flip   = m_coords.elevation >= Radians::HalfPi || m_coords.elevation <= -Radians::HalfPi;
-    auto center = m_object.Center();
     auto view   = identity<mat4>();
     view        = rotate(view, m_coords.elevation.value, m_basis.right);
     view        = rotate(view, m_coords.azimuth.value, m_basis.up);
+    auto pan_x  = vec3(row(view, 0)) * m_offset.horizontal;
+    auto pan_y  = vec3(row(view, 2)) * m_offset.vertical;
+    auto center = m_object.Center() - pan_x + pan_y;
     auto eye    = -m_coords.distance * m_basis.forward * mat3(view) + center;
 
     return lookAtRH(eye, center, flip ? -m_basis.up : m_basis.up);
+}
+
+glm::mat4 Camera::GetPerspectiveMatrix() const noexcept
+{
+    return glm::perspectiveRH(m_perspective.fovy.value, m_perspective.aspect, m_perspective.near, m_perspective.far);
 }
 
 SphericalCoordinates Camera::GetSphericalCoordinates() const noexcept
@@ -187,23 +185,28 @@ SphericalCoordinates Camera::GetSphericalCoordinates() const noexcept
     return SphericalCoordinates{ elevation, m_coords.azimuth, camera_up, m_coords.distance };
 }
 
+Offset Camera::GetOffset() const noexcept
+{
+    return m_offset;
+}
+
 const CameraLimits& Camera::GetLimits() const noexcept
 {
     return m_limits;
 }
 
-void Camera::Orbit(Degrees elevation_delta, Degrees azimuth_delta) noexcept
+void Camera::Orbit(Degrees delta_elevation, Degrees delta_azimuth) noexcept
 {
     using namespace glm;
 
-    m_coords.azimuth = m_coords.azimuth + ToRadians(azimuth_delta);
+    m_coords.azimuth = m_coords.azimuth + ToRadians(delta_azimuth);
     if (m_coords.azimuth > Radians::Pi) {
         m_coords.azimuth = m_coords.azimuth - Radians::TwoPi;
     } else if (m_coords.azimuth < -Radians::Pi) {
         m_coords.azimuth = m_coords.azimuth + Radians::TwoPi;
     }
 
-    m_coords.elevation = m_coords.elevation + ToRadians(elevation_delta);
+    m_coords.elevation = m_coords.elevation + ToRadians(delta_elevation);
     if (m_coords.elevation > Radians::Pi) {
         m_coords.elevation = m_coords.elevation - Radians::TwoPi;
     } else if (m_coords.elevation < -Radians::Pi) {
@@ -222,10 +225,24 @@ void Camera::Zoom(float delta) noexcept
     m_coords.distance = std::clamp(distance, m_limits.distance.min, m_limits.distance.max);
 }
 
+void Camera::Track(float delta_x, float delta_y) noexcept
+{
+    using namespace glm;
+
+    constexpr auto delta_modifier = 0.5f;
+
+    auto step     = std::min(std::min(m_object.ExtentX(), m_object.ExtentY()), m_object.ExtentZ());
+    auto distance = (m_coords.distance - m_limits.distance.min) / m_limits.distance.max;
+    auto step_x   = step * (0.01f + distance) * delta_x * delta_modifier;
+    auto step_y   = step * (0.01f + distance) * delta_y * delta_modifier;
+
+    m_offset.horizontal = m_offset.horizontal + step_x;
+    m_offset.vertical   = m_offset.vertical + step_y;
+}
+
 void Camera::UpdateAspect(float aspect) noexcept
 {
     m_perspective.aspect = aspect;
-    m_perspective.matrix = glm::perspectiveRH(m_perspective.fovy.value, aspect, m_perspective.near, m_perspective.far);
 }
 
 void Camera::UpdateSphericalCoordinates(const SphericalCoordinates& coordinates) noexcept
@@ -253,4 +270,9 @@ void Camera::UpdateSphericalCoordinates(const SphericalCoordinates& coordinates)
     }
 
     m_coords.distance = std::clamp(coordinates.distance, m_limits.distance.min, m_limits.distance.max);
+}
+
+void Camera::UpdateOffset(Offset offset) noexcept
+{
+    m_offset = offset;
 }

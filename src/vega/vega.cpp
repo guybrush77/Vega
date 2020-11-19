@@ -572,7 +572,7 @@ class SwapchainManager {
 class RenderContext {
   public:
     enum Status { WindowClosed, SwapchainOutOfDate };
-    enum class MouseLook { None, Orbit, Zoom, Pan };
+    enum class MouseLook { None, Orbit, Zoom, Track };
 
     RenderContext(
         etna::Device         device,
@@ -612,7 +612,7 @@ class RenderContext {
             if (mouse_state.buttons.left.is_pressed) {
                 m_mouse_look = MouseLook::Orbit;
             } else if (mouse_state.buttons.right.is_pressed) {
-                m_mouse_look = MouseLook::Pan;
+                m_mouse_look = MouseLook::Track;
             } else if (mouse_state.buttons.middle.is_pressed) {
                 m_mouse_look = MouseLook::Zoom;
             } else {
@@ -627,6 +627,8 @@ class RenderContext {
             auto rot_x = Degrees(mouse_state.cursor.delta.x);
             auto rot_y = Degrees(mouse_state.cursor.delta.y);
             m_camera->Orbit(rot_y, rot_x);
+        } else if (m_mouse_look == MouseLook::Track) {
+            m_camera->Track(mouse_state.cursor.delta.x, mouse_state.cursor.delta.y);
         } else if (m_mouse_look == MouseLook::Zoom) {
             m_camera->Zoom(mouse_state.cursor.delta.y);
         }
