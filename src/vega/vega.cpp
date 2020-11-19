@@ -592,9 +592,10 @@ class RenderContext {
 
     void ProcessUserInput()
     {
-        auto mouse_state = m_gui->GetMouseState();
+        auto mouse_state  = m_gui->GetMouseState();
+        bool is_scrolling = mouse_state.scroll.y != 0;
 
-        if (mouse_state.buttons.IsNonePressed()) {
+        if (mouse_state.buttons.IsNonePressed() && !is_scrolling) {
             if (m_mouse_look != MouseLook::None) {
                 glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             }
@@ -614,6 +615,10 @@ class RenderContext {
                 m_mouse_look = MouseLook::Pan;
             } else if (mouse_state.buttons.middle.is_pressed) {
                 m_mouse_look = MouseLook::Zoom;
+            } else {
+                constexpr auto scroll_sensitivity = 6;
+                m_camera->Zoom(scroll_sensitivity * mouse_state.scroll.y);
+                return;
             }
             glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
@@ -622,6 +627,8 @@ class RenderContext {
             auto rot_x = Degrees(mouse_state.cursor.delta.x);
             auto rot_y = Degrees(mouse_state.cursor.delta.y);
             m_camera->Orbit(rot_y, rot_x);
+        } else if (m_mouse_look == MouseLook::Zoom) {
+            m_camera->Zoom(mouse_state.cursor.delta.y);
         }
     }
 
@@ -1056,7 +1063,7 @@ int main()
         UpAxis::PositiveZ,
         ObjectView::Front,
         mesh.aabb,
-        Degrees(45),
+        45_deg,
         ComputeAspect(extent));
 
     Gui gui(

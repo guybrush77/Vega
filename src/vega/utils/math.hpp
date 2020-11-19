@@ -1,11 +1,13 @@
 #pragma once
 
 #include "platform.hpp"
-#include <math.h>
+
 BEGIN_DISABLE_WARNINGS
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/vec3.hpp>
+
+#include <compare>
 
 END_DISABLE_WARNINGS
 
@@ -23,11 +25,25 @@ struct Radians final {
     constexpr Radians() noexcept = default;
     constexpr explicit Radians(float value) noexcept : value(value) {}
 
-    Radians operator+=(Radians rhs) noexcept { value += rhs.value; }
-    Radians operator-=(Radians rhs) noexcept { value -= rhs.value; }
+    constexpr auto operator<=>(const Radians&) const = default;
+
+    constexpr Radians operator-() const noexcept { return Radians(-value); }
+
+    static const Radians HalfPi;
+    static const Radians Pi;
+    static const Radians TwoPi;
 
     float value = 0;
 };
+
+inline const Radians Radians::HalfPi = Radians(1.57079632679f);
+inline const Radians Radians::Pi     = Radians(3.14159265359f);
+inline const Radians Radians::TwoPi  = Radians(6.28318530718f);
+
+inline constexpr Radians operator""_rad(unsigned long long int value) noexcept
+{
+    return Radians(static_cast<float>(value));
+}
 
 inline constexpr Radians operator*(float lhs, Radians rhs) noexcept
 {
@@ -39,7 +55,7 @@ inline constexpr Radians operator+(Radians lhs, Radians rhs) noexcept
     return Radians(lhs.value + rhs.value);
 }
 
-inline Radians operator-(Radians lhs, Radians rhs) noexcept
+inline constexpr Radians operator-(Radians lhs, Radians rhs) noexcept
 {
     return Radians(lhs.value - rhs.value);
 }
@@ -48,11 +64,17 @@ struct Degrees final {
     constexpr Degrees() noexcept = default;
     constexpr explicit Degrees(float value) noexcept : value(value) {}
 
+    Degrees operator-() noexcept { return Degrees(-value); }
     Degrees operator+=(Degrees rhs) noexcept { value += rhs.value; }
     Degrees operator-=(Degrees rhs) noexcept { value -= rhs.value; }
 
     float value = 0;
 };
+
+inline constexpr Degrees operator""_deg(unsigned long long int value) noexcept
+{
+    return Degrees(static_cast<float>(value));
+}
 
 inline constexpr Degrees operator+(Degrees lhs, Degrees rhs) noexcept
 {

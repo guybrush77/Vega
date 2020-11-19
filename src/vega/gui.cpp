@@ -21,6 +21,8 @@ BEGIN_DISABLE_WARNINGS
 
 END_DISABLE_WARNINGS
 
+#include <array>
+
 namespace {
 
 static Gui& Self(GLFWwindow* window)
@@ -201,8 +203,11 @@ void Gui::OnMouseButton(int button, int action, int /*mods*/)
     }
 }
 
-void Gui::OnScroll(double /*xoffset*/, double /*yoffset*/)
-{}
+void Gui::OnScroll(double xoffset, double yoffset)
+{
+    m_mouse_state.scroll.x = etna::narrow_cast<float>(xoffset);
+    m_mouse_state.scroll.y = etna::narrow_cast<float>(yoffset);
+}
 
 void Gui::OnFramebufferSize(int /*width*/, int /*height*/)
 {}
@@ -255,6 +260,8 @@ void Gui::Draw(
 
     m_mouse_state.cursor.delta.x = 0;
     m_mouse_state.cursor.delta.y = 0;
+    m_mouse_state.scroll.x       = 0;
+    m_mouse_state.scroll.y       = 0;
 }
 
 bool Gui::IsAnyWindowHovered() const noexcept
@@ -268,21 +275,40 @@ void CameraWindow::Draw()
 
     Begin("Camera");
 
-    {
-        const char* up_labels[] = { "Normal", "Inverted" };
+    auto coordinates = m_camera->GetSphericalCoordinates();
+    auto limits      = m_camera->GetLimits();
+    auto labels      = std::array{ "Normal", "Inverted" };
+    auto label_index = static_cast<int>(coordinates.camera_up);
 
-        auto coordinates = m_camera->GetSphericalCoordinates();
-        auto elevation   = coordinates.elevation;
-        auto azimuth     = coordinates.azimuth;
-        auto camera_up   = coordinates.camera_up == CameraUp::Normal ? 0 : 1;
+    bool elevation_changed = SliderAngle(
+        "Elevation",
+        &coordinates.elevation.value,
+        limits.elevation.min.value,
+        limits.elevation.max.value,
+        "%.1f deg",
+        ImGuiSliderFlags_AlwaysClamp);
 
-        bool elevation_changed = SliderAngle("Elevation", &elevation.value, -90, 90);
-        bool azimuth_changed   = SliderAngle("Azimuth", &azimuth.value, -180, 180);
-        bool camera_up_changed = SliderInt("Camera Up", &camera_up, 0, 1, up_labels[camera_up]);
+    bool azimuth_changed = SliderAngle(
+        "Azimuth",
+        &coordinates.azimuth.value,
+        limits.azimuth.min.value,
+        limits.azimuth.max.value,
+        "%.1f deg",
+        ImGuiSliderFlags_AlwaysClamp);
 
-        if (elevation_changed || azimuth_changed || camera_up_changed) {
-            m_camera->UpdateView(elevation, azimuth, camera_up == 0 ? CameraUp::Normal : CameraUp::Inverted);
-        }
+    bool distance_changed = SliderFloat(
+        "Distance",
+        &coordinates.distance,
+        limits.distance.min,
+        limits.distance.max,
+        nullptr,
+        ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
+
+    bool camera_up_changed = SliderInt("Camera Up", &label_index, 0, 1, labels[label_index]);
+
+    if (elevation_changed || azimuth_changed || camera_up_changed || distance_changed) {
+        coordinates.camera_up = static_cast<CameraUp>(label_index);
+        m_camera->UpdateSphericalCoordinates(coordinates);
     }
 
     {

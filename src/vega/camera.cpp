@@ -4,6 +4,8 @@
 #include <glm/gtx/transform.hpp>
 #include <stdexcept>
 
+#include <algorithm>
+
 namespace {
 
 struct Dimensions final {
@@ -77,49 +79,52 @@ static glm::vec3 GetUpVector(UpAxis up)
 
 Camera Camera::Create(
     Orientation orientation,
-    ForwardAxis forward,
-    UpAxis      up,
-    ObjectView  camera_view,
-    AABB        aabb,
+    ForwardAxis forward_axis,
+    UpAxis      up_axis,
+    ObjectView  object_view,
+    AABB        object,
     Degrees     fovy,
-    float       aspect)
+    float       aspect,
+    float       near,
+    float       far)
 {
     using namespace glm;
 
-    auto vec_up      = GetUpVector(up);
-    auto vec_forward = GetForwardVector(forward);
-    auto cross_prod  = cross(vec_forward, vec_up);
-    auto vec_right   = orientation == Orientation::RightHanded ? cross_prod : -cross_prod;
-    auto dimensions  = ComputeDimensions(forward, up, aabb);
-    auto elevation   = Radians(0);
-    auto azimuth     = Radians(0);
-    auto obj_width   = float{};
-    auto obj_height  = float{};
-    auto obj_depth   = float{};
+    auto up         = GetUpVector(up_axis);
+    auto forward    = GetForwardVector(forward_axis);
+    auto right      = orientation == Orientation::RightHanded ? cross(forward, up) : -cross(forward, up);
+    auto dimensions = ComputeDimensions(forward_axis, up_axis, object);
+    auto elevation  = 0_rad;
+    auto azimuth    = 0_rad;
+    auto obj_width  = 0.0f;
+    auto obj_height = 0.0f;
+    auto obj_depth  = 0.0f;
 
-    if (camera_view == ObjectView::Front || camera_view == ObjectView::Back) {
-        azimuth    = camera_view == ObjectView::Front ? Radians(0) : Radians(pi<float>());
+    if (object_view == ObjectView::Front || object_view == ObjectView::Back) {
+        azimuth    = object_view == ObjectView::Front ? Radians(0) : Radians(pi<float>());
         obj_width  = dimensions.width;
         obj_height = dimensions.height;
         obj_depth  = dimensions.depth;
     }
-    if (camera_view == ObjectView::Left || camera_view == ObjectView::Right) {
-        azimuth    = camera_view == ObjectView::Left ? Radians(half_pi<float>()) : Radians(-half_pi<float>());
+    if (object_view == ObjectView::Left || object_view == ObjectView::Right) {
+        azimuth    = object_view == ObjectView::Left ? Radians(half_pi<float>()) : Radians(-half_pi<float>());
         obj_width  = dimensions.depth;
         obj_height = dimensions.height;
         obj_depth  = dimensions.width;
     }
-    if (camera_view == ObjectView::Top || camera_view == ObjectView::Bottom) {
-        elevation  = camera_view == ObjectView::Top ? Radians(half_pi<float>()) : Radians(-half_pi<float>());
+    if (object_view == ObjectView::Top || object_view == ObjectView::Bottom) {
+        elevation  = object_view == ObjectView::Top ? Radians(half_pi<float>()) : Radians(-half_pi<float>());
         obj_width  = dimensions.width;
         obj_height = dimensions.depth;
         obj_depth  = dimensions.height;
     }
 
-    auto fovy_rad = ToRadians(fovy);
-    auto fovx_rad = aspect * fovy_rad;
-    auto center   = aabb.Center();
-    auto distance = 0.0f;
+    auto fovy_rad     = ToRadians(fovy);
+    auto fovx_rad     = aspect * fovy_rad;
+    auto distance     = 0.0f;
+    auto min_distance = std::min(std::min(obj_width, obj_height), obj_depth);
+    auto max_distance = 500 * min_distance;
+    auto perspective  = perspectiveRH(fovy_rad.value, aspect, near, far);
 
     if (auto obj_aspect = obj_width / obj_height; obj_aspect > aspect) {
         distance = (0.5f * obj_depth) + (0.5f * obj_width) / tanf(0.5f * fovx_rad.value);
@@ -127,22 +132,41 @@ Camera Camera::Create(
         distance = (0.5f * obj_depth) + (0.5f * obj_height) / tanf(0.5f * fovy_rad.value);
     }
 
-    auto perspective = glm::perspectiveRH(fovy_rad.value, aspect, 0.1f, 1000.0f);
+    auto limits = CameraLimits{
 
-    return Camera(elevation, azimuth, distance, fovy_rad, aspect, vec_forward, vec_up, vec_right, center, perspective);
+        .elevation = { -90_deg, 90_deg },
+        .azimuth   = { -180_deg, 180_deg },
+        .distance  = { min_distance, max_distance }
+    };
+
+    return Camera(
+        elevation,
+        azimuth,
+        distance,
+        forward,
+        up,
+        right,
+        fovy_rad,
+        perspective,
+        aspect,
+        near,
+        far,
+        object,
+        limits);
 }
 
 glm::mat4 Camera::GetViewMatrix() const noexcept
 {
     using namespace glm;
 
-    bool flip = m_elevation.value >= half_pi<float>() || m_elevation.value <= -half_pi<float>();
-    auto view = identity<mat4>();
-    view      = rotate(view, m_elevation.value, m_right);
-    view      = rotate(view, m_azimuth.value, m_up);
-    auto eye  = -m_distance * m_forward * mat3(view) + m_center;
+    bool flip   = m_coords.elevation >= Radians::HalfPi || m_coords.elevation <= -Radians::HalfPi;
+    auto center = m_object.Center();
+    auto view   = identity<mat4>();
+    view        = rotate(view, m_coords.elevation.value, m_basis.right);
+    view        = rotate(view, m_coords.azimuth.value, m_basis.up);
+    auto eye    = -m_coords.distance * m_basis.forward * mat3(view) + center;
 
-    return lookAtRH(eye, m_center, flip ? -m_up : m_up);
+    return lookAtRH(eye, center, flip ? -m_basis.up : m_basis.up);
 }
 
 SphericalCoordinates Camera::GetSphericalCoordinates() const noexcept
@@ -150,66 +174,83 @@ SphericalCoordinates Camera::GetSphericalCoordinates() const noexcept
     using namespace glm;
 
     auto camera_up = CameraUp::Normal;
-    auto elevation = m_elevation.value;
+    auto elevation = m_coords.elevation;
 
-    if (elevation > half_pi<float>()) {
-        elevation = pi<float>() - elevation;
+    if (elevation > Radians::HalfPi) {
+        elevation = Radians::Pi - elevation;
         camera_up = CameraUp::Inverted;
-    } else if (elevation < -half_pi<float>()) {
-        elevation = -(pi<float>() + elevation);
+    } else if (elevation < -Radians::HalfPi) {
+        elevation = -Radians::Pi - elevation;
         camera_up = CameraUp::Inverted;
     }
 
-    return SphericalCoordinates{ Radians(elevation), Radians(m_azimuth), camera_up };
+    return SphericalCoordinates{ elevation, m_coords.azimuth, camera_up, m_coords.distance };
+}
+
+const CameraLimits& Camera::GetLimits() const noexcept
+{
+    return m_limits;
 }
 
 void Camera::Orbit(Degrees elevation_delta, Degrees azimuth_delta) noexcept
 {
     using namespace glm;
 
-    m_azimuth = m_azimuth + ToRadians(azimuth_delta);
-    if (m_azimuth.value > pi<float>()) {
-        m_azimuth.value -= two_pi<float>();
-    } else if (m_azimuth.value < -pi<float>()) {
-        m_azimuth.value += two_pi<float>();
+    m_coords.azimuth = m_coords.azimuth + ToRadians(azimuth_delta);
+    if (m_coords.azimuth > Radians::Pi) {
+        m_coords.azimuth = m_coords.azimuth - Radians::TwoPi;
+    } else if (m_coords.azimuth < -Radians::Pi) {
+        m_coords.azimuth = m_coords.azimuth + Radians::TwoPi;
     }
 
-    m_elevation = m_elevation + ToRadians(elevation_delta);
-    if (m_elevation.value > pi<float>()) {
-        m_elevation.value -= two_pi<float>();
-    } else if (m_elevation.value < -pi<float>()) {
-        m_elevation.value += two_pi<float>();
+    m_coords.elevation = m_coords.elevation + ToRadians(elevation_delta);
+    if (m_coords.elevation > Radians::Pi) {
+        m_coords.elevation = m_coords.elevation - Radians::TwoPi;
+    } else if (m_coords.elevation < -Radians::Pi) {
+        m_coords.elevation = m_coords.elevation + Radians::TwoPi;
     }
+}
+
+void Camera::Zoom(float delta) noexcept
+{
+    constexpr auto delta_modifier = 0.01f;
+
+    auto distance     = (m_coords.distance - m_limits.distance.min) / m_limits.distance.max;
+    auto step         = (0.01f + distance) * delta * delta_modifier;
+    distance          = std::clamp(distance + step, 0.0f, 1.0f);
+    distance          = (distance * m_limits.distance.max) + m_limits.distance.min;
+    m_coords.distance = std::clamp(distance, m_limits.distance.min, m_limits.distance.max);
 }
 
 void Camera::UpdateAspect(float aspect) noexcept
 {
-    m_perspective = glm::perspectiveRH(m_fovy.value, aspect, 0.1f, 1000.0f);
+    m_perspective.aspect = aspect;
+    m_perspective.matrix = glm::perspectiveRH(m_perspective.fovy.value, aspect, m_perspective.near, m_perspective.far);
 }
 
-void Camera::UpdateView(Radians elevation, Radians azimuth, CameraUp camera_up) noexcept
+void Camera::UpdateSphericalCoordinates(const SphericalCoordinates& coordinates) noexcept
 {
     using namespace glm;
 
-    m_azimuth = azimuth;
-    if (m_azimuth.value > pi<float>()) {
-        m_azimuth.value -= two_pi<float>();
-    } else if (m_azimuth.value < -pi<float>()) {
-        m_azimuth.value += two_pi<float>();
+    m_coords.azimuth = coordinates.azimuth;
+    if (m_coords.azimuth > Radians::Pi) {
+        m_coords.azimuth = m_coords.azimuth - Radians::TwoPi;
+    } else if (m_coords.azimuth < -Radians::Pi) {
+        m_coords.azimuth = m_coords.azimuth + Radians::TwoPi;
     }
 
-    if (camera_up == CameraUp::Inverted) {
-        if (elevation.value >= 0) {
-            elevation.value = pi<float>() - elevation.value;
-        } else if (elevation.value < 0) {
-            elevation.value = -pi<float>() - elevation.value;
-        }
+    m_coords.elevation = coordinates.elevation;
+
+    if (coordinates.camera_up == CameraUp::Inverted) {
+        m_coords.elevation = (m_coords.elevation >= 0_rad) ? (Radians::Pi - m_coords.elevation)
+                                                           : (-Radians::Pi - m_coords.elevation);
     }
 
-    m_elevation = elevation;
-    if (m_elevation.value > pi<float>()) {
-        m_elevation.value -= two_pi<float>();
-    } else if (m_elevation.value < -pi<float>()) {
-        m_elevation.value += two_pi<float>();
+    if (m_coords.elevation > Radians::Pi) {
+        m_coords.elevation = m_coords.elevation - Radians::TwoPi;
+    } else if (m_coords.elevation < -Radians::Pi) {
+        m_coords.elevation = m_coords.elevation + Radians::TwoPi;
     }
+
+    m_coords.distance = std::clamp(coordinates.distance, m_limits.distance.min, m_limits.distance.max);
 }

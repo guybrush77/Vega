@@ -26,51 +26,90 @@ struct SphericalCoordinates {
     Radians  elevation;
     Radians  azimuth;
     CameraUp camera_up;
+    float    distance;
+};
+
+struct CameraLimits {
+    struct {
+        Degrees min;
+        Degrees max;
+    } elevation;
+    struct {
+        Degrees min;
+        Degrees max;
+    } azimuth;
+    struct {
+        float min;
+        float max;
+    } distance;
 };
 
 class Camera {
   public:
     static Camera Create(
         Orientation orientation,
-        ForwardAxis forward,
-        UpAxis      up,
-        ObjectView  camera_view,
-        AABB        aabb,
+        ForwardAxis forward_axis,
+        UpAxis      up_axis,
+        ObjectView  object_view,
+        AABB        object,
         Degrees     fovy,
-        float       aspect);
+        float       aspect,
+        float       near = 0.1f,
+        float       far  = FLT_MAX);
 
     auto GetViewMatrix() const noexcept -> glm::mat4;
-    auto GetPerspectiveMatrix() const noexcept { return m_perspective; }
+    auto GetPerspectiveMatrix() const noexcept { return m_perspective.matrix; }
     auto GetSphericalCoordinates() const noexcept -> SphericalCoordinates;
+    auto GetLimits() const noexcept -> const CameraLimits&;
 
     void Orbit(Degrees elevation_delta, Degrees azimuth_delta) noexcept;
+    void Zoom(float delta) noexcept;
+
     void UpdateAspect(float aspect) noexcept;
-    void UpdateView(Radians elevation, Radians azimuth, CameraUp camera_up) noexcept;
+    void UpdateSphericalCoordinates(const SphericalCoordinates& coordinates) noexcept;
 
   private:
     Camera(
-        Radians   elevation,
-        Radians   azimuth,
-        float     distance,
-        Radians   fovy,
-        float     aspect,
-        glm::vec3 forward,
-        glm::vec3 up,
-        glm::vec3 right,
-        glm::vec3 center,
-        glm::mat4 perspective)
-        : m_elevation(elevation), m_azimuth(azimuth), m_distance(distance), m_fovy(fovy), m_aspect(aspect),
-          m_forward(forward), m_up(up), m_right(right), m_center(center), m_perspective(perspective)
+        Radians      elevation,
+        Radians      azimuth,
+        float        distance,
+        glm::vec3    forward,
+        glm::vec3    up,
+        glm::vec3    right,
+        Radians      fovy,
+        glm::mat4    perspective,
+        float        aspect,
+        float        near,
+        float        far,
+        AABB         object,
+        CameraLimits limits)
+        : m_coords{ elevation, azimuth, distance }, m_basis{ forward, up, right },
+          m_perspective{ fovy, aspect, near, far, perspective }, m_object{ object }, m_limits{ limits }
     {}
 
-    Radians   m_elevation;
-    Radians   m_azimuth;
-    float     m_distance;
-    Radians   m_fovy;
-    float     m_aspect;
-    glm::vec3 m_forward;
-    glm::vec3 m_up;
-    glm::vec3 m_right;
-    glm::vec3 m_center;
-    glm::mat4 m_perspective;
+    struct Coords {
+        Radians elevation;
+        Radians azimuth;
+        float   distance;
+    };
+
+    struct Basis {
+        glm::vec3 forward;
+        glm::vec3 up;
+        glm::vec3 right;
+    };
+
+    struct Perspective {
+        Radians   fovy;
+        float     aspect;
+        float     near;
+        float     far;
+        glm::mat4 matrix;
+    };
+
+    Coords       m_coords;
+    Basis        m_basis;
+    Perspective  m_perspective;
+    AABB         m_object;
+    CameraLimits m_limits;
 };

@@ -90,12 +90,12 @@ class Gui {
     struct MouseState final {
         struct Cursor final {
             struct Position final {
-                float x;
-                float y;
+                float x = 0;
+                float y = 0;
             } position;
             struct Delta final {
-                float x;
-                float y;
+                float x = 0;
+                float y = 0;
             } delta;
         } cursor;
         struct Buttons final {
@@ -114,6 +114,10 @@ class Gui {
             bool IsAnyPressed() const noexcept { return left.is_pressed || right.is_pressed || middle.is_pressed; }
             bool IsNonePressed() const noexcept { return !left.is_pressed && !right.is_pressed && !middle.is_pressed; }
         } buttons;
+        struct Scroll final {
+            float x = 0;
+            float y = 0;
+        } scroll;
     };
 
   private:
