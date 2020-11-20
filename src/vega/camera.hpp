@@ -34,6 +34,13 @@ struct Offset final {
     float vertical;
 };
 
+struct Perspective final {
+    Radians fovy;
+    float   aspect;
+    float   near;
+    float   far;
+};
+
 struct CameraLimits {
     struct {
         Degrees min;
@@ -55,6 +62,10 @@ struct CameraLimits {
         float min;
         float max;
     } offset_y;
+    struct {
+        Degrees min;
+        Degrees max;
+    } fov_y;
 };
 
 class Camera {
@@ -67,13 +78,14 @@ class Camera {
         AABB        object,
         Degrees     fovy,
         float       aspect,
-        float       near = 0.1f,
-        float       far  = FLT_MAX);
+        float       near = 0,
+        float       far  = std::numeric_limits<float>::infinity());
 
     auto GetViewMatrix() const noexcept -> glm::mat4;
     auto GetPerspectiveMatrix() const noexcept -> glm::mat4;
     auto GetSphericalCoordinates() const noexcept -> SphericalCoordinates;
     auto GetOffset() const noexcept -> Offset;
+    auto GetPerspective() const noexcept -> Perspective;
     auto GetLimits() const noexcept -> const CameraLimits&;
 
     void Orbit(Degrees delta_elevation, Degrees delta_azimuth) noexcept;
@@ -83,6 +95,7 @@ class Camera {
     void UpdateAspect(float aspect) noexcept;
     void UpdateSphericalCoordinates(const SphericalCoordinates& coordinates) noexcept;
     void UpdateOffset(Offset offset) noexcept;
+    void UpdatePerspective(Perspective perspective) noexcept;
 
   private:
     Camera(
@@ -112,13 +125,6 @@ class Camera {
         glm::vec3 forward{};
         glm::vec3 up{};
         glm::vec3 right{};
-    };
-
-    struct Perspective final {
-        Radians fovy{};
-        float   aspect{};
-        float   near{};
-        float   far{};
     };
 
     Coords       m_coords;

@@ -123,7 +123,7 @@ Camera Camera::Create(
     auto fovx_rad      = aspect * fovy_rad;
     auto distance      = 0.0f;
     auto min_dimension = std::min({ obj_width, obj_height, obj_depth });
-    auto min_distance  = min_dimension;
+    auto min_distance  = 0.1f * min_dimension;
     auto max_distance  = 1000 * min_dimension;
     auto min_offset    = -10 * min_dimension;
     auto max_offset    = +10 * min_dimension;
@@ -140,8 +140,12 @@ Camera Camera::Create(
         .azimuth   = { -180_deg, 180_deg },
         .distance  = { min_distance, max_distance },
         .offset_x  = { min_offset, max_offset },
-        .offset_y  = { min_offset, max_offset }
+        .offset_y  = { min_offset, max_offset },
+        .fov_y     = { 5_deg, 90_deg }
     };
+
+    distance = std::clamp(distance, limits.distance.min, limits.distance.max);
+    fovy_rad = std::clamp(fovy_rad, ToRadians(limits.fov_y.min), ToRadians(limits.fov_y.max));
 
     return Camera(elevation, azimuth, distance, forward, up, right, fovy_rad, aspect, near, far, object, limits);
 }
@@ -164,7 +168,11 @@ glm::mat4 Camera::GetViewMatrix() const noexcept
 
 glm::mat4 Camera::GetPerspectiveMatrix() const noexcept
 {
-    return glm::perspectiveRH(m_perspective.fovy.value, m_perspective.aspect, m_perspective.near, m_perspective.far);
+    auto dim  = std::min({ m_object.ExtentX(), m_object.ExtentY(), m_object.ExtentZ() });
+    auto near = std::max(dim * 0.01f, m_perspective.near);
+    auto far  = std::min(std::numeric_limits<float>::max(), m_perspective.far);
+
+    return glm::perspectiveRH(m_perspective.fovy.value, m_perspective.aspect, near, far);
 }
 
 SphericalCoordinates Camera::GetSphericalCoordinates() const noexcept
@@ -188,6 +196,11 @@ SphericalCoordinates Camera::GetSphericalCoordinates() const noexcept
 Offset Camera::GetOffset() const noexcept
 {
     return m_offset;
+}
+
+Perspective Camera::GetPerspective() const noexcept
+{
+    return m_perspective;
 }
 
 const CameraLimits& Camera::GetLimits() const noexcept
@@ -275,4 +288,9 @@ void Camera::UpdateSphericalCoordinates(const SphericalCoordinates& coordinates)
 void Camera::UpdateOffset(Offset offset) noexcept
 {
     m_offset = offset;
+}
+
+void Camera::UpdatePerspective(Perspective perspective) noexcept
+{
+    m_perspective = perspective;
 }

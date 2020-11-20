@@ -22,6 +22,7 @@ BEGIN_DISABLE_WARNINGS
 END_DISABLE_WARNINGS
 
 #include <array>
+#include <charconv>
 
 namespace {
 
@@ -275,6 +276,8 @@ void CameraWindow::Draw()
 
     Begin("Camera");
 
+    Text("View");
+
     auto coordinates = m_camera->GetSphericalCoordinates();
     auto offset      = m_camera->GetOffset();
     auto limits      = m_camera->GetLimits();
@@ -319,38 +322,44 @@ void CameraWindow::Draw()
         m_camera->UpdateOffset(offset);
     }
 
-    {
-        const auto view = m_camera->GetViewMatrix();
-        const auto row0 = glm::row(view, 0);
-        const auto row1 = glm::row(view, 1);
-        const auto row2 = glm::row(view, 2);
-        const auto row3 = glm::row(view, 3);
+    auto perspective = m_camera->GetPerspective();
 
-        Text("View");
-        PushFont(m_fonts.monospace);
-        Text("  % f % f % f % f", row0.x, row0.y, row0.z, row0.w);
-        Text("  % f % f % f % f", row1.x, row1.y, row1.z, row1.w);
-        Text("  % f % f % f % f", row2.x, row2.y, row2.z, row2.w);
-        Text("  % f % f % f % f", row3.x, row3.y, row3.z, row3.w);
-        PopFont();
-        Separator();
-    }
+    Text("Perspective");
 
-    {
-        const auto view = m_camera->GetPerspectiveMatrix();
-        const auto row0 = glm::row(view, 0);
-        const auto row1 = glm::row(view, 1);
-        const auto row2 = glm::row(view, 2);
-        const auto row3 = glm::row(view, 3);
+    bool fovy_changed = SliderAngle(
+        "Fov Y",
+        &perspective.fovy.value,
+        limits.fov_y.min.value,
+        limits.fov_y.max.value,
+        "%.1f deg",
+        ImGuiSliderFlags_AlwaysClamp);
 
-        Text("Perspective");
-        PushFont(m_fonts.monospace);
-        Text("  % f % f % f % f", row0.x, row0.y, row0.z, row0.w);
-        Text("  % f % f % f % f", row1.x, row1.y, row1.z, row1.w);
-        Text("  % f % f % f % f", row2.x, row2.y, row2.z, row2.w);
-        Text("  % f % f % f % f", row3.x, row3.y, row3.z, row3.w);
-        PopFont();
-        Separator();
+    constexpr auto Success = std::errc();
+
+    auto near_text = std::array<char, 16>();
+
+    std::to_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+
+    bool near_changed = ImGui::InputText(
+        "Near",
+        near_text.data(),
+        sizeof(near_text),
+        ImGuiInputTextFlags_CharsScientific | ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
+
+    auto far_text = std::array<char, 16>();
+
+    assert(Success == std::to_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far).ec);
+
+    bool far_changed = ImGui::InputText(
+        "Far",
+        far_text.data(),
+        sizeof(far_text),
+        ImGuiInputTextFlags_CharsScientific | ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
+
+    if (fovy_changed || near_changed || far_changed) {
+        std::from_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+        std::from_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+        m_camera->UpdatePerspective(perspective);
     }
 
     End();

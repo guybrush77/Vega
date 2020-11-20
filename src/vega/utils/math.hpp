@@ -50,6 +50,11 @@ inline constexpr Radians operator*(float lhs, Radians rhs) noexcept
     return Radians(lhs * rhs.value);
 }
 
+inline constexpr Radians operator*(Radians lhs, float rhs) noexcept
+{
+    return Radians(lhs.value * rhs);
+}
+
 inline constexpr Radians operator+(Radians lhs, Radians rhs) noexcept
 {
     return Radians(lhs.value + rhs.value);
