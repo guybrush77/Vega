@@ -70,8 +70,8 @@ struct Degrees final {
     constexpr explicit Degrees(float value) noexcept : value(value) {}
 
     Degrees operator-() noexcept { return Degrees(-value); }
-    Degrees operator+=(Degrees rhs) noexcept { value += rhs.value; }
-    Degrees operator-=(Degrees rhs) noexcept { value -= rhs.value; }
+    Degrees& operator+=(Degrees rhs) noexcept { value += rhs.value; return *this; }
+    Degrees& operator-=(Degrees rhs) noexcept { value -= rhs.value; return *this; }
 
     float value = 0;
 };

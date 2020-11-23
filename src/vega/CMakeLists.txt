@@ -9,6 +9,8 @@ target_compile_features(vega PUBLIC cxx_std_20)
 
 set_source_files_properties(${source_files} PROPERTIES COMPILE_FLAGS ${WARNING_FLAGS})
 
+target_include_directories(vega PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+
 target_link_libraries(
     vega
     PRIVATE etna

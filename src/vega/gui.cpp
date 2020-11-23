@@ -285,7 +285,7 @@ void CameraWindow::Draw()
 
         auto coordinates = m_camera->GetSphericalCoordinates();
         auto offset      = m_camera->GetOffset();
-        auto labels      = ToStringArray<CameraUp>();
+        auto label       = ToString(coordinates.camera_up);
         auto label_index = static_cast<int>(coordinates.camera_up);
 
         bool elevation_changed = SliderAngle(
@@ -309,7 +309,7 @@ void CameraWindow::Draw()
             &label_index,
             0,
             1,
-            labels[label_index],
+            label,
             ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput);
 
         bool distance_changed = SliderFloat(
@@ -342,8 +342,15 @@ void CameraWindow::Draw()
         auto near_text   = std::array<char, 16>();
         auto far_text    = std::array<char, 16>();
 
-        std::to_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
-        std::to_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+        // TODO: Re-enable this code
+        //std::to_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+        //std::to_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+
+        // TODO: Remove four lines below
+        auto near_string = std::to_string(perspective.near);
+        auto far_string  = std::to_string(perspective.far);
+        std::strncpy(near_text.data(), near_string.c_str(), near_text.size());
+        std::strncpy(far_text.data(), far_string.c_str(), far_text.size());
 
         bool fovy_changed = SliderAngle(
             "Fov V",
@@ -368,8 +375,13 @@ void CameraWindow::Draw()
                 ImGuiInputTextFlags_EnterReturnsTrue);
 
         if (fovy_changed || near_changed || far_changed) {
-            std::from_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
-            std::from_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+            // TODO: Re-enable this code
+            //std::from_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+            //std::from_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+
+            // TODO: Remove the two lines below
+            perspective.near = std::stof(std::string(near_text.data()));
+            perspective.far  = std::stof(std::string(far_text.data()));
             m_camera->UpdatePerspective(perspective);
         }
     }

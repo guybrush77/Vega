@@ -15,7 +15,7 @@ END_DISABLE_WARNINGS
 #include <array>
 
 template <typename>
-auto ToStringArray();
+auto ToStringArray() noexcept;
 
 #define DEFINE_ENUM_TO_STRING(Type, ...) \
     template <> \
@@ -44,14 +44,14 @@ DEFINE_ENUM_TO_STRING(Orientation, "RightHanded", "LeftHanded")
 //
 enum class Axis { PositiveX, NegativeX, PositiveY, NegativeY, PositiveZ, NegativeZ };
 
-DEFINE_ENUM_TO_STRING(Axis, "Positive X", "Negative X", "Positive Y", "Negative Y", "Positive Z", "Negative Z");
+DEFINE_ENUM_TO_STRING(Axis, "Positive X", "Negative X", "Positive Y", "Negative Y", "Positive Z", "Negative Z")
 
 //
 // ObjectView
 //
 enum class ObjectView { Front, Back, Left, Right, Top, Bottom };
 
-DEFINE_ENUM_TO_STRING(ObjectView, "Front", "Back", "Left", "Right", "Top", "Bottom");
+DEFINE_ENUM_TO_STRING(ObjectView, "Front", "Back", "Left", "Right", "Top", "Bottom")
 
 template <typename T>
 struct AxisBase {
