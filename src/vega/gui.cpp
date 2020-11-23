@@ -21,7 +21,6 @@ BEGIN_DISABLE_WARNINGS
 
 END_DISABLE_WARNINGS
 
-#include <array>
 #include <charconv>
 
 namespace {
@@ -274,93 +273,168 @@ void CameraWindow::Draw()
 {
     using namespace ImGui;
 
+    static const auto width  = CalcTextSize("Camera Up").x;
+    const auto&       limits = m_camera->GetLimits();
+
     Begin("Camera");
 
-    Text("View");
+    PushItemWidth(-width);
 
-    auto coordinates = m_camera->GetSphericalCoordinates();
-    auto offset      = m_camera->GetOffset();
-    auto limits      = m_camera->GetLimits();
-    auto labels      = std::array{ "Normal", "Inverted" };
-    auto label_index = static_cast<int>(coordinates.camera_up);
+    {
+        Text("View");
 
-    bool elevation_changed = SliderAngle(
-        "Elevation",
-        &coordinates.elevation.value,
-        limits.elevation.min.value,
-        limits.elevation.max.value,
-        "%.1f deg",
-        ImGuiSliderFlags_AlwaysClamp);
+        auto coordinates = m_camera->GetSphericalCoordinates();
+        auto offset      = m_camera->GetOffset();
+        auto labels      = ToStringArray<CameraUp>();
+        auto label_index = static_cast<int>(coordinates.camera_up);
 
-    bool azimuth_changed = SliderAngle(
-        "Azimuth",
-        &coordinates.azimuth.value,
-        limits.azimuth.min.value,
-        limits.azimuth.max.value,
-        "%.1f deg",
-        ImGuiSliderFlags_AlwaysClamp);
+        bool elevation_changed = SliderAngle(
+            "Elevation",
+            &coordinates.elevation.value,
+            limits.elevation.min.value,
+            limits.elevation.max.value,
+            "%.1f deg",
+            ImGuiSliderFlags_AlwaysClamp);
 
-    bool distance_changed = SliderFloat(
-        "Distance",
-        &coordinates.distance,
-        limits.distance.min,
-        limits.distance.max,
-        nullptr,
-        ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
+        bool azimuth_changed = SliderAngle(
+            "Azimuth",
+            &coordinates.azimuth.value,
+            limits.azimuth.min.value,
+            limits.azimuth.max.value,
+            "%.1f deg",
+            ImGuiSliderFlags_AlwaysClamp);
 
-    bool camera_up_changed = SliderInt("Camera Up", &label_index, 0, 1, labels[label_index]);
+        bool camera_up_changed = SliderInt(
+            "Camera Up",
+            &label_index,
+            0,
+            1,
+            labels[label_index],
+            ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput);
 
-    if (elevation_changed || azimuth_changed || distance_changed || camera_up_changed) {
-        coordinates.camera_up = static_cast<CameraUp>(label_index);
-        m_camera->UpdateSphericalCoordinates(coordinates);
+        bool distance_changed = SliderFloat(
+            "Distance",
+            &coordinates.distance,
+            limits.distance.min,
+            limits.distance.max,
+            nullptr,
+            ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
+
+        if (elevation_changed || azimuth_changed || distance_changed || camera_up_changed) {
+            coordinates.camera_up = static_cast<CameraUp>(label_index);
+            m_camera->UpdateSphericalCoordinates(coordinates);
+        }
+
+        bool offset_h_changed = SliderFloat("Track H", &offset.horizontal, limits.offset_x.min, limits.offset_x.max);
+        bool offset_v_changed = SliderFloat("Track V", &offset.vertical, limits.offset_y.min, limits.offset_y.max);
+
+        if (offset_h_changed || offset_v_changed) {
+            m_camera->UpdateOffset(offset);
+        }
     }
 
-    bool offset_h_changed = SliderFloat("Track H", &offset.horizontal, limits.offset_x.min, limits.offset_x.max);
-    bool offset_v_changed = SliderFloat("Track V", &offset.vertical, limits.offset_y.min, limits.offset_y.max);
+    Dummy({ 0, 20 });
 
-    if (offset_h_changed || offset_v_changed) {
-        m_camera->UpdateOffset(offset);
+    {
+        Text("Perspective");
+
+        auto perspective = m_camera->GetPerspective();
+        auto near_text   = std::array<char, 16>();
+        auto far_text    = std::array<char, 16>();
+
+        std::to_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+        std::to_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+
+        bool fovy_changed = SliderAngle(
+            "Fov V",
+            &perspective.fovy.value,
+            limits.fov_y.min.value,
+            limits.fov_y.max.value,
+            "%.1f deg",
+            ImGuiSliderFlags_AlwaysClamp);
+
+        bool near_changed = ImGui::InputText(
+            "Near",
+            near_text.data(),
+            sizeof(near_text),
+            ImGuiInputTextFlags_CharsScientific | ImGuiInputTextFlags_AutoSelectAll |
+                ImGuiInputTextFlags_EnterReturnsTrue);
+
+        bool far_changed = ImGui::InputText(
+            "Far",
+            far_text.data(),
+            sizeof(far_text),
+            ImGuiInputTextFlags_CharsScientific | ImGuiInputTextFlags_AutoSelectAll |
+                ImGuiInputTextFlags_EnterReturnsTrue);
+
+        if (fovy_changed || near_changed || far_changed) {
+            std::from_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+            std::from_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+            m_camera->UpdatePerspective(perspective);
+        }
     }
 
-    auto perspective = m_camera->GetPerspective();
+    Dummy({ 0, 20 });
 
-    Text("Perspective");
+    {
+        Text("Coordinate System");
 
-    bool fovy_changed = SliderAngle(
-        "Fov Y",
-        &perspective.fovy.value,
-        limits.fov_y.min.value,
-        limits.fov_y.max.value,
-        "%.1f deg",
-        ImGuiSliderFlags_AlwaysClamp);
+        auto basis        = m_camera->GetBasis();
+        auto perspective  = m_camera->GetPerspective();
+        auto object       = m_camera->GetObject();
+        auto labels       = ToStringArray<Axis>();
+        auto labels_count = static_cast<int>(labels.size());
 
-    constexpr auto Success = std::errc();
+        auto forward_index   = basis.forward.ToInt();
+        bool forward_changed = Combo("Forward", &forward_index, labels.data(), labels_count);
+        auto forward         = Forward::FromInt(forward_index);
 
-    auto near_text = std::array<char, 16>();
+        auto up_index   = basis.up.ToInt();
+        bool up_changed = Combo("Up", &up_index, labels.data(), labels_count);
+        auto up         = Up::FromInt(up_index);
 
-    std::to_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+        bool forward_x = forward == Axis::PositiveX || forward == Axis::NegativeX;
+        bool forward_y = forward == Axis::PositiveY || forward == Axis::NegativeY;
+        bool forward_z = forward == Axis::PositiveZ || forward == Axis::NegativeZ;
+        bool up_x      = up == Axis::PositiveX || up == Axis::NegativeX;
+        bool up_y      = up == Axis::PositiveY || up == Axis::NegativeY;
+        bool up_z      = up == Axis::PositiveZ || up == Axis::NegativeZ;
 
-    bool near_changed = ImGui::InputText(
-        "Near",
-        near_text.data(),
-        sizeof(near_text),
-        ImGuiInputTextFlags_CharsScientific | ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
+        if (forward_changed) {
+            if (forward_x && up_x) {
+                up = Up(Axis::PositiveY);
+            } else if (forward_y && up_y) {
+                up = Up(Axis::PositiveZ);
+            } else if (forward_z && up_z) {
+                up = Up(Axis::PositiveY);
+            }
+        }
 
-    auto far_text = std::array<char, 16>();
+        if (up_changed) {
+            if (forward_x && up_x) {
+                forward = Forward(Axis::PositiveY);
+            } else if (forward_y && up_y) {
+                forward = Forward(Axis::NegativeZ);
+            } else if (forward_z && up_z) {
+                forward = Forward(Axis::PositiveY);
+            }
+        }
 
-    assert(Success == std::to_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far).ec);
-
-    bool far_changed = ImGui::InputText(
-        "Far",
-        far_text.data(),
-        sizeof(far_text),
-        ImGuiInputTextFlags_CharsScientific | ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
-
-    if (fovy_changed || near_changed || far_changed) {
-        std::from_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
-        std::from_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
-        m_camera->UpdatePerspective(perspective);
+        if (up != basis.up || forward != basis.forward) {
+            *m_camera = Camera::Create(
+                Orientation::RightHanded,
+                forward,
+                up,
+                ObjectView::Front,
+                object,
+                ToDegrees(perspective.fovy),
+                perspective.aspect,
+                perspective.near,
+                perspective.far);
+        }
     }
+
+    PopItemWidth();
 
     End();
 }

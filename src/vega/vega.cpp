@@ -932,6 +932,9 @@ int main()
         }
     }
 
+    // Aspect
+    auto aspect = ComputeAspect(extent);
+
     // Create pipeline renderpass
     UniqueRenderPass renderpass;
     {
@@ -1061,12 +1064,12 @@ int main()
 
     auto camera = Camera::Create(
         Orientation::RightHanded,
-        ForwardAxis::PositiveY,
-        UpAxis::PositiveZ,
+        Forward{ Axis::PositiveY },
+        Up{ Axis::PositiveZ },
         ObjectView::Front,
         mesh.aabb,
         45_deg,
-        ComputeAspect(extent));
+        aspect);
 
     Gui gui(
         *instance,

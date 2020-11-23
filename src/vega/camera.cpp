@@ -14,30 +14,30 @@ struct Dimensions final {
     float depth;
 };
 
-static Dimensions ComputeDimensions(ForwardAxis forward, UpAxis up, AABB aabb)
+static Dimensions ComputeDimensions(Forward forward, Up up, AABB aabb)
 {
     auto extent_x = aabb.ExtentX();
     auto extent_y = aabb.ExtentY();
     auto extent_z = aabb.ExtentZ();
 
-    if (up == UpAxis::PositiveX || up == UpAxis::NegativeX) {
-        if (forward == ForwardAxis::PositiveY || forward == ForwardAxis::NegativeY) {
+    if (up == Axis::PositiveX || up == Axis::NegativeX) {
+        if (forward == Axis::PositiveY || forward == Axis::NegativeY) {
             return Dimensions{ .width = extent_z, .height = extent_x, .depth = extent_y };
-        } else if (forward == ForwardAxis::PositiveZ || forward == ForwardAxis::NegativeZ) {
+        } else if (forward == Axis::PositiveZ || forward == Axis::NegativeZ) {
             return Dimensions{ .width = extent_y, .height = extent_x, .depth = extent_z };
         }
     }
-    if (up == UpAxis::PositiveY || up == UpAxis::NegativeY) {
-        if (forward == ForwardAxis::PositiveX || forward == ForwardAxis::NegativeX) {
+    if (up == Axis::PositiveY || up == Axis::NegativeY) {
+        if (forward == Axis::PositiveX || forward == Axis::NegativeX) {
             return Dimensions{ .width = extent_z, .height = extent_y, .depth = extent_x };
-        } else if (forward == ForwardAxis::PositiveZ || forward == ForwardAxis::NegativeZ) {
+        } else if (forward == Axis::PositiveZ || forward == Axis::NegativeZ) {
             return Dimensions{ .width = extent_x, .height = extent_y, .depth = extent_z };
         }
     }
-    if (up == UpAxis::PositiveZ || up == UpAxis::NegativeZ) {
-        if (forward == ForwardAxis::PositiveX || forward == ForwardAxis::NegativeX) {
+    if (up == Axis::PositiveZ || up == Axis::NegativeZ) {
+        if (forward == Axis::PositiveX || forward == Axis::NegativeX) {
             return Dimensions{ .width = extent_y, .height = extent_z, .depth = extent_x };
-        } else if (forward == ForwardAxis::PositiveY || forward == ForwardAxis::NegativeY) {
+        } else if (forward == Axis::PositiveY || forward == Axis::NegativeY) {
             return Dimensions{ .width = extent_x, .height = extent_z, .depth = extent_y };
         }
     }
@@ -45,42 +45,29 @@ static Dimensions ComputeDimensions(ForwardAxis forward, UpAxis up, AABB aabb)
     throw std::invalid_argument("ComputeDimensions: invalid arguments 'forward' and 'up'");
 }
 
-static glm::vec3 GetForwardVector(ForwardAxis forward)
+static Axis GetAxis(glm::vec3 vec)
 {
-    switch (forward) {
-    case ForwardAxis::PositiveX: return glm::vec3(1, 0, 0);
-    case ForwardAxis::NegativeX: return glm::vec3(-1, 0, 0);
-    case ForwardAxis::PositiveY: return glm::vec3(0, 1, 0);
-    case ForwardAxis::NegativeY: return glm::vec3(0, -1, 0);
-    case ForwardAxis::PositiveZ: return glm::vec3(0, 0, 1);
-    case ForwardAxis::NegativeZ: return glm::vec3(0, 0, -1);
-    default: break;
+    const auto mag_x = fabsf(vec.x);
+    const auto mag_y = fabsf(vec.y);
+    const auto mag_z = fabsf(vec.z);
+
+    if ((mag_x > mag_y) && (mag_x > mag_z)) {
+        return vec.x > 0 ? Axis::PositiveX : Axis::NegativeX;
+    } else if ((mag_y > mag_x) && (mag_y > mag_z)) {
+        return vec.y > 0 ? Axis::PositiveY : Axis::NegativeY;
+    } else if ((mag_z > mag_x) && (mag_z > mag_y)) {
+        return vec.z > 0 ? Axis::PositiveZ : Axis::NegativeZ;
     }
 
-    throw std::invalid_argument("GetForwardVector: invalid argument");
-}
-
-static glm::vec3 GetUpVector(UpAxis up)
-{
-    switch (up) {
-    case UpAxis::PositiveX: return glm::vec3(1, 0, 0);
-    case UpAxis::NegativeX: return glm::vec3(-1, 0, 0);
-    case UpAxis::PositiveY: return glm::vec3(0, 1, 0);
-    case UpAxis::NegativeY: return glm::vec3(0, -1, 0);
-    case UpAxis::PositiveZ: return glm::vec3(0, 0, 1);
-    case UpAxis::NegativeZ: return glm::vec3(0, 0, -1);
-    default: break;
-    }
-
-    throw std::invalid_argument("GetUpVector: invalid argument");
+    throw std::invalid_argument("GetAxis: invalid argument");
 }
 
 } // namespace
 
 Camera Camera::Create(
     Orientation orientation,
-    ForwardAxis forward_axis,
-    UpAxis      up_axis,
+    Forward     forward,
+    Up          up,
     ObjectView  object_view,
     AABB        object,
     Degrees     fovy,
@@ -90,10 +77,10 @@ Camera Camera::Create(
 {
     using namespace glm;
 
-    auto up         = GetUpVector(up_axis);
-    auto forward    = GetForwardVector(forward_axis);
-    auto right      = orientation == Orientation::RightHanded ? cross(forward, up) : -cross(forward, up);
-    auto dimensions = ComputeDimensions(forward_axis, up_axis, object);
+    auto cross_prod = cross(forward.Vector(), up.Vector());
+    auto right_vec  = orientation == Orientation::RightHanded ? cross_prod : -cross_prod;
+    auto right      = Right(GetAxis(right_vec));
+    auto dimensions = ComputeDimensions(forward, up, object);
     auto elevation  = 0_rad;
     auto azimuth    = 0_rad;
     auto obj_width  = 0.0f;
@@ -147,23 +134,29 @@ Camera Camera::Create(
     distance = std::clamp(distance, limits.distance.min, limits.distance.max);
     fovy_rad = std::clamp(fovy_rad, ToRadians(limits.fov_y.min), ToRadians(limits.fov_y.max));
 
-    return Camera(elevation, azimuth, distance, forward, up, right, fovy_rad, aspect, near, far, object, limits);
+    auto basis       = Basis{ forward, up, right, orientation };
+    auto perspective = Perspective{ fovy_rad, aspect, near, far };
+
+    return Camera(basis, elevation, azimuth, distance, perspective, object, limits);
 }
 
 glm::mat4 Camera::GetViewMatrix() const noexcept
 {
     using namespace glm;
 
-    bool flip   = m_coords.elevation >= Radians::HalfPi || m_coords.elevation <= -Radians::HalfPi;
-    auto view   = identity<mat4>();
-    view        = rotate(view, m_coords.elevation.value, m_basis.right);
-    view        = rotate(view, m_coords.azimuth.value, m_basis.up);
-    auto pan_x  = vec3(row(view, 0)) * m_offset.horizontal;
-    auto pan_y  = vec3(row(view, 2)) * m_offset.vertical;
-    auto center = m_object.Center() - pan_x + pan_y;
-    auto eye    = -m_coords.distance * m_basis.forward * mat3(view) + center;
+    auto forward = m_basis.forward.Vector();
+    auto up      = m_basis.up.Vector();
+    auto right   = m_basis.right.Vector();
+    bool flip    = m_coords.elevation >= Radians::HalfPi || m_coords.elevation <= -Radians::HalfPi;
+    auto view    = identity<mat4>();
+    view         = rotate(view, m_coords.elevation.value, right);
+    view         = rotate(view, m_coords.azimuth.value, up);
+    auto pan_x   = vec3(row(view, 0)) * m_offset.horizontal;
+    auto pan_y   = vec3(row(view, 2)) * m_offset.vertical;
+    auto center  = m_object.Center() - pan_x + pan_y;
+    auto eye     = -m_coords.distance * forward * mat3(view) + center;
 
-    return lookAtRH(eye, center, flip ? -m_basis.up : m_basis.up);
+    return lookAtRH(eye, center, flip ? -up : up);
 }
 
 glm::mat4 Camera::GetPerspectiveMatrix() const noexcept
@@ -201,6 +194,16 @@ Offset Camera::GetOffset() const noexcept
 Perspective Camera::GetPerspective() const noexcept
 {
     return m_perspective;
+}
+
+Basis Camera::GetBasis() const noexcept
+{
+    return m_basis;
+}
+
+AABB Camera::GetObject() const noexcept
+{
+    return m_object;
 }
 
 const CameraLimits& Camera::GetLimits() const noexcept
