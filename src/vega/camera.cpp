@@ -144,19 +144,22 @@ glm::mat4 Camera::GetViewMatrix() const noexcept
 {
     using namespace glm;
 
-    auto forward = m_basis.forward.Vector();
-    auto up      = m_basis.up.Vector();
-    auto right   = m_basis.right.Vector();
-    bool flip    = m_coords.elevation >= Radians::HalfPi || m_coords.elevation <= -Radians::HalfPi;
-    auto view    = identity<mat4>();
-    view         = rotate(view, m_coords.elevation.value, right);
-    view         = rotate(view, m_coords.azimuth.value, up);
-    auto pan_x   = vec3(row(view, 0)) * m_offset.horizontal;
-    auto pan_y   = vec3(row(view, 2)) * m_offset.vertical;
-    auto center  = m_object.Center() - pan_x + pan_y;
-    auto eye     = -m_coords.distance * forward * mat3(view) + center;
+    auto elevation = m_coords.elevation.value;
+    auto azimuth   = m_coords.azimuth.value;
+    auto forward   = m_basis.forward.Vector();
+    auto up        = m_basis.up.Vector();
+    auto right     = m_basis.right.Vector();
+    auto view      = rotate(rotate(identity<mat4>(), elevation, right), azimuth, up);
+    auto center    = m_object.Center();
+    auto eye       = -m_coords.distance * forward * mat3(view) + center;
+    bool flip      = m_coords.elevation >= Radians::HalfPi || m_coords.elevation <= -Radians::HalfPi;
 
-    return lookAtRH(eye, center, flip ? -up : up);
+    view = lookAtRH(eye, center, flip ? -up : up);
+
+    view[3][0] += m_offset.horizontal;
+    view[3][1] += m_offset.vertical;
+
+    return view;
 }
 
 glm::mat4 Camera::GetPerspectiveMatrix() const noexcept
@@ -247,13 +250,13 @@ void Camera::Track(float delta_x, float delta_y) noexcept
 
     constexpr auto delta_modifier = 0.5f;
 
-    auto step     = std::min(std::min(m_object.ExtentX(), m_object.ExtentY()), m_object.ExtentZ());
+    auto step     = std::min({ m_object.ExtentX(), m_object.ExtentY(), m_object.ExtentZ() });
     auto distance = (m_coords.distance - m_limits.distance.min) / m_limits.distance.max;
     auto step_x   = step * (0.01f + distance) * delta_x * delta_modifier;
     auto step_y   = step * (0.01f + distance) * delta_y * delta_modifier;
 
     m_offset.horizontal = m_offset.horizontal + step_x;
-    m_offset.vertical   = m_offset.vertical + step_y;
+    m_offset.vertical   = m_offset.vertical - step_y;
 }
 
 void Camera::UpdateAspect(float aspect) noexcept
