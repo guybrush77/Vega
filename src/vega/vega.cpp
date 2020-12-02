@@ -22,6 +22,7 @@ BEGIN_DISABLE_WARNINGS
 END_DISABLE_WARNINGS
 
 #include <algorithm>
+#include <filesystem>
 #include <optional>
 #include <unordered_map>
 #include <vector>
@@ -43,7 +44,12 @@ struct MVP {
     glm::mat4 proj;
 };
 
-struct VertexPN {
+struct Vertex {};
+
+template <typename T>
+concept VertexType = std::is_base_of_v<Vertex, T>&& std::is_standard_layout_v<T>&& std::is_trivially_copyable_v<T>;
+
+struct VertexPN : Vertex {
     glm::vec3 position;
     glm::vec3 normal;
 };
@@ -78,14 +84,18 @@ struct Index final {
           texcoord(static_cast<uint32_t>(idx.texcoord_index))
     {}
 
-    constexpr size_t operator()(const Index& index) const noexcept
-    {
-        size_t hash = 23;
-        hash        = hash * 31 + index.vertex;
-        hash        = hash * 31 + index.normal;
-        hash        = hash * 31 + index.texcoord;
-        return hash;
-    }
+    struct Hash final {
+        constexpr size_t operator()(const Index& index) const noexcept
+        {
+            size_t hash = 23;
+
+            hash = hash * 31 + index.vertex;
+            hash = hash * 31 + index.normal;
+            hash = hash * 31 + index.texcoord;
+
+            return hash;
+        }
+    };
 
     uint32_t vertex;
     uint32_t normal;
@@ -97,67 +107,90 @@ constexpr bool operator==(const Index& lhs, const Index& rhs) noexcept
     return lhs.vertex == rhs.vertex && lhs.normal == rhs.normal && lhs.texcoord == rhs.texcoord;
 }
 
-Mesh LoadMesh(const char* filepath)
+Mesh LoadObj(const char* filepath)
 {
+    namespace fs = std::filesystem;
+
+    if (false == fs::exists(filepath)) {
+        throw std::runtime_error("File does not exist");
+    }
+
+    auto parent_dir = fs::path(filepath).parent_path();
+
     tinyobj::attrib_t                attributes;
     std::vector<tinyobj::shape_t>    shapes;
     std::vector<tinyobj::material_t> materials;
     std::string                      warning;
     std::string                      err;
-    bool success = tinyobj::LoadObj(&attributes, &shapes, &materials, &warning, &err, filepath, nullptr, true, false);
+
+    bool success = tinyobj::LoadObj(
+        &attributes,
+        &shapes,
+        &materials,
+        &warning,
+        &err,
+        filepath,
+        parent_dir.string().c_str(),
+        true,
+        false);
+
     if (success == false) {
         throw std::runtime_error("Failed to load file");
     }
 
-    auto index_map = std::unordered_map<Index, uint32_t, Index>{};
+    auto index_map = std::unordered_map<Index, uint32_t, Index::Hash>{};
     auto vertices  = std::vector<VertexPN>{};
     auto indices   = std::vector<uint32_t>{};
+    auto meshes    = std::vector<Mesh>{};
 
-    auto shape       = shapes[0];
-    auto num_indices = shape.mesh.indices.size();
-    auto aabb        = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
+    for (const auto& shape : shapes) {
+        auto num_indices = shape.mesh.indices.size();
+        auto aabb        = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
 
-    assert(num_indices % 3 == 0);
+        assert(num_indices % 3 == 0);
 
-    for (size_t i = 0; i < num_indices; i += 3) {
-        for (std::size_t j = 0; j < 3; ++j) {
-            auto index = Index(shape.mesh.indices[i + j]);
-            if (auto it = index_map.find(index); it != index_map.end()) {
-                indices.push_back(it->second);
-            } else {
-                VertexPN vertex;
-                {
+        for (size_t i = 0; i < num_indices; i += 3) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                auto index = Index(shape.mesh.indices[i + j]);
+                if (auto it = index_map.find(index); it != index_map.end()) {
+                    indices.push_back(it->second);
+                } else {
                     auto position_idx = static_cast<size_t>(3) * index.vertex;
+                    auto normal_idx   = static_cast<size_t>(3) * index.normal;
 
-                    vertex.position.x = attributes.vertices[position_idx + 0];
-                    vertex.position.y = attributes.vertices[position_idx + 1];
-                    vertex.position.z = attributes.vertices[position_idx + 2];
+                    auto vertex = VertexPN{
 
-                    auto normal_idx = static_cast<size_t>(3) * index.normal;
+                        .position = { attributes.vertices[position_idx + 0],
+                                      attributes.vertices[position_idx + 1],
+                                      attributes.vertices[position_idx + 2] },
 
-                    vertex.normal.x = attributes.normals[normal_idx + 0];
-                    vertex.normal.y = attributes.normals[normal_idx + 1];
-                    vertex.normal.z = attributes.normals[normal_idx + 2];
+                        .normal = { attributes.normals[normal_idx + 0],
+                                    attributes.normals[normal_idx + 1],
+                                    attributes.normals[normal_idx + 2] }
+                    };
+
+                    vertices.push_back(vertex);
+
+                    aabb.min = { std::min(aabb.min.x, vertex.position.x),
+                                 std::min(aabb.min.y, vertex.position.y),
+                                 std::min(aabb.min.z, vertex.position.z) };
+
+                    aabb.max = { std::max(aabb.max.x, vertex.position.x),
+                                 std::max(aabb.max.y, vertex.position.y),
+                                 std::max(aabb.max.z, vertex.position.z) };
+
+                    auto idx         = static_cast<uint32_t>(vertices.size() - 1);
+                    index_map[index] = idx;
+
+                    indices.push_back(idx);
                 }
-
-                aabb.min.x = std::min(aabb.min.x, vertex.position.x);
-                aabb.min.y = std::min(aabb.min.y, vertex.position.y);
-                aabb.min.z = std::min(aabb.min.z, vertex.position.z);
-                aabb.max.x = std::max(aabb.max.x, vertex.position.x);
-                aabb.max.y = std::max(aabb.max.y, vertex.position.y);
-                aabb.max.z = std::max(aabb.max.z, vertex.position.z);
-
-                vertices.push_back(vertex);
-
-                auto idx         = static_cast<uint32_t>(vertices.size() - 1);
-                index_map[index] = idx;
-
-                indices.push_back(idx);
             }
         }
+
+        meshes.push_back({ shape.name, aabb, { std::move(vertices) }, { std::move(indices) } });
     }
 
-    return { std::move(shape.name), aabb, { std::move(vertices) }, { std::move(indices) } };
+    return meshes[0];
 }
 
 struct QueueInfo final {
@@ -862,7 +895,7 @@ int main()
         queues.presentation = device->GetQueue(presentation.family_index);
     }
 
-    auto mesh = LoadMesh("../../../data/models/suzanne.obj");
+    auto mesh = LoadObj("../../../data/models/suzanne.obj");
 
     // Copy mesh data to GPU
     UniqueBuffer vertex_buffer;
