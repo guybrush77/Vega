@@ -18,6 +18,7 @@ target_link_libraries(
     PRIVATE glfw
     PRIVATE glm
     PRIVATE imgui
+    PRIVATE nlohmann_json::nlohmann_json
     PRIVATE shaders
     PRIVATE spdlog
     PRIVATE utils

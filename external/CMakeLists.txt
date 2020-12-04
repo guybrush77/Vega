@@ -105,6 +105,21 @@ set_target_properties(imgui PROPERTIES FOLDER "external")
 
 
 #------------------------------------------------------------------------------------
+# Fetch json
+#------------------------------------------------------------------------------------
+
+set(JSON_BuildTests OFF)
+set(JSON_Install OFF)
+
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY  https://github.com/nlohmann/json.git
+    GIT_TAG         v3.9.1
+)
+
+FetchContent_MakeAvailable(json)
+
+#------------------------------------------------------------------------------------
 # Fetch spdlog
 #------------------------------------------------------------------------------------
 
