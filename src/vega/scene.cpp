@@ -13,17 +13,6 @@ struct ValueToJson final {
 
 } // namespace
 
-namespace std {
-
-static void to_json(json& json, const Dictionary& dictionary)
-{
-    for (const auto& [key, value] : dictionary) {
-        visit(ValueToJson{ json, key }, value);
-    }
-}
-
-} // namespace std
-
 namespace glm {
 
 static void to_json(json& json, const glm::vec3& vec)
@@ -40,6 +29,17 @@ static void to_json(json& json, const UniqueNode& node)
     json = node->ToJson();
 }
 
+static void to_json(json& json, const AABB& aabb)
+{
+    json["min"] = aabb.min;
+    json["max"] = aabb.max;
+}
+
+static void to_json(json& json, ID id)
+{
+    json = id.value;
+}
+
 static void to_json(json& json, InstanceGeoNodePtr mesh)
 {
     json = mesh->ID();
@@ -50,11 +50,43 @@ static void to_json(json& json, Radians radians)
     json["radians"] = radians.value;
 }
 
-static NodeID GetID() noexcept
+static void to_json(json& json, const Mesh& mesh)
+{
+    json = mesh.ToJson();
+}
+
+static void to_json(json& json, const Vertices& vertices)
+{
+    json["vertex.type"]   = vertices.Type();
+    json["vertex.size"]   = vertices.VertexSize();
+    json["vertex.count"]  = vertices.Count();
+    json["vertices.size"] = vertices.Size();
+}
+
+static void to_json(json& json, const Indices& indices)
+{
+    json["index.type"]   = indices.Type();
+    json["index.size"]   = indices.IndexSize();
+    json["index.count"]  = indices.Count();
+    json["indices.size"] = indices.Size();
+}
+
+struct MeshStructure final {
+    const Vertices* vertices;
+    const Indices*  indices;
+};
+
+static void to_json(json& json, const MeshStructure& geometry)
+{
+    json["vertices"] = *geometry.vertices;
+    json["indices"]  = *geometry.indices;
+}
+
+static ID GetID() noexcept
 {
     static std::atomic_int id = 0;
     id++;
-    return id;
+    return { id };
 }
 
 struct NodeAccess {
@@ -90,11 +122,11 @@ struct NodeAccess {
         json["node.id"]    = node->m_id;
 
         if (node->HasProperties()) {
-            json["node.properties"] = node->Node::ToJson();
+            json["node.properties"] = node->PropertyDictionary::ToJson();
         }
     }
 
-    static void ChildrenToJson(const std::vector<UniqueNode>& nodes, json& json) { json["subset"] = nodes; }
+    static void ChildrenToJson(const std::vector<UniqueNode>& nodes, json& json) { json["sublist"] = nodes; }
 };
 
 TranslateGeoNodePtr InternalGeoNode::AddTranslateNode(glm::vec3 amount)
@@ -115,10 +147,10 @@ ScaleGeoNodePtr InternalGeoNode::AddScaleNode(float factor)
     return static_cast<ScaleGeoNodePtr>(m_nodes.back().get());
 }
 
-InstanceGeoNodePtr InternalGeoNode::AddInstanceNode(InstanceMaterialNodePtr material_instance)
+InstanceGeoNodePtr InternalGeoNode::AddInstanceNode(MeshPtr mesh, InstanceMaterialNodePtr material)
 {
-    assert(material_instance);
-    m_nodes.push_back(NodeAccess::MakeUnique<InstanceGeoNode>(GetID(), material_instance));
+    assert(mesh && material);
+    m_nodes.push_back(NodeAccess::MakeUnique<InstanceGeoNode>(GetID(), mesh, material));
     return static_cast<InstanceGeoNodePtr>(m_nodes.back().get());
 }
 
@@ -161,7 +193,8 @@ json InstanceGeoNode::ToJson() const
 
     NodeAccess::ThisToJson(this, json);
 
-    json["node.material.instance"] = m_material_instance->ID();
+    json["node.ref.material"] = m_material_instance->ID();
+    json["node.ref.mesh"]     = m_mesh_instance->ID();
 
     return json;
 }
@@ -169,10 +202,10 @@ json InstanceGeoNode::ToJson() const
 void InstanceGeoNode::UpdateInstances() noexcept
 {}
 
-InstanceGeoNode::InstanceGeoNode(NodeID id, InstanceMaterialNodePtr material_instance) noexcept
-    : GeoNode(id), m_material_instance(material_instance)
+InstanceGeoNode::InstanceGeoNode(NodeID id, MeshPtr mesh, InstanceMaterialNodePtr material) noexcept
+    : GeoNode(id), m_mesh_instance(mesh), m_material_instance(material)
 {
-    NodeAccess::AddMeshInstancePtr(this, material_instance);
+    NodeAccess::AddMeshInstancePtr(this, material);
 }
 
 json TranslateGeoNode::ToJson() const
@@ -233,7 +266,7 @@ void ScaleGeoNode::UpdateInstances() noexcept
     }
 }
 
-const Value& Node::GetProperty(const Key& key) const noexcept
+const Value& PropertyDictionary::GetProperty(const Key& key) const noexcept
 {
     if (m_dictionary) {
         if (auto it = m_dictionary->find(key); it != m_dictionary->end()) {
@@ -243,44 +276,50 @@ const Value& Node::GetProperty(const Key& key) const noexcept
     return nullvalue;
 }
 
-bool Node::HasProperty(const Key& key) const noexcept
+bool PropertyDictionary::HasProperty(const Key& key) const noexcept
 {
     return m_dictionary ? m_dictionary->count(key) : false;
 }
 
-bool Node::HasProperties() const noexcept
+bool PropertyDictionary::HasProperties() const noexcept
 {
     return m_dictionary && !m_dictionary->empty();
 }
 
-void Node::SetProperty(Key key, int value)
+void PropertyDictionary::SetProperty(Key key, int value)
 {
     SetPropertyPrivate(std::move(key), value);
 }
 
-void Node::SetProperty(Key key, float value)
+void PropertyDictionary::SetProperty(Key key, float value)
 {
     SetPropertyPrivate(std::move(key), value);
 }
 
-void Node::SetProperty(Key key, std::string value)
+void PropertyDictionary::SetProperty(Key key, std::string value)
 {
     SetPropertyPrivate(std::move(key), std::move(value));
 }
 
-void Node::RemoveProperty(Key key)
+void PropertyDictionary::RemoveProperty(Key key)
 {
     if (m_dictionary) {
         m_dictionary->erase(key);
     }
 }
 
-json Node::ToJson() const
+json PropertyDictionary::ToJson() const
 {
-    return (m_dictionary && !m_dictionary->empty()) ? json(*m_dictionary) : json{};
+    json json;
+
+    for (const auto& [key, value] : *m_dictionary) {
+        std::visit(ValueToJson{ json, key }, value);
+    }
+
+    return json;
 }
 
-void Node::SetPropertyPrivate(Key key, Value value)
+void PropertyDictionary::SetPropertyPrivate(Key key, Value value)
 {
     if (m_dictionary == nullptr) {
         m_dictionary.reset(new Dictionary);
@@ -299,8 +338,14 @@ json Scene::ToJson() const
 
     json["materials"] = m_materials->ToJson();
     json["geometry"]  = m_geometry->ToJson();
+    json["meshes"]    = m_mesh_manager.ToJson();
 
     return json;
+}
+
+MeshPtr Scene::CreateMesh(AABB aabb, Vertices vertices, Indices indices)
+{
+    return m_mesh_manager.CreateMesh(aabb, std::move(vertices), std::move(indices));
 }
 
 RootMaterialNodePtr Scene::GetMaterialRoot() noexcept
@@ -356,7 +401,44 @@ json InstanceMaterialNode::ToJson() const
 
     NodeAccess::ThisToJson(this, json);
 
-    json["node.geo.instances"] = m_mesh_instances;
+    json["node.refs.geo"] = m_mesh_instances;
+
+    return json;
+}
+
+MeshPtr MeshManager::CreateMesh(AABB aabb, Vertices vertices, Indices indices)
+{
+    auto mesh          = UniqueMesh(new Mesh(GetID(), aabb, std::move(vertices), std::move(indices)));
+    auto mesh_ptr      = mesh.get();
+    m_meshes[mesh_ptr] = std::move(mesh);
+
+    return mesh_ptr;
+}
+
+json MeshManager::ToJson() const
+{
+    auto mesh_refs = std::vector<std::reference_wrapper<Mesh>>{};
+
+    mesh_refs.reserve(m_meshes.size());
+
+    for (auto& pair : m_meshes) {
+        mesh_refs.push_back(*pair.second);
+    }
+
+    return nlohmann::json(mesh_refs);
+}
+
+json Mesh::ToJson() const
+{
+    json json;
+
+    json["mesh.id"]        = m_id;
+    json["mesh.span"]      = m_aabb;
+    json["mesh.structure"] = MeshStructure{ &m_vertices, &m_indices };
+
+    if (HasProperties()) {
+        json["mesh.properties"] = PropertyDictionary::ToJson();
+    }
 
     return json;
 }

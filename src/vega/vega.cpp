@@ -54,7 +54,7 @@ struct VertexPN : Vertex {
     glm::vec3 normal;
 };
 
-struct Mesh final {
+struct OldMesh final {
     std::string name;
 
     AABB aabb{};
@@ -107,7 +107,7 @@ constexpr bool operator==(const Index& lhs, const Index& rhs) noexcept
     return lhs.vertex == rhs.vertex && lhs.normal == rhs.normal && lhs.texcoord == rhs.texcoord;
 }
 
-Mesh LoadObj(const char* filepath)
+OldMesh LoadObj(const char* filepath)
 {
     namespace fs = std::filesystem;
 
@@ -141,7 +141,7 @@ Mesh LoadObj(const char* filepath)
     auto index_map = std::unordered_map<Index, uint32_t, Index::Hash>{};
     auto vertices  = std::vector<VertexPN>{};
     auto indices   = std::vector<uint32_t>{};
-    auto meshes    = std::vector<Mesh>{};
+    auto meshes    = std::vector<OldMesh>{};
 
     for (const auto& shape : shapes) {
         auto num_indices = shape.mesh.indices.size();
@@ -187,7 +187,7 @@ Mesh LoadObj(const char* filepath)
             }
         }
 
-        meshes.push_back({ shape.name, aabb, { std::move(vertices) }, { std::move(indices) } });
+        meshes.push_back({ shape.name, aabb, std::move(vertices), std::move(indices) });
     }
 
     return meshes[0];
