@@ -3,6 +3,13 @@
 #include "utils/math.hpp"
 #include "vertex.hpp"
 
+BEGIN_DISABLE_WARNINGS
+
+#include <glm/gtx/transform.hpp>
+#include <glm/matrix.hpp>
+
+END_DISABLE_WARNINGS
+
 #include <nlohmann/json.hpp>
 
 #include <any>
@@ -12,9 +19,13 @@
 #include <variant>
 #include <vector>
 
-struct Vertices;
-struct Indices;
+struct ID;
+struct MeshID;
+
+struct MeshVertices;
+struct MeshIndices;
 struct Mesh;
+struct MeshManager;
 
 struct Node;
 
@@ -32,10 +43,10 @@ struct InstanceGeoNode;
 
 struct Scene;
 
-using VerticesPtr = Vertices*;
-using IndicesPtr  = Indices*;
-using UniqueMesh  = std::unique_ptr<Mesh>;
-using MeshPtr     = Mesh*;
+using MeshVerticesPtr = MeshVertices*;
+using MeshIndicesPtr  = MeshIndices*;
+using UniqueMesh      = std::unique_ptr<Mesh>;
+using MeshPtr         = Mesh*;
 
 using Key        = std::string;
 using Value      = std::variant<int, float, std::string>;
@@ -58,12 +69,20 @@ using RotateGeoNodePtr    = RotateGeoNode*;
 using ScaleGeoNodePtr     = ScaleGeoNode*;
 using InstanceGeoNodePtr  = InstanceGeoNode*;
 
+using MeshList          = std::vector<MeshID>;
+using UniqueMeshManager = std::unique_ptr<MeshManager>;
+
 using ScenePtr = Scene*;
 
 using json = nlohmann::json;
 
 struct ID {
     int value;
+
+    constexpr bool operator==(const ID&) const noexcept = default;
+    struct Hash {
+        constexpr size_t operator()(ID id) const noexcept { return id.value; }
+    };
 };
 
 struct PropertyDictionary {
@@ -85,9 +104,9 @@ struct PropertyDictionary {
     std::unique_ptr<Dictionary> m_dictionary;
 };
 
-struct Vertices final {
+struct MeshVertices final {
     template <VertexType T>
-    Vertices(std::vector<T> vertices) : m_vertices(std::move(vertices))
+    MeshVertices(std::vector<T> vertices) : m_vertices(std::move(vertices))
     {
         using etna::narrow_cast;
 
@@ -102,11 +121,11 @@ struct Vertices final {
         m_data        = static_cast<const void*>(vertices_ref.data());
     }
 
-    Vertices(const Vertices&) = delete;
-    Vertices& operator=(const Vertices&) = delete;
+    MeshVertices(const MeshVertices&) = delete;
+    MeshVertices& operator=(const MeshVertices&) = delete;
 
-    Vertices(Vertices&&) = default;
-    Vertices& operator=(Vertices&&) = default;
+    MeshVertices(MeshVertices&&) = default;
+    MeshVertices& operator=(MeshVertices&&) = default;
 
     auto Type() const noexcept { return m_type; }
     auto VertexSize() const noexcept { return m_vertex_size; }
@@ -123,12 +142,13 @@ struct Vertices final {
     const void* m_data        = nullptr;
 };
 
-struct Indices final {
-    Indices(std::vector<uint16_t> indices) : m_indices(indices)
+struct MeshIndices final {
+    template <IndexType T>
+    MeshIndices(std::vector<T> indices) : m_indices(indices)
     {
         using etna::narrow_cast;
 
-        auto& indices_ref = std::get<decltype(indices)>(m_indices);
+        auto& indices_ref = std::any_cast<std::vector<T>&>(m_indices);
 
         indices_ref.shrink_to_fit();
 
@@ -139,26 +159,11 @@ struct Indices final {
         m_data       = static_cast<const void*>(indices_ref.data());
     }
 
-    Indices(std::vector<uint32_t> indices) : m_indices(indices)
-    {
-        using etna::narrow_cast;
+    MeshIndices(const MeshIndices&) = delete;
+    MeshIndices& operator=(const MeshIndices&) = delete;
 
-        auto& indices_ref = std::get<decltype(indices)>(m_indices);
-
-        indices_ref.shrink_to_fit();
-
-        m_type       = typeid(indices_ref[0]).name();
-        m_index_size = narrow_cast<uint32_t>(sizeof(indices_ref[0]));
-        m_count      = narrow_cast<uint32_t>(indices_ref.size());
-        m_size       = narrow_cast<uint32_t>(m_index_size * m_count);
-        m_data       = static_cast<const void*>(indices_ref.data());
-    }
-
-    Indices(const Indices&) = delete;
-    Indices& operator=(const Indices&) = delete;
-
-    Indices(Indices&&) = default;
-    Indices& operator=(Indices&&) = default;
+    MeshIndices(MeshIndices&&) = default;
+    MeshIndices& operator=(MeshIndices&&) = default;
 
     auto Type() const noexcept { return m_type; }
     auto IndexSize() const noexcept { return m_index_size; }
@@ -167,8 +172,7 @@ struct Indices final {
     auto Data() const noexcept { return m_data; }
 
   private:
-    std::variant<std::vector<uint16_t>, std::vector<uint32_t>> m_indices;
-
+    std::any    m_indices;
     const char* m_type       = nullptr;
     uint32_t    m_index_size = 0;
     uint32_t    m_count      = 0;
@@ -188,30 +192,27 @@ struct Mesh final : PropertyDictionary {
     Mesh(Mesh&&)  = default;
     Mesh& operator=(Mesh&&) = default;
 
-    auto ID() const noexcept { return m_id; }
+    auto ID() const noexcept -> MeshID { return m_id; }
+    auto BoundingBox() const noexcept -> const AABB& { return m_aabb; }
+    auto Vertices() const noexcept -> const MeshVertices& { return m_vertices; }
+    auto Indices() const noexcept -> const MeshIndices& { return m_indices; }
 
     json ToJson() const;
 
   private:
     friend struct MeshManager;
 
-    Mesh(MeshID id, AABB aabb, Vertices vertices, Indices indices) noexcept
-        : m_id(id), m_aabb(aabb), m_vertices(std::move(vertices)), m_indices(std::move(indices))
+    Mesh(MeshID id, AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) noexcept
+        : m_id(id), m_aabb(aabb), m_vertices(std::move(mesh_vertices)), m_indices(std::move(mesh_indices))
     {}
 
-    MeshID   m_id{};
-    AABB     m_aabb{};
-    Vertices m_vertices;
-    Indices  m_indices;
-};
+    bool GetIsNewThenReset() noexcept;
 
-struct MeshManager {
-    MeshPtr CreateMesh(AABB aabb, Vertices vertices, Indices indices);
-
-    json ToJson() const;
-
-  private:
-    std::unordered_map<MeshPtr, UniqueMesh> m_meshes;
+    MeshID       m_id{};
+    AABB         m_aabb{};
+    MeshVertices m_vertices;
+    MeshIndices  m_indices;
+    bool         m_is_new = true;
 };
 
 struct NodeID final : ID {
@@ -297,7 +298,7 @@ struct GeoNode : Node {
     GeoNode(NodeID id) noexcept : Node(id) {}
 
   private:
-    virtual void UpdateInstances() noexcept = 0;
+    virtual void ApplyTransform(const glm::mat4& matrix) noexcept = 0;
 
     friend struct NodeAccess;
 };
@@ -313,12 +314,13 @@ struct InstanceGeoNode final : GeoNode {
   private:
     friend struct NodeAccess;
 
-    virtual void UpdateInstances() noexcept override;
+    virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
     InstanceGeoNode(NodeID id, MeshPtr mesh, InstanceMaterialNodePtr material) noexcept;
 
     MeshPtr                 m_mesh_instance     = nullptr;
     InstanceMaterialNodePtr m_material_instance = nullptr;
+    glm::mat4               m_transform;
 };
 
 struct InternalGeoNode : GeoNode {
@@ -348,7 +350,7 @@ struct RootGeoNode final : InternalGeoNode {
 
     RootGeoNode(NodeID id) noexcept : InternalGeoNode(id) {}
 
-    virtual void UpdateInstances() noexcept override;
+    virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 };
 
 struct TranslateGeoNode final : InternalGeoNode {
@@ -362,7 +364,7 @@ struct TranslateGeoNode final : InternalGeoNode {
 
     TranslateGeoNode(NodeID id, glm::vec3 distance) noexcept : InternalGeoNode(id), m_distance(distance) {}
 
-    virtual void UpdateInstances() noexcept override;
+    virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
     glm::vec3 m_distance;
 };
@@ -379,7 +381,7 @@ struct RotateGeoNode final : InternalGeoNode {
     RotateGeoNode(NodeID id, glm::vec3 axis, Radians angle) noexcept : InternalGeoNode(id), m_axis(axis), m_angle(angle)
     {}
 
-    virtual void UpdateInstances() noexcept override;
+    virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
     glm::vec3 m_axis;
     Radians   m_angle;
@@ -396,9 +398,13 @@ struct ScaleGeoNode final : InternalGeoNode {
 
     ScaleGeoNode(NodeID id, float factor) noexcept : InternalGeoNode(id), m_factor(factor) {}
 
-    virtual void UpdateInstances() noexcept override;
+    virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
     float m_factor;
+};
+
+struct DrawData final {
+    MeshList new_meshes;
 };
 
 struct Scene {
@@ -407,17 +413,21 @@ struct Scene {
     Scene(const Scene&) = delete;
     Scene operator=(const Scene&) = delete;
 
+    ~Scene() noexcept;
+
     auto GetGeometryRoot() noexcept -> RootGeoNodePtr;
     auto GetMaterialRoot() noexcept -> RootMaterialNodePtr;
 
-    MeshPtr CreateMesh(AABB aabb, Vertices vertices, Indices indices);
+    auto CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) -> MeshPtr;
 
-    void UpdateInstances() noexcept;
+    auto GetMesh(MeshID mesh_id) -> MeshPtr;
+
+    auto GetDrawData() noexcept -> DrawData;
 
     json ToJson() const;
 
   private:
-    UniqueNode  m_materials;
-    UniqueNode  m_geometry;
-    MeshManager m_mesh_manager;
+    UniqueNode        m_materials;
+    UniqueNode        m_geometry;
+    UniqueMeshManager m_mesh_manager;
 };

@@ -20,3 +20,6 @@ struct VertexPN : Vertex {
     glm::vec3 position;
     glm::vec3 normal;
 };
+
+template <typename T>
+concept IndexType = std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t>;

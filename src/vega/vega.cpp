@@ -2,7 +2,7 @@
 
 #include "camera.hpp"
 #include "gui.hpp"
-#include "platform.hpp"
+#include "scene.hpp"
 #include "utils/resource.hpp"
 
 BEGIN_DISABLE_WARNINGS
@@ -36,44 +36,10 @@ struct GLFW {
     ~GLFW() { glfwTerminate(); }
 } glfw;
 
-DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
-
 struct MVP {
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
-};
-
-struct Vertex {};
-
-template <typename T>
-concept VertexType = std::is_base_of_v<Vertex, T>&& std::is_standard_layout_v<T>&& std::is_trivially_copyable_v<T>;
-
-struct VertexPN : Vertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-};
-
-struct OldMesh final {
-    std::string name;
-
-    AABB aabb{};
-
-    struct {
-        std::vector<VertexPN> array;
-
-        auto count() const noexcept { return static_cast<uint32_t>(array.size()); }
-        auto size() const noexcept { return static_cast<uint32_t>(sizeof(array[0]) * array.size()); }
-        auto data() const noexcept { return array.data(); }
-    } vertices;
-
-    struct {
-        std::vector<uint32_t> array;
-
-        auto count() const noexcept { return static_cast<uint32_t>(array.size()); }
-        auto size() const noexcept { return static_cast<uint32_t>(sizeof(array[0]) * array.size()); }
-        auto data() const noexcept { return array.data(); }
-    } indices;
 };
 
 struct Index final {
@@ -107,7 +73,7 @@ constexpr bool operator==(const Index& lhs, const Index& rhs) noexcept
     return lhs.vertex == rhs.vertex && lhs.normal == rhs.normal && lhs.texcoord == rhs.texcoord;
 }
 
-OldMesh LoadObj(const char* filepath)
+void LoadObj(ScenePtr scene, std::filesystem::path filepath)
 {
     namespace fs = std::filesystem;
 
@@ -117,11 +83,11 @@ OldMesh LoadObj(const char* filepath)
 
     auto parent_dir = fs::path(filepath).parent_path();
 
-    tinyobj::attrib_t                attributes;
-    std::vector<tinyobj::shape_t>    shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string                      warning;
-    std::string                      err;
+    auto attributes = tinyobj::attrib_t{};
+    auto shapes     = std::vector<tinyobj::shape_t>{};
+    auto materials  = std::vector<tinyobj::material_t>{};
+    auto warning    = std::string{};
+    auto err        = std::string{};
 
     bool success = tinyobj::LoadObj(
         &attributes,
@@ -129,7 +95,7 @@ OldMesh LoadObj(const char* filepath)
         &materials,
         &warning,
         &err,
-        filepath,
+        filepath.string().c_str(),
         parent_dir.string().c_str(),
         true,
         false);
@@ -138,10 +104,16 @@ OldMesh LoadObj(const char* filepath)
         throw std::runtime_error("Failed to load file");
     }
 
+    auto material_root     = scene->GetMaterialRoot();
+    auto material_class    = material_root->AddMaterialClassNode();
+    auto material_instance = material_class->AddMaterialInstanceNode();
+
+    auto geometry_root = scene->GetGeometryRoot();
+
     auto index_map = std::unordered_map<Index, uint32_t, Index::Hash>{};
     auto vertices  = std::vector<VertexPN>{};
     auto indices   = std::vector<uint32_t>{};
-    auto meshes    = std::vector<OldMesh>{};
+    auto meshes    = std::vector<Mesh>{};
 
     for (const auto& shape : shapes) {
         auto num_indices = shape.mesh.indices.size();
@@ -187,10 +159,14 @@ OldMesh LoadObj(const char* filepath)
             }
         }
 
-        meshes.push_back({ shape.name, aabb, std::move(vertices), std::move(indices) });
-    }
+        auto mesh = scene->CreateMesh(aabb, std::move(vertices), std::move(indices));
 
-    return meshes[0];
+        mesh->SetProperty("name", shape.name);
+
+        auto mesh_instance = geometry_root->AddInstanceNode(mesh, material_instance);
+
+        mesh_instance->SetProperty("name", shape.name);
+    }
 }
 
 struct QueueInfo final {
@@ -667,7 +643,10 @@ class RenderContext {
         }
     }
 
-    Status Draw(etna::Buffer vertex_buffer, etna::Buffer index_buffer, uint32_t index_count)
+    Status Draw(
+        const std::vector<etna::UniqueBuffer>& vertex_buffers,
+        const std::vector<etna::UniqueBuffer>& index_buffers,
+        const std::vector<uint32_t>&           index_counts)
     {
         using namespace etna;
 
@@ -718,10 +697,17 @@ class RenderContext {
             frame.cmd_buffers.draw.BindPipeline(PipelineBindPoint::Graphics, m_pipeline);
             frame.cmd_buffers.draw.SetViewport(viewport);
             frame.cmd_buffers.draw.SetScissor(scissor);
-            frame.cmd_buffers.draw.BindVertexBuffers(vertex_buffer);
-            frame.cmd_buffers.draw.BindIndexBuffer(index_buffer, IndexType::Uint32);
-            frame.cmd_buffers.draw.BindDescriptorSet(PipelineBindPoint::Graphics, m_pipeline_layout, descriptor_set);
-            frame.cmd_buffers.draw.DrawIndexed(index_count, 1);
+
+            for (size_t i = 0; i < vertex_buffers.size(); ++i) {
+                frame.cmd_buffers.draw.BindVertexBuffers(*vertex_buffers[i]);
+                frame.cmd_buffers.draw.BindIndexBuffer(*index_buffers[i], IndexType::Uint32);
+                frame.cmd_buffers.draw.BindDescriptorSet(
+                    PipelineBindPoint::Graphics,
+                    m_pipeline_layout,
+                    descriptor_set);
+                frame.cmd_buffers.draw.DrawIndexed(index_counts[i], 1);
+            }
+
             frame.cmd_buffers.draw.EndRenderPass();
             frame.cmd_buffers.draw.End();
 
@@ -887,7 +873,7 @@ int main()
         device = instance->CreateDevice(gpu, builder.state);
     }
 
-    Queues queues;
+    auto queues = Queues{};
     {
         queues.graphics     = device->GetQueue(graphics.family_index);
         queues.compute      = device->GetQueue(compute.family_index);
@@ -895,44 +881,65 @@ int main()
         queues.presentation = device->GetQueue(presentation.family_index);
     }
 
-    auto mesh = LoadObj("../../../data/models/suzanne.obj");
+    auto scene = Scene();
+
+    LoadObj(&scene, "../../../data/models/suzanne.obj");
+
+    auto draw_data = scene.GetDrawData();
 
     // Copy mesh data to GPU
-    UniqueBuffer vertex_buffer;
-    UniqueBuffer index_buffer;
+    auto vertex_buffers = std::vector<UniqueBuffer>();
+    auto index_buffers  = std::vector<UniqueBuffer>();
+    auto index_counts   = std::vector<uint32_t>(); // TODO: temporary
     {
-        void* data = nullptr;
-
-        auto src_vbo = device->CreateBuffer(mesh.vertices.size(), BufferUsage::TransferSrc, MemoryUsage::CpuOnly);
-        auto src_ibo = device->CreateBuffer(mesh.indices.size(), BufferUsage::TransferSrc, MemoryUsage::CpuOnly);
-
-        data = src_vbo->MapMemory();
-        memcpy(data, mesh.vertices.data(), mesh.vertices.size());
-        src_vbo->UnmapMemory();
-
-        data = src_ibo->MapMemory();
-        memcpy(data, mesh.indices.data(), mesh.indices.size());
-        src_ibo->UnmapMemory();
-
-        vertex_buffer = device->CreateBuffer(
-            mesh.vertices.size(),
-            BufferUsage::VertexBuffer | BufferUsage::TransferDst,
-            MemoryUsage::GpuOnly);
-
-        index_buffer = device->CreateBuffer(
-            mesh.indices.size(),
-            BufferUsage::IndexBuffer | BufferUsage::TransferDst,
-            MemoryUsage::GpuOnly);
-
         auto cmd_pool   = device->CreateCommandPool(transfer.family_index, CommandPoolCreate::Transient);
         auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
 
+        auto src_vbos = std::vector<UniqueBuffer>();
+        auto src_ibos = std::vector<UniqueBuffer>();
+
         cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
-        cmd_buffer->CopyBuffer(*src_vbo, *vertex_buffer, mesh.vertices.size());
-        cmd_buffer->CopyBuffer(*src_ibo, *index_buffer, mesh.indices.size());
+
+        for (MeshID mesh_id : draw_data.new_meshes) {
+            auto mesh = scene.GetMesh(mesh_id);
+
+            auto vertices_size = mesh->Vertices().Size();
+            auto vertices_data = mesh->Vertices().Data();
+
+            auto indices_size = mesh->Indices().Size();
+            auto indices_data = mesh->Indices().Data();
+
+            src_vbos.push_back(device->CreateBuffer(vertices_size, BufferUsage::TransferSrc, MemoryUsage::CpuOnly));
+            src_ibos.push_back(device->CreateBuffer(indices_size, BufferUsage::TransferSrc, MemoryUsage::CpuOnly));
+
+            auto vertices_raw_data = src_vbos.back()->MapMemory();
+            memcpy(vertices_raw_data, vertices_data, vertices_size);
+            src_vbos.back()->UnmapMemory();
+
+            auto indices_raw_data = src_ibos.back()->MapMemory();
+            memcpy(indices_raw_data, indices_data, indices_size);
+            src_ibos.back()->UnmapMemory();
+
+            vertex_buffers.push_back(device->CreateBuffer(
+                vertices_size,
+                BufferUsage::VertexBuffer | BufferUsage::TransferDst,
+                MemoryUsage::GpuOnly));
+
+            index_buffers.push_back(device->CreateBuffer(
+                indices_size,
+                BufferUsage::IndexBuffer | BufferUsage::TransferDst,
+                MemoryUsage::GpuOnly));
+
+            index_counts.push_back(mesh->Indices().Count());
+
+            cmd_buffer->CopyBuffer(*src_vbos.back(), *vertex_buffers.back(), vertices_size);
+            cmd_buffer->CopyBuffer(*src_ibos.back(), *index_buffers.back(), indices_size);
+        }
+
         cmd_buffer->End();
 
         queues.transfer.Submit(*cmd_buffer);
+
         device->WaitIdle();
     }
 
@@ -1100,7 +1107,7 @@ int main()
         Forward{ Axis::PositiveY },
         Up{ Axis::PositiveZ },
         ObjectView::Front,
-        mesh.aabb,
+        { { -1, -1, -1 }, { 1, 1, 1 } }, // TODO: get aabb from DrawList
         45_deg,
         aspect);
 
@@ -1147,7 +1154,7 @@ int main()
             &gui,
             &camera);
 
-        auto result = render_context.Draw(*vertex_buffer, *index_buffer, mesh.indices.count());
+        auto result = render_context.Draw(vertex_buffers, index_buffers, index_counts);
 
         device->WaitIdle();
 
