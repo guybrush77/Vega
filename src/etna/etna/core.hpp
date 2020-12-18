@@ -108,6 +108,18 @@ ETNA_DEFINE_ENUM_ANALOGUE(Result)
 
 const char* to_string(Result value);
 
+enum class PhysicalDeviceType {
+    Other         = VK_PHYSICAL_DEVICE_TYPE_OTHER,
+    IntegratedGpu = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
+    DiscreteGpu   = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU,
+    VirtualGpu    = VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU,
+    Cpu           = VK_PHYSICAL_DEVICE_TYPE_CPU
+};
+
+ETNA_DEFINE_ENUM_ANALOGUE(PhysicalDeviceType)
+
+const char* to_string(PhysicalDeviceType value);
+
 enum class AttachmentStoreOp { Store = VK_ATTACHMENT_STORE_OP_STORE, DontCare = VK_ATTACHMENT_STORE_OP_DONT_CARE };
 
 ETNA_DEFINE_ENUM_ANALOGUE(AttachmentStoreOp)
@@ -909,18 +921,33 @@ requires composable_flags<E>::value inline constexpr auto operator&(E lhs, Mask<
     return rhs & lhs;
 }
 
-using Offset2D            = VkOffset2D;
-using Extent2D            = VkExtent2D;
-using Extent3D            = VkExtent3D;
-using Rect2D              = VkRect2D;
-using Viewport            = VkViewport;
-using ExtensionProperties = VkExtensionProperties;
+using DeviceSize                     = VkDeviceSize;
+using Offset2D                       = VkOffset2D;
+using Extent2D                       = VkExtent2D;
+using Extent3D                       = VkExtent3D;
+using Rect2D                         = VkRect2D;
+using Viewport                       = VkViewport;
+using ExtensionProperties            = VkExtensionProperties;
+using PhysicalDeviceLimits           = VkPhysicalDeviceLimits;
+using PhysicalDeviceSparseProperties = VkPhysicalDeviceSparseProperties;
 
 struct DescriptorPoolSize final {
     DescriptorType type;
     uint32_t       descriptorCount;
 
     constexpr operator VkDescriptorPoolSize() const noexcept { return { VkEnum(type), descriptorCount }; };
+};
+
+struct PhysicalDeviceProperties final {
+    uint32_t                       apiVersion;
+    uint32_t                       driverVersion;
+    uint32_t                       vendorID;
+    uint32_t                       deviceID;
+    PhysicalDeviceType             deviceType;
+    char                           deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
+    uint8_t                        pipelineCacheUUID[VK_UUID_SIZE];
+    PhysicalDeviceLimits           limits;
+    PhysicalDeviceSparseProperties sparseProperties;
 };
 
 struct QueueFamilyProperties final {
@@ -933,6 +960,11 @@ struct QueueFamilyProperties final {
     {
         return { VkEnum(queueFlags), queueCount, timestampValidBits, minImageTransferGranularity };
     }
+};
+
+struct MappedMemoryRange final {
+    DeviceSize offset = 0;
+    DeviceSize size   = VK_WHOLE_SIZE;
 };
 
 struct SurfaceFormatKHR final {
@@ -1162,7 +1194,6 @@ class Buffer;
 class CommandBuffer;
 class CommandPool;
 class DescriptorPool;
-class DescriptorSet;
 class DescriptorSetLayout;
 class Device;
 class Fence;
@@ -1172,13 +1203,11 @@ class ImageView2D;
 class Instance;
 class Pipeline;
 class PipelineLayout;
-class Queue;
 class RenderPass;
 class Semaphore;
 class ShaderModule;
 class SurfaceKHR;
 class SwapchainKHR;
-class WriteDescriptorSet;
 
 using UniqueBuffer              = UniqueHandle<Buffer>;
 using UniqueCommandBuffer       = UniqueHandle<CommandBuffer>;
@@ -1189,8 +1218,8 @@ using UniqueDevice              = UniqueHandle<Device>;
 using UniqueFence               = UniqueHandle<Fence>;
 using UniqueFramebuffer         = UniqueHandle<Framebuffer>;
 using UniqueImage2D             = UniqueHandle<Image2D>;
-using UniqueInstance            = UniqueHandle<Instance>;
 using UniqueImageView2D         = UniqueHandle<ImageView2D>;
+using UniqueInstance            = UniqueHandle<Instance>;
 using UniquePipeline            = UniqueHandle<Pipeline>;
 using UniquePipelineLayout      = UniqueHandle<PipelineLayout>;
 using UniqueRenderPass          = UniqueHandle<RenderPass>;
@@ -1198,5 +1227,13 @@ using UniqueSemaphore           = UniqueHandle<Semaphore>;
 using UniqueShaderModule        = UniqueHandle<ShaderModule>;
 using UniqueSurfaceKHR          = UniqueHandle<SurfaceKHR>;
 using UniqueSwapchainKHR        = UniqueHandle<SwapchainKHR>;
+
+class DescriptorSet;
+class Queue;
+class WriteDescriptorSet;
+
+using DescriptorSetRef      = std::reference_wrapper<DescriptorSet>;
+using QueueRef              = std::reference_wrapper<Queue>;
+using WriteDescriptorSetRef = std::reference_wrapper<WriteDescriptorSet>;
 
 } // namespace etna

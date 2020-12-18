@@ -20,7 +20,6 @@ END_DISABLE_WARNINGS
 #include <vector>
 
 struct ID;
-struct MeshID;
 
 struct MeshVertices;
 struct MeshIndices;
@@ -57,19 +56,18 @@ using NodePtr    = Node*;
 using NodeRef    = Node&;
 using NodeArray  = std::vector<NodePtr>;
 
-using MaterialNodePtr         = MaterialNode*;
-using RootMaterialNodePtr     = RootMaterialNode*;
-using ClassMaterialNodePtr    = ClassMaterialNode*;
-using InstanceMaterialNodePtr = InstanceMaterialNode*;
+using MaterialNodePtr     = MaterialNode*;
+using RootMaterialNodePtr = RootMaterialNode*;
+using MaterialClassPtr    = ClassMaterialNode*;
+using MaterialInstancePtr = InstanceMaterialNode*;
 
-using GeoNodePtr          = GeoNode*;
-using RootGeoNodePtr      = RootGeoNode*;
-using TranslateGeoNodePtr = TranslateGeoNode*;
-using RotateGeoNodePtr    = RotateGeoNode*;
-using ScaleGeoNodePtr     = ScaleGeoNode*;
-using InstanceGeoNodePtr  = InstanceGeoNode*;
+using GeoNodePtr       = GeoNode*;
+using RootGeoNodePtr   = RootGeoNode*;
+using TranslateNodePtr = TranslateGeoNode*;
+using RotateNodePtr    = RotateGeoNode*;
+using ScaleNodePtr     = ScaleGeoNode*;
+using MeshInstancePtr  = InstanceGeoNode*;
 
-using MeshList          = std::vector<MeshID>;
 using UniqueMeshManager = std::unique_ptr<MeshManager>;
 
 using ScenePtr = Scene*;
@@ -180,11 +178,6 @@ struct MeshIndices final {
     const void* m_data       = nullptr;
 };
 
-struct MeshID final : ID {
-    constexpr MeshID() noexcept : ID({}) {}
-    constexpr MeshID(ID id) noexcept : ID(id) {}
-};
-
 struct Mesh final : PropertyDictionary {
     Mesh(const Mesh&) = delete;
     Mesh& operator=(const Mesh&) = delete;
@@ -192,7 +185,7 @@ struct Mesh final : PropertyDictionary {
     Mesh(Mesh&&)  = default;
     Mesh& operator=(Mesh&&) = default;
 
-    auto ID() const noexcept -> MeshID { return m_id; }
+    auto GetID() const noexcept -> ID { return m_id; }
     auto BoundingBox() const noexcept -> const AABB& { return m_aabb; }
     auto Vertices() const noexcept -> const MeshVertices& { return m_vertices; }
     auto Indices() const noexcept -> const MeshIndices& { return m_indices; }
@@ -202,17 +195,14 @@ struct Mesh final : PropertyDictionary {
   private:
     friend struct MeshManager;
 
-    Mesh(MeshID id, AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) noexcept
+    Mesh(ID id, AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) noexcept
         : m_id(id), m_aabb(aabb), m_vertices(std::move(mesh_vertices)), m_indices(std::move(mesh_indices))
     {}
 
-    bool GetIsNewThenReset() noexcept;
-
-    MeshID       m_id{};
+    ID           m_id{};
     AABB         m_aabb{};
     MeshVertices m_vertices;
     MeshIndices  m_indices;
-    bool         m_is_new = true;
 };
 
 struct NodeID final : ID {
@@ -244,7 +234,7 @@ struct RootMaterialNode final : MaterialNode {
     RootMaterialNode(const RootMaterialNode&) = delete;
     RootMaterialNode& operator=(const RootMaterialNode&) = delete;
 
-    auto AddMaterialClassNode() -> ClassMaterialNodePtr;
+    auto AddMaterialClassNode() -> MaterialClassPtr;
 
     auto GetChildren() const -> NodeArray override;
 
@@ -262,7 +252,7 @@ struct ClassMaterialNode final : MaterialNode {
     ClassMaterialNode(const ClassMaterialNode&) = delete;
     ClassMaterialNode& operator=(const ClassMaterialNode&) = delete;
 
-    auto AddMaterialInstanceNode() -> InstanceMaterialNodePtr;
+    auto AddMaterialInstanceNode() -> MaterialInstancePtr;
 
     auto GetChildren() const -> NodeArray override;
 
@@ -280,7 +270,7 @@ struct InstanceMaterialNode final : MaterialNode {
     InstanceMaterialNode(const InstanceMaterialNode&) = delete;
     InstanceMaterialNode& operator=(const InstanceMaterialNode&) = delete;
 
-    auto GetChildren() const -> NodeArray override { return {}; }
+    auto GetChildren() const -> NodeArray override { return m_nodes; }
 
     json ToJson() const override;
 
@@ -289,9 +279,9 @@ struct InstanceMaterialNode final : MaterialNode {
 
     InstanceMaterialNode(NodeID id) noexcept : MaterialNode(id) {}
 
-    void AddMeshInstancePtr(InstanceGeoNodePtr mesh_instance) { m_mesh_instances.push_back(mesh_instance); }
+    void AddMeshInstancePtr(MeshInstancePtr mesh_instance);
 
-    std::vector<InstanceGeoNodePtr> m_mesh_instances;
+    NodeArray m_nodes;
 };
 
 struct GeoNode : Node {
@@ -303,31 +293,11 @@ struct GeoNode : Node {
     friend struct NodeAccess;
 };
 
-struct InstanceGeoNode final : GeoNode {
-    InstanceGeoNode(const InstanceGeoNode&) = delete;
-    InstanceGeoNode& operator=(const InstanceGeoNode&) = delete;
-
-    auto GetChildren() const -> NodeArray override { return {}; }
-
-    json ToJson() const override;
-
-  private:
-    friend struct NodeAccess;
-
-    virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
-
-    InstanceGeoNode(NodeID id, MeshPtr mesh, InstanceMaterialNodePtr material) noexcept;
-
-    MeshPtr                 m_mesh_instance     = nullptr;
-    InstanceMaterialNodePtr m_material_instance = nullptr;
-    glm::mat4               m_transform;
-};
-
 struct InternalGeoNode : GeoNode {
-    auto AddTranslateNode(glm::vec3 amount) -> TranslateGeoNodePtr;
-    auto AddRotateNode(glm::vec3 axis, Radians angle) -> RotateGeoNodePtr;
-    auto AddScaleNode(float factor) -> ScaleGeoNodePtr;
-    auto AddInstanceNode(MeshPtr mesh, InstanceMaterialNodePtr material) -> InstanceGeoNodePtr;
+    auto AddTranslateNode(glm::vec3 amount) -> TranslateNodePtr;
+    auto AddRotateNode(glm::vec3 axis, Radians angle) -> RotateNodePtr;
+    auto AddScaleNode(float factor) -> ScaleNodePtr;
+    auto AddInstanceNode(MeshPtr mesh, MaterialInstancePtr material) -> MeshInstancePtr;
 
     auto GetChildren() const -> NodeArray override;
 
@@ -375,6 +345,12 @@ struct RotateGeoNode final : InternalGeoNode {
 
     json ToJson() const override;
 
+    auto Axis() const noexcept { return m_axis; }
+    auto Angle() const noexcept { return m_angle; }
+
+    void SetAxis(const glm::vec3& axis) noexcept { m_axis = axis; }
+    void SetAngle(Radians angle) noexcept { m_angle = angle; }
+
   private:
     friend struct NodeAccess;
 
@@ -403,26 +379,56 @@ struct ScaleGeoNode final : InternalGeoNode {
     float m_factor;
 };
 
-struct DrawData final {
-    MeshList new_meshes;
+struct InstanceGeoNode final : GeoNode {
+    InstanceGeoNode(const InstanceGeoNode&) = delete;
+    InstanceGeoNode& operator=(const InstanceGeoNode&) = delete;
+
+    auto GetChildren() const -> NodeArray override { return NodeArray{}; }
+
+    auto GetMeshPtr() const noexcept { return m_mesh; }
+
+    auto GetMaterialInstancePtr() const noexcept { return m_material_instance; }
+
+    auto GetTransformPtr() const noexcept -> const glm::mat4* { return &m_transform; }
+
+    json ToJson() const override;
+
+  private:
+    friend struct NodeAccess;
+
+    virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
+
+    InstanceGeoNode(NodeID id, MeshPtr mesh, MaterialInstancePtr material) noexcept;
+
+    MeshPtr             m_mesh              = nullptr;
+    MaterialInstancePtr m_material_instance = nullptr;
+    glm::mat4           m_transform         = glm::mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
 };
+
+struct DrawRecord final {
+    MeshPtr          mesh;
+    const glm::mat4* transform;
+};
+
+using DrawList = std::vector<DrawRecord>;
 
 struct Scene {
     Scene();
 
     Scene(const Scene&) = delete;
-    Scene operator=(const Scene&) = delete;
+    Scene& operator=(const Scene&) = delete;
+
+    Scene(Scene&&) = default;
+    Scene& operator=(Scene&&) = default;
 
     ~Scene() noexcept;
 
-    auto GetGeometryRoot() noexcept -> RootGeoNodePtr;
-    auto GetMaterialRoot() noexcept -> RootMaterialNodePtr;
+    auto GetGeometryRootPtr() noexcept -> RootGeoNodePtr;
+    auto GetMaterialRootPtr() noexcept -> RootMaterialNodePtr;
 
     auto CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) -> MeshPtr;
 
-    auto GetMesh(MeshID mesh_id) -> MeshPtr;
-
-    auto GetDrawData() noexcept -> DrawData;
+    auto GetDrawList() const -> DrawList;
 
     json ToJson() const;
 

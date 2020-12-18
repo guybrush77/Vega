@@ -20,6 +20,8 @@ class Buffer {
     void* MapMemory();
     void  UnmapMemory();
 
+    void FlushMappedMemoryRanges(std::initializer_list<MappedMemoryRange> memory_ranges);
+
   private:
     template <typename>
     friend class UniqueHandle;

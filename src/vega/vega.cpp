@@ -36,10 +36,13 @@ struct GLFW {
     ~GLFW() { glfwTerminate(); }
 } glfw;
 
-struct MVP {
+struct ModelTransform final {
     glm::mat4 model;
+};
+
+struct CameraTransform final {
     glm::mat4 view;
-    glm::mat4 proj;
+    glm::mat4 projection;
 };
 
 struct Index final {
@@ -104,11 +107,11 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
         throw std::runtime_error("Failed to load file");
     }
 
-    auto material_root     = scene->GetMaterialRoot();
+    auto material_root     = scene->GetMaterialRootPtr();
     auto material_class    = material_root->AddMaterialClassNode();
     auto material_instance = material_class->AddMaterialInstanceNode();
 
-    auto geometry_root = scene->GetGeometryRoot();
+    auto geometry_root = scene->GetGeometryRootPtr();
 
     auto index_map = std::unordered_map<Index, uint32_t, Index::Hash>{};
     auto vertices  = std::vector<VertexPN>{};
@@ -460,39 +463,135 @@ class FrameManager {
 
 class DescriptorManager {
   public:
-    DescriptorManager(etna::Device device, uint32_t count, etna::DescriptorSetLayout descriptor_set_layout)
+    DescriptorManager() noexcept = default;
+
+    DescriptorManager(const DescriptorManager&) = delete;
+    DescriptorManager& operator=(const DescriptorManager&) = delete;
+
+    DescriptorManager(DescriptorManager&&) = default;
+    DescriptorManager& operator=(DescriptorManager&&) = default;
+
+    DescriptorManager(
+        etna::Device                      device,
+        uint32_t                          num_frames,
+        etna::DescriptorSetLayout         descriptor_set_layout,
+        const etna::PhysicalDeviceLimits& gpu_limits)
         : m_device(device), m_descriptor_set_layout(descriptor_set_layout)
     {
         using namespace etna;
 
-        m_descriptor_pool = device.CreateDescriptorPool({ DescriptorPoolSize{ DescriptorType::UniformBuffer, count } });
-        m_descriptor_sets = m_descriptor_pool->AllocateDescriptorSets(count, descriptor_set_layout);
-        m_descriptor_buffers =
-            device.CreateBuffers(count, sizeof(MVP), BufferUsage::UniformBuffer, MemoryUsage::CpuToGpu);
+        m_offset_multiplier = sizeof(glm::mat4);
+
+        if (auto min_alignment = gpu_limits.minUniformBufferOffsetAlignment; min_alignment > 0) {
+            m_offset_multiplier = (m_offset_multiplier + min_alignment - 1) & ~(min_alignment - 1);
+        }
+
+        m_descriptor_pool =
+            device.CreateDescriptorPool({ DescriptorPoolSize{ DescriptorType::UniformBuffer, num_frames } });
+
+        auto descriptor_sets = m_descriptor_pool->AllocateDescriptorSets(num_frames, descriptor_set_layout);
+
+        auto model_buffers = device.CreateBuffers(
+            num_frames,
+            kMaxTransforms * m_offset_multiplier,
+            BufferUsage::UniformBuffer,
+            MemoryUsage::CpuToGpu);
+
+        auto camera_buffers = device.CreateBuffers(
+            num_frames,
+            sizeof(CameraTransform),
+            BufferUsage::UniformBuffer,
+            MemoryUsage::CpuToGpu);
+
+        auto write_descriptor_sets = std::vector<WriteDescriptorSet>();
+
+        m_frame_states.reserve(num_frames);
+        write_descriptor_sets.reserve(num_frames);
+
+        for (size_t i = 0; i < num_frames; ++i) {
+            auto model_buffer_memory  = static_cast<std::byte*>(model_buffers[i]->MapMemory());
+            auto camera_buffer_memory = static_cast<std::byte*>(camera_buffers[i]->MapMemory());
+
+            auto frame_state = FrameState{
+
+                descriptor_sets[i],
+                { std::move(model_buffers[i]), model_buffer_memory },
+                { std::move(camera_buffers[i]), camera_buffer_memory }
+            };
+
+            m_frame_states.push_back(std::move(frame_state));
+
+            write_descriptor_sets.emplace_back(descriptor_sets[i], Binding{ 0 }, DescriptorType::UniformBufferDynamic);
+            write_descriptor_sets.back().AddBuffer(*m_frame_states[i].model.buffer);
+
+            write_descriptor_sets.emplace_back(descriptor_sets[i], Binding{ 1 }, DescriptorType::UniformBuffer);
+            write_descriptor_sets.back().AddBuffer(*m_frame_states[i].camera.buffer);
+        }
+
+        m_device.UpdateDescriptorSets(write_descriptor_sets);
     }
 
-    auto DescriptorSet(size_t index) const noexcept { return m_descriptor_sets[index]; }
+    ~DescriptorManager() noexcept
+    {
+        for (auto& frame_state : m_frame_states) {
+            frame_state.model.buffer->UnmapMemory();
+            frame_state.camera.buffer->UnmapMemory();
+        }
+    }
+
+    auto DescriptorSet(size_t frame_index) const noexcept { return m_frame_states[frame_index].descriptor_set; }
     auto DescriptorSetLayout() const noexcept { return m_descriptor_set_layout; }
 
-    void UpdateDescriptorSet(size_t index, const MVP& mvp)
+    uint32_t Set(size_t frame_index, size_t transform_index, const ModelTransform& model_transform) noexcept
+    {
+        auto& frame_state = m_frame_states[frame_index];
+
+        auto offset = transform_index * m_offset_multiplier;
+
+        memcpy(frame_state.model.mapped_memory + offset, &model_transform, m_offset_multiplier);
+
+        return etna::narrow_cast<uint32_t>(offset);
+    }
+
+    void Set(size_t frame_index, const CameraTransform& camera_transform) noexcept
+    {
+        auto& frame_state = m_frame_states[frame_index];
+
+        memcpy(frame_state.camera.mapped_memory, &camera_transform, sizeof(camera_transform));
+    }
+
+    void UpdateDescriptorSet(size_t frame_index)
     {
         using namespace etna;
 
-        void* data = m_descriptor_buffers[index]->MapMemory();
-        memcpy(data, &mvp, sizeof(mvp));
-        m_descriptor_buffers[index]->UnmapMemory();
+        auto& frame_state = m_frame_states[frame_index];
 
-        WriteDescriptorSet write_descriptor(m_descriptor_sets[index], Binding{ 0 }, DescriptorType::UniformBuffer);
-        write_descriptor.AddBuffer(*m_descriptor_buffers[index]);
-        m_device.UpdateDescriptorSet(write_descriptor);
+        frame_state.model.buffer->FlushMappedMemoryRanges({ MappedMemoryRange{} });
+        frame_state.camera.buffer->FlushMappedMemoryRanges({ MappedMemoryRange{} });
     }
 
   private:
-    etna::Device                     m_device;
-    etna::DescriptorSetLayout        m_descriptor_set_layout;
-    etna::UniqueDescriptorPool       m_descriptor_pool;
-    std::vector<etna::DescriptorSet> m_descriptor_sets;
-    std::vector<etna::UniqueBuffer>  m_descriptor_buffers;
+    static constexpr int kMaxTransforms = 64;
+
+    struct FrameState final {
+        etna::DescriptorSet descriptor_set;
+
+        struct Model final {
+            etna::UniqueBuffer buffer{};
+            std::byte*         mapped_memory{};
+        } model;
+
+        struct Camera final {
+            etna::UniqueBuffer buffer{};
+            std::byte*         mapped_memory{};
+        } camera;
+    };
+
+    etna::Device               m_device;
+    etna::DescriptorSetLayout  m_descriptor_set_layout;
+    etna::UniqueDescriptorPool m_descriptor_pool;
+    std::vector<FrameState>    m_frame_states;
+    etna::DeviceSize           m_offset_multiplier;
 };
 
 struct FramebufferInfo {
@@ -578,6 +677,139 @@ class SwapchainManager {
     uint32_t                             m_min_image_count;
 };
 
+struct MeshRecord final {
+    struct Vertex final {
+        etna::Buffer buffer;
+        uint32_t     size;
+        uint32_t     count;
+    } vertices;
+    struct Indexfinal {
+        etna::Buffer buffer;
+        uint32_t     size;
+        uint32_t     count;
+    } indices;
+};
+
+class MeshStore {
+  public:
+    MeshStore(etna::Device device) : m_device(device) {}
+
+    MeshStore(const MeshStore&) = delete;
+    MeshStore& operator=(const MeshStore&) = delete;
+
+    MeshStore(MeshStore&&) = default;
+    MeshStore& operator=(MeshStore&&) = default;
+
+    bool Add(MeshPtr mesh)
+    {
+        using namespace etna;
+
+        if (m_cpu_buffers.count(mesh)) {
+            return false;
+        }
+
+        auto vertices_size  = mesh->Vertices().Size();
+        auto vertices_data  = mesh->Vertices().Data();
+        auto vertices_count = mesh->Vertices().Count();
+
+        auto indices_size  = mesh->Indices().Size();
+        auto indices_data  = mesh->Indices().Data();
+        auto indices_count = mesh->Indices().Count();
+
+        auto cpu_vertex_buffer = m_device.CreateBuffer(vertices_size, BufferUsage::TransferSrc, MemoryUsage::CpuOnly);
+        auto cpu_index_buffer  = m_device.CreateBuffer(indices_size, BufferUsage::TransferSrc, MemoryUsage::CpuOnly);
+
+        auto vertex_buffer_data = cpu_vertex_buffer->MapMemory();
+        memcpy(vertex_buffer_data, vertices_data, vertices_size);
+        cpu_vertex_buffer->UnmapMemory();
+
+        auto index_buffer_data = cpu_index_buffer->MapMemory();
+        memcpy(index_buffer_data, indices_data, indices_size);
+        cpu_index_buffer->UnmapMemory();
+
+        auto cpu_buffers = MeshRecordPrivate{ { std::move(cpu_vertex_buffer), vertices_size, vertices_count },
+                                              { std::move(cpu_index_buffer), indices_size, indices_count } };
+
+        auto rv = m_cpu_buffers.insert({ mesh, std::move(cpu_buffers) });
+
+        return rv.second;
+    }
+
+    void Upload(etna::Queue transfer_queue, uint32_t transfer_queue_family_index)
+    {
+        using namespace etna;
+
+        auto cmd_pool   = m_device.CreateCommandPool(transfer_queue_family_index, CommandPoolCreate::Transient);
+        auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
+
+        cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
+
+        for (const auto& [mesh_id, cpu_mesh] : m_cpu_buffers) {
+            auto vertices_size  = cpu_mesh.vertices.size;
+            auto vertices_count = cpu_mesh.vertices.count;
+            auto indices_size   = cpu_mesh.indices.size;
+            auto indices_count  = cpu_mesh.indices.count;
+
+            auto gpu_vertex_buffer = m_device.CreateBuffer(
+                vertices_size,
+                BufferUsage::VertexBuffer | BufferUsage::TransferDst,
+                MemoryUsage::GpuOnly);
+
+            auto gpu_index_buffer = m_device.CreateBuffer(
+                indices_size,
+                BufferUsage::IndexBuffer | BufferUsage::TransferDst,
+                MemoryUsage::GpuOnly);
+
+            auto gpu_buffers = MeshRecordPrivate{ { std::move(gpu_vertex_buffer), vertices_size, vertices_count },
+                                                  { std::move(gpu_index_buffer), indices_size, indices_count } };
+
+            auto [it, success] = m_gpu_buffers.insert({ mesh_id, std::move(gpu_buffers) });
+
+            const auto& gpu_mesh = it->second;
+
+            cmd_buffer->CopyBuffer(*cpu_mesh.vertices.buffer, *gpu_mesh.vertices.buffer, vertices_size);
+            cmd_buffer->CopyBuffer(*cpu_mesh.indices.buffer, *gpu_mesh.indices.buffer, indices_size);
+        }
+
+        cmd_buffer->End();
+
+        transfer_queue.Submit(*cmd_buffer);
+
+        m_device.WaitIdle();
+
+        m_cpu_buffers.clear();
+    }
+
+    auto Get(MeshPtr mesh)
+    {
+        if (auto it = m_gpu_buffers.find(mesh); it != m_gpu_buffers.end()) {
+            const auto& buffers = it->second;
+            return MeshRecord{ { *buffers.vertices.buffer, buffers.vertices.size, buffers.vertices.count },
+                               { *buffers.indices.buffer, buffers.indices.size, buffers.indices.count } };
+        }
+        return MeshRecord{};
+    }
+
+  private:
+    struct MeshRecordPrivate final {
+        struct Vertex final {
+            etna::UniqueBuffer buffer;
+            uint32_t           size;
+            uint32_t           count;
+        } vertices;
+        struct Indexfinal {
+            etna::UniqueBuffer buffer;
+            uint32_t           size;
+            uint32_t           count;
+        } indices;
+    };
+
+    etna::Device m_device;
+
+    std::unordered_map<MeshPtr, MeshRecordPrivate> m_cpu_buffers;
+    std::unordered_map<MeshPtr, MeshRecordPrivate> m_gpu_buffers;
+};
+
 class RenderContext {
   public:
     enum Status { WindowClosed, SwapchainOutOfDate };
@@ -593,10 +825,13 @@ class RenderContext {
         FrameManager*        frame_manager,
         DescriptorManager*   descriptor_manager,
         Gui*                 gui,
-        Camera*              camera)
+        Camera*              camera,
+        MeshStore*           mesh_store,
+        Scene*               scene)
         : m_device(device), m_graphics_queue(graphics_queue), m_pipeline(pipeline), m_pipeline_layout(pipeline_layout),
           m_window(window), m_swapchain_manager(swapchain_manager), m_frame_manager(frame_manager),
-          m_descriptor_manager(descriptor_manager), m_gui(gui), m_camera(camera)
+          m_descriptor_manager(descriptor_manager), m_gui(gui), m_camera(camera), m_mesh_store(mesh_store),
+          m_scene(scene)
     {}
 
     void ProcessUserInput()
@@ -643,10 +878,7 @@ class RenderContext {
         }
     }
 
-    Status Draw(
-        const std::vector<etna::UniqueBuffer>& vertex_buffers,
-        const std::vector<etna::UniqueBuffer>& index_buffers,
-        const std::vector<uint32_t>&           index_counts)
+    Status StartRenderLoop()
     {
         using namespace etna;
 
@@ -675,11 +907,12 @@ class RenderContext {
 
             ProcessUserInput();
 
-            auto extent = framebuffers.extent;
-            auto model  = glm::identity<glm::mat4>();
-            auto mvp    = MVP{ model, m_camera->GetViewMatrix(), m_camera->GetPerspectiveMatrix() };
+            auto draw_list = m_scene->GetDrawList();
+            auto extent    = framebuffers.extent;
 
-            m_descriptor_manager->UpdateDescriptorSet(frame.index, mvp);
+            auto camera_transform = CameraTransform{ m_camera->GetViewMatrix(), m_camera->GetPerspectiveMatrix() };
+
+            m_descriptor_manager->Set(frame.index, camera_transform);
 
             auto clear_color    = ClearColor::Transparent;
             auto clear_depth    = ClearDepthStencil::Default;
@@ -698,18 +931,22 @@ class RenderContext {
             frame.cmd_buffers.draw.SetViewport(viewport);
             frame.cmd_buffers.draw.SetScissor(scissor);
 
-            for (size_t i = 0; i < vertex_buffers.size(); ++i) {
-                frame.cmd_buffers.draw.BindVertexBuffers(*vertex_buffers[i]);
-                frame.cmd_buffers.draw.BindIndexBuffer(*index_buffers[i], IndexType::Uint32);
-                frame.cmd_buffers.draw.BindDescriptorSet(
-                    PipelineBindPoint::Graphics,
-                    m_pipeline_layout,
-                    descriptor_set);
-                frame.cmd_buffers.draw.DrawIndexed(index_counts[i], 1);
+            for (size_t i = 0; i < draw_list.size(); ++i) {
+                auto model_transform = ModelTransform{ *draw_list[i].transform };
+                auto offset          = m_descriptor_manager->Set(frame.index, i, model_transform);
+                auto mesh            = m_mesh_store->Get(draw_list[i].mesh);
+
+                frame.cmd_buffers.draw.BindVertexBuffers(mesh.vertices.buffer);
+                frame.cmd_buffers.draw.BindIndexBuffer(mesh.indices.buffer, IndexType::Uint32); // TODO: buffer type?
+                frame.cmd_buffers.draw
+                    .BindDescriptorSet(PipelineBindPoint::Graphics, m_pipeline_layout, descriptor_set, { offset });
+                frame.cmd_buffers.draw.DrawIndexed(mesh.indices.count, 1);
             }
 
             frame.cmd_buffers.draw.EndRenderPass();
             frame.cmd_buffers.draw.End();
+
+            m_descriptor_manager->UpdateDescriptorSet(frame.index);
 
             m_graphics_queue.Submit(
                 frame.cmd_buffers.draw,
@@ -742,6 +979,8 @@ class RenderContext {
     DescriptorManager*   m_descriptor_manager    = nullptr;
     Gui*                 m_gui                   = nullptr;
     Camera*              m_camera                = nullptr;
+    MeshStore*           m_mesh_store            = nullptr;
+    Scene*               m_scene                 = nullptr;
     MouseLook            m_mouse_look            = MouseLook::None;
     bool                 m_is_any_window_hovered = false;
 };
@@ -842,6 +1081,8 @@ int main()
         }
     }
 
+    auto gpu_properties = gpu.GetPhysicalDeviceProperties();
+
     auto window = CreateWindow("Vega Viewer");
 
     UniqueSurfaceKHR surface;
@@ -884,64 +1125,6 @@ int main()
     auto scene = Scene();
 
     LoadObj(&scene, "../../../data/models/suzanne.obj");
-
-    auto draw_data = scene.GetDrawData();
-
-    // Copy mesh data to GPU
-    auto vertex_buffers = std::vector<UniqueBuffer>();
-    auto index_buffers  = std::vector<UniqueBuffer>();
-    auto index_counts   = std::vector<uint32_t>(); // TODO: temporary
-    {
-        auto cmd_pool   = device->CreateCommandPool(transfer.family_index, CommandPoolCreate::Transient);
-        auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
-
-        auto src_vbos = std::vector<UniqueBuffer>();
-        auto src_ibos = std::vector<UniqueBuffer>();
-
-        cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
-
-        for (MeshID mesh_id : draw_data.new_meshes) {
-            auto mesh = scene.GetMesh(mesh_id);
-
-            auto vertices_size = mesh->Vertices().Size();
-            auto vertices_data = mesh->Vertices().Data();
-
-            auto indices_size = mesh->Indices().Size();
-            auto indices_data = mesh->Indices().Data();
-
-            src_vbos.push_back(device->CreateBuffer(vertices_size, BufferUsage::TransferSrc, MemoryUsage::CpuOnly));
-            src_ibos.push_back(device->CreateBuffer(indices_size, BufferUsage::TransferSrc, MemoryUsage::CpuOnly));
-
-            auto vertices_raw_data = src_vbos.back()->MapMemory();
-            memcpy(vertices_raw_data, vertices_data, vertices_size);
-            src_vbos.back()->UnmapMemory();
-
-            auto indices_raw_data = src_ibos.back()->MapMemory();
-            memcpy(indices_raw_data, indices_data, indices_size);
-            src_ibos.back()->UnmapMemory();
-
-            vertex_buffers.push_back(device->CreateBuffer(
-                vertices_size,
-                BufferUsage::VertexBuffer | BufferUsage::TransferDst,
-                MemoryUsage::GpuOnly));
-
-            index_buffers.push_back(device->CreateBuffer(
-                indices_size,
-                BufferUsage::IndexBuffer | BufferUsage::TransferDst,
-                MemoryUsage::GpuOnly));
-
-            index_counts.push_back(mesh->Indices().Count());
-
-            cmd_buffer->CopyBuffer(*src_vbos.back(), *vertex_buffers.back(), vertices_size);
-            cmd_buffer->CopyBuffer(*src_ibos.back(), *index_buffers.back(), indices_size);
-        }
-
-        cmd_buffer->End();
-
-        queues.transfer.Submit(*cmd_buffer);
-
-        device->WaitIdle();
-    }
 
     SurfaceFormatKHR surface_format = FindOptimalSurfaceFormatKHR(
         gpu,
@@ -1050,7 +1233,11 @@ int main()
     UniqueDescriptorSetLayout descriptor_set_layout;
     {
         auto builder = DescriptorSetLayout::Builder();
-        builder.AddDescriptorSetLayoutBinding(Binding{ 0 }, DescriptorType::UniformBuffer, 1, ShaderStage::Vertex);
+
+        builder
+            .AddDescriptorSetLayoutBinding(Binding{ 0 }, DescriptorType::UniformBufferDynamic, 1, ShaderStage::Vertex);
+        builder.AddDescriptorSetLayoutBinding(Binding{ 1 }, DescriptorType::UniformBuffer, 1, ShaderStage::Vertex);
+
         descriptor_set_layout = device->CreateDescriptorSetLayout(builder.state);
     }
 
@@ -1097,10 +1284,20 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
+    auto draw_list = scene.GetDrawList();
+
+    auto mesh_store = MeshStore(*device);
+
+    for (DrawRecord draw_record : draw_list) {
+        mesh_store.Add(draw_record.mesh);
+    }
+
+    mesh_store.Upload(queues.transfer, transfer.family_index);
+
     uint32_t image_count = 3;
     uint32_t frame_count = 2;
 
-    DescriptorManager descriptor_manager(*device, frame_count, *descriptor_set_layout);
+    auto descriptor_manager = DescriptorManager(*device, frame_count, *descriptor_set_layout, gpu_properties.limits);
 
     auto camera = Camera::Create(
         Orientation::RightHanded,
@@ -1111,17 +1308,17 @@ int main()
         45_deg,
         aspect);
 
-    Gui gui(
-        *instance,
-        gpu,
-        *device,
-        graphics.family_index,
-        queues.graphics,
-        *gui_renderpass,
-        window.get(),
-        extent,
-        image_count,
-        image_count);
+    auto gui =
+        Gui(*instance,
+            gpu,
+            *device,
+            graphics.family_index,
+            queues.graphics,
+            *gui_renderpass,
+            window.get(),
+            extent,
+            image_count,
+            image_count);
 
     gui.AddWindow<CameraWindow>(&camera);
 
@@ -1152,9 +1349,11 @@ int main()
             &frame_manager,
             &descriptor_manager,
             &gui,
-            &camera);
+            &camera,
+            &mesh_store,
+            &scene);
 
-        auto result = render_context.Draw(vertex_buffers, index_buffers, index_counts);
+        auto result = render_context.StartRenderLoop();
 
         device->WaitIdle();
 

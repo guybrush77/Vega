@@ -32,13 +32,14 @@ class PhysicalDevice {
 
     bool operator==(const PhysicalDevice&) const = default;
 
-    FormatProperties                   GetPhysicalDeviceFormatProperties(Format format) const;
-    std::vector<QueueFamilyProperties> GetPhysicalDeviceQueueFamilyProperties() const;
-    SurfaceCapabilitiesKHR             GetPhysicalDeviceSurfaceCapabilitiesKHR(SurfaceKHR surface) const;
-    std::vector<SurfaceFormatKHR>      GetPhysicalDeviceSurfaceFormatsKHR(SurfaceKHR surface) const;
-    std::vector<PresentModeKHR>        GetPhysicalDeviceSurfacePresentModesKHR(SurfaceKHR surface) const;
-    bool                               GetPhysicalDeviceSurfaceSupportKHR(uint32_t queue_idx, SurfaceKHR surface) const;
-    std::vector<ExtensionProperties>   EnumerateDeviceExtensionProperties(const char* layer_name = nullptr) const;
+    auto GetPhysicalDeviceProperties() const -> PhysicalDeviceProperties;
+    auto GetPhysicalDeviceFormatProperties(Format format) const -> FormatProperties;
+    auto GetPhysicalDeviceQueueFamilyProperties() const -> std::vector<QueueFamilyProperties>;
+    auto GetPhysicalDeviceSurfaceCapabilitiesKHR(SurfaceKHR surface) const -> SurfaceCapabilitiesKHR;
+    auto GetPhysicalDeviceSurfaceFormatsKHR(SurfaceKHR surface) const -> std::vector<SurfaceFormatKHR>;
+    auto GetPhysicalDeviceSurfacePresentModesKHR(SurfaceKHR surface) const -> std::vector<PresentModeKHR>;
+    bool GetPhysicalDeviceSurfaceSupportKHR(uint32_t queue_idx, SurfaceKHR surface) const;
+    auto EnumerateDeviceExtensionProperties(const char* layer_name = nullptr) const -> std::vector<ExtensionProperties>;
 
   private:
     VkPhysicalDevice m_physical_device{};

@@ -91,17 +91,17 @@ Gui::Gui(
     {
         DescriptorPoolSize pool_sizes[] = {
 
-            { DescriptorType::Sampler, 1000 },
-            { DescriptorType::CombinedImageSampler, 1000 },
-            { DescriptorType::SampledImage, 1000 },
-            { DescriptorType::StorageImage, 1000 },
-            { DescriptorType::UniformTexelBuffer, 1000 },
-            { DescriptorType::StorageTexelBuffer, 1000 },
-            { DescriptorType::UniformBuffer, 1000 },
-            { DescriptorType::StorageBuffer, 1000 },
-            { DescriptorType::UniformBufferDynamic, 1000 },
-            { DescriptorType::StorageBufferDynamic, 1000 },
-            { DescriptorType::InputAttachment, 1000 }
+            { DescriptorType::Sampler, 1 },
+            { DescriptorType::CombinedImageSampler, 1 },
+            { DescriptorType::SampledImage, 1 },
+            { DescriptorType::StorageImage, 1 },
+            { DescriptorType::UniformTexelBuffer, 1 },
+            { DescriptorType::StorageTexelBuffer, 1 },
+            { DescriptorType::UniformBuffer, 1 },
+            { DescriptorType::StorageBuffer, 1 },
+            { DescriptorType::UniformBufferDynamic, 1 },
+            { DescriptorType::StorageBufferDynamic, 1 },
+            { DescriptorType::InputAttachment, 1 }
         };
         m_descriptor_pool = device.CreateDescriptorPool(pool_sizes);
     }

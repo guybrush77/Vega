@@ -452,9 +452,7 @@ void Device::ResetFences(std::initializer_list<Fence> fences)
         throw_etna_error(__FILE__, __LINE__, "Too many elements in std::initializer_list<Fence>");
     }
 
-    std::transform(fences.begin(), fences.end(), vk_fences.begin(), [](Fence fence) {
-        return static_cast<VkFence>(fence);
-    });
+    std::ranges::transform(fences, vk_fences.begin(), [](Fence fence) { return static_cast<VkFence>(fence); });
 
     auto vk_size = narrow_cast<uint32_t>(fences.size());
 
@@ -463,13 +461,52 @@ void Device::ResetFences(std::initializer_list<Fence> fences)
     }
 }
 
-void Device::UpdateDescriptorSet(const WriteDescriptorSet& write_descriptor_set)
+void Device::UpdateDescriptorSets(std::initializer_list<WriteDescriptorSetRef> write_descriptor_sets)
 {
     assert(m_device);
 
-    VkWriteDescriptorSet vk_write_descriptor_set = write_descriptor_set;
+    constexpr size_t kMaxSets = 16;
 
-    vkUpdateDescriptorSets(m_device, 1, &vk_write_descriptor_set, 0, nullptr);
+    std::array<VkWriteDescriptorSet, kMaxSets> vk_write_descriptor_sets;
+
+    if (write_descriptor_sets.size() > vk_write_descriptor_sets.size()) {
+        throw_etna_error(__FILE__, __LINE__, "Too many elements in std::initializer_list<WriteDescriptorSetRef>");
+    }
+
+    std::ranges::transform(write_descriptor_sets, vk_write_descriptor_sets.begin(), [](const WriteDescriptorSet& set) {
+        if (set.m_descriptor_buffer_infos.empty()) {
+            throw_etna_error(__FILE__, __LINE__, "No buffers to update in WriteDescriptorSet");
+        }
+        return static_cast<VkWriteDescriptorSet>(set);
+    });
+
+    auto vk_size = narrow_cast<uint32_t>(write_descriptor_sets.size());
+
+    vkUpdateDescriptorSets(m_device, vk_size, vk_write_descriptor_sets.data(), 0, nullptr);
+}
+
+void Device::UpdateDescriptorSets(std::span<WriteDescriptorSet> write_descriptor_sets)
+{
+    assert(m_device);
+
+    constexpr size_t kMaxSets = 16;
+
+    std::array<VkWriteDescriptorSet, kMaxSets> vk_write_descriptor_sets;
+
+    if (write_descriptor_sets.size() > vk_write_descriptor_sets.size()) {
+        throw_etna_error(__FILE__, __LINE__, "Too many elements in std::span<WriteDescriptorSet>");
+    }
+
+    std::ranges::transform(write_descriptor_sets, vk_write_descriptor_sets.begin(), [](const WriteDescriptorSet& set) {
+        if (set.m_descriptor_buffer_infos.empty()) {
+            throw_etna_error(__FILE__, __LINE__, "No buffers to update in WriteDescriptorSet");
+        }
+        return static_cast<VkWriteDescriptorSet>(set);
+    });
+
+    auto vk_size = narrow_cast<uint32_t>(write_descriptor_sets.size());
+
+    vkUpdateDescriptorSets(m_device, vk_size, vk_write_descriptor_sets.data(), 0, nullptr);
 }
 
 void Device::WaitForFence(Fence fence, uint64_t timeout)

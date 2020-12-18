@@ -59,6 +59,18 @@ const char* to_string(Result value)
     }
 }
 
+const char* to_string(PhysicalDeviceType value)
+{
+    switch (value) {
+    case PhysicalDeviceType::Other: return "Other";
+    case PhysicalDeviceType::IntegratedGpu: return "IntegratedGpu";
+    case PhysicalDeviceType::DiscreteGpu: return "DiscreteGpu";
+    case PhysicalDeviceType::VirtualGpu: return "VirtualGpu";
+    case PhysicalDeviceType::Cpu: return "Cpu";
+    default: return "invalid";
+    }
+}
+
 const char* to_string(DebugUtilsMessageSeverity value) noexcept
 {
     switch (value) {

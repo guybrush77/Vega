@@ -1,5 +1,9 @@
 #include "scene.hpp"
 
+#include "utils/cast.hpp"
+
+#include <ranges>
+
 namespace {
 
 struct ValueToJson final {
@@ -49,7 +53,7 @@ static void to_json(json& json, ID id)
     json = id.value;
 }
 
-static void to_json(json& json, InstanceGeoNodePtr mesh)
+static void to_json(json& json, MeshInstancePtr mesh)
 {
     json = mesh->ID();
 }
@@ -91,7 +95,7 @@ static void to_json(json& json, const MeshStructure& geometry)
     json["indices"]  = *geometry.indices;
 }
 
-static ID GetID() noexcept
+static ID GetUniqueID() noexcept
 {
     static std::atomic_int id = 0;
     id++;
@@ -116,7 +120,7 @@ struct NodeAccess {
         return ret;
     }
 
-    static void AddMeshInstancePtr(InstanceGeoNodePtr mesh_instance, InstanceMaterialNodePtr material_instance)
+    static void AddMeshInstancePtr(MeshInstancePtr mesh_instance, MaterialInstancePtr material_instance)
     {
         assert(mesh_instance && material_instance);
         material_instance->AddMeshInstancePtr(mesh_instance);
@@ -141,31 +145,12 @@ struct NodeAccess {
 struct MeshManager {
     MeshPtr CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices)
     {
-        auto mesh         = UniqueMesh(new Mesh(GetID(), aabb, std::move(mesh_vertices), std::move(mesh_indices)));
-        auto mesh_id      = mesh->ID();
-        auto mesh_ptr     = mesh.get();
+        auto mesh     = UniqueMesh(new Mesh(GetUniqueID(), aabb, std::move(mesh_vertices), std::move(mesh_indices)));
+        auto mesh_id  = mesh->GetID();
+        auto mesh_ptr = mesh.get();
         m_meshes[mesh_id] = std::move(mesh);
 
         return mesh_ptr;
-    }
-
-    MeshList GetNewMeshesAndReset()
-    {
-        MeshList mesh_list;
-        for (const auto& [id, mesh] : m_meshes) {
-            if (mesh->GetIsNewThenReset()) {
-                mesh_list.push_back(id);
-            }
-        }
-        return mesh_list;
-    }
-
-    MeshPtr GetMesh(MeshID mesh_id)
-    {
-        if (auto iter = m_meshes.find(mesh_id); iter != m_meshes.end()) {
-            return iter->second.get();
-        }
-        return nullptr;
     }
 
     json ToJson() const
@@ -179,32 +164,32 @@ struct MeshManager {
     }
 
   private:
-    std::unordered_map<MeshID, UniqueMesh, MeshID::Hash> m_meshes;
+    std::unordered_map<ID, UniqueMesh, ID::Hash> m_meshes;
 };
 
-TranslateGeoNodePtr InternalGeoNode::AddTranslateNode(glm::vec3 amount)
+TranslateNodePtr InternalGeoNode::AddTranslateNode(glm::vec3 amount)
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<TranslateGeoNode>(GetID(), amount));
-    return static_cast<TranslateGeoNodePtr>(m_nodes.back().get());
+    m_nodes.push_back(NodeAccess::MakeUnique<TranslateGeoNode>(GetUniqueID(), amount));
+    return static_cast<TranslateNodePtr>(m_nodes.back().get());
 }
 
-RotateGeoNodePtr InternalGeoNode::AddRotateNode(glm::vec3 axis, Radians angle)
+RotateNodePtr InternalGeoNode::AddRotateNode(glm::vec3 axis, Radians angle)
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<RotateGeoNode>(GetID(), axis, angle));
-    return static_cast<RotateGeoNodePtr>(m_nodes.back().get());
+    m_nodes.push_back(NodeAccess::MakeUnique<RotateGeoNode>(GetUniqueID(), axis, angle));
+    return static_cast<RotateNodePtr>(m_nodes.back().get());
 }
 
-ScaleGeoNodePtr InternalGeoNode::AddScaleNode(float factor)
+ScaleNodePtr InternalGeoNode::AddScaleNode(float factor)
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<ScaleGeoNode>(GetID(), factor));
-    return static_cast<ScaleGeoNodePtr>(m_nodes.back().get());
+    m_nodes.push_back(NodeAccess::MakeUnique<ScaleGeoNode>(GetUniqueID(), factor));
+    return static_cast<ScaleNodePtr>(m_nodes.back().get());
 }
 
-InstanceGeoNodePtr InternalGeoNode::AddInstanceNode(MeshPtr mesh, InstanceMaterialNodePtr material)
+MeshInstancePtr InternalGeoNode::AddInstanceNode(MeshPtr mesh, MaterialInstancePtr material)
 {
     assert(mesh && material);
-    m_nodes.push_back(NodeAccess::MakeUnique<InstanceGeoNode>(GetID(), mesh, material));
-    return static_cast<InstanceGeoNodePtr>(m_nodes.back().get());
+    m_nodes.push_back(NodeAccess::MakeUnique<InstanceGeoNode>(GetUniqueID(), mesh, material));
+    return static_cast<MeshInstancePtr>(m_nodes.back().get());
 }
 
 NodeArray InternalGeoNode::GetChildren() const
@@ -214,20 +199,36 @@ NodeArray InternalGeoNode::GetChildren() const
 
 Scene::Scene()
 {
-    m_materials    = NodeAccess::MakeUnique<RootMaterialNode>(GetID());
-    m_geometry     = NodeAccess::MakeUnique<RootGeoNode>(GetID());
+    m_materials    = NodeAccess::MakeUnique<RootMaterialNode>(GetUniqueID());
+    m_geometry     = NodeAccess::MakeUnique<RootGeoNode>(GetUniqueID());
     m_mesh_manager = std::make_unique<MeshManager>();
 }
 
-DrawData Scene::GetDrawData() noexcept
+DrawList Scene::GetDrawList() const
 {
+    using namespace std::ranges;
+
     auto geo_root = static_cast<GeoNodePtr>(m_geometry.get());
 
     NodeAccess::ApplyTransform(geo_root, glm::identity<glm::mat4>());
 
-    auto draw_data = DrawData{ .new_meshes = m_mesh_manager->GetNewMeshesAndReset() };
+    auto draw_list = DrawList{};
 
-    return draw_data;
+    auto material_classes = m_materials->GetChildren();
+
+    for (auto material_class : material_classes | views::transform(pointer_cast<MaterialClassPtr>)) {
+        auto material_instances = material_class->GetChildren();
+
+        for (auto material_instance : material_instances | views::transform(pointer_cast<MaterialInstancePtr>)) {
+            auto mesh_instances = material_instance->GetChildren();
+
+            for (auto mesh_instance : mesh_instances | views::transform(pointer_cast<MeshInstancePtr>)) {
+                draw_list.push_back({ mesh_instance->GetMeshPtr(), mesh_instance->GetTransformPtr() });
+            }
+        }
+    }
+
+    return draw_list;
 }
 
 json RootGeoNode::ToJson() const
@@ -254,7 +255,7 @@ json InstanceGeoNode::ToJson() const
     NodeAccess::ThisToJson(this, json);
 
     json["node.ref.material"] = m_material_instance->ID();
-    json["node.ref.mesh"]     = m_mesh_instance->ID();
+    json["node.ref.mesh"]     = m_mesh->GetID();
     json["node.transform"]    = m_transform;
 
     return json;
@@ -265,8 +266,8 @@ void InstanceGeoNode::ApplyTransform(const glm::mat4& matrix) noexcept
     m_transform = matrix;
 }
 
-InstanceGeoNode::InstanceGeoNode(NodeID id, MeshPtr mesh, InstanceMaterialNodePtr material) noexcept
-    : GeoNode(id), m_mesh_instance(mesh), m_material_instance(material)
+InstanceGeoNode::InstanceGeoNode(NodeID id, MeshPtr mesh, MaterialInstancePtr material) noexcept
+    : GeoNode(id), m_mesh(mesh), m_material_instance(material)
 {
     NodeAccess::AddMeshInstancePtr(this, material);
 }
@@ -393,7 +394,7 @@ void PropertyDictionary::SetPropertyPrivate(Key key, Value value)
     m_dictionary->insert_or_assign(std::move(key), std::move(value));
 }
 
-RootGeoNodePtr Scene::GetGeometryRoot() noexcept
+RootGeoNodePtr Scene::GetGeometryRootPtr() noexcept
 {
     return static_cast<RootGeoNodePtr>(m_geometry.get());
 }
@@ -417,15 +418,15 @@ MeshPtr Scene::CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mes
 Scene::~Scene()
 {}
 
-RootMaterialNodePtr Scene::GetMaterialRoot() noexcept
+RootMaterialNodePtr Scene::GetMaterialRootPtr() noexcept
 {
     return static_cast<RootMaterialNodePtr>(m_materials.get());
 }
 
-InstanceMaterialNodePtr ClassMaterialNode::AddMaterialInstanceNode()
+MaterialInstancePtr ClassMaterialNode::AddMaterialInstanceNode()
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<InstanceMaterialNode>(GetID()));
-    return static_cast<InstanceMaterialNodePtr>(m_nodes.back().get());
+    m_nodes.push_back(NodeAccess::MakeUnique<InstanceMaterialNode>(GetUniqueID()));
+    return static_cast<MaterialInstancePtr>(m_nodes.back().get());
 }
 
 NodeArray ClassMaterialNode::GetChildren() const
@@ -443,10 +444,10 @@ json ClassMaterialNode::ToJson() const
     return json;
 }
 
-ClassMaterialNodePtr RootMaterialNode::AddMaterialClassNode()
+MaterialClassPtr RootMaterialNode::AddMaterialClassNode()
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<ClassMaterialNode>(GetID()));
-    return static_cast<ClassMaterialNodePtr>(m_nodes.back().get());
+    m_nodes.push_back(NodeAccess::MakeUnique<ClassMaterialNode>(GetUniqueID()));
+    return static_cast<MaterialClassPtr>(m_nodes.back().get());
 }
 
 NodeArray RootMaterialNode::GetChildren() const
@@ -470,19 +471,18 @@ json InstanceMaterialNode::ToJson() const
 
     NodeAccess::ThisToJson(this, json);
 
-    json["node.refs.geo"] = m_mesh_instances;
+    auto refs = std::vector<MeshInstancePtr>(m_nodes.size());
+
+    std::ranges::transform(m_nodes, refs.begin(), pointer_cast<MeshInstancePtr>);
+
+    json["node.refs.geo"] = refs;
 
     return json;
 }
 
-MeshPtr Scene::GetMesh(MeshID mesh_id)
+void InstanceMaterialNode::AddMeshInstancePtr(MeshInstancePtr mesh_instance)
 {
-    return m_mesh_manager->GetMesh(mesh_id);
-}
-
-bool Mesh::GetIsNewThenReset() noexcept
-{
-    return std::exchange(m_is_new, false);
+    m_nodes.push_back(static_cast<NodePtr>(mesh_instance));
 }
 
 json Mesh::ToJson() const

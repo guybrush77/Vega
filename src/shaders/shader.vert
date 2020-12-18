@@ -1,9 +1,13 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-layout (binding = 0) uniform MVP
+layout (binding = 0) uniform ModelTransform
 {
     mat4 model;
+};
+
+layout (binding = 1) uniform CameraTransform
+{
     mat4 view;
     mat4 proj;
 };

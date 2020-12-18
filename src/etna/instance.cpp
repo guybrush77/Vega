@@ -201,6 +201,33 @@ void Instance::Destroy() noexcept
     m_debug_messenger = nullptr;
 }
 
+PhysicalDeviceProperties PhysicalDevice::GetPhysicalDeviceProperties() const
+{
+    assert(m_physical_device);
+
+    VkPhysicalDeviceProperties vk_properties{};
+
+    vkGetPhysicalDeviceProperties(m_physical_device, &vk_properties);
+
+    auto properties = PhysicalDeviceProperties{
+
+        vk_properties.apiVersion,
+        vk_properties.driverVersion,
+        vk_properties.vendorID,
+        vk_properties.deviceID,
+        static_cast<PhysicalDeviceType>(vk_properties.deviceType),
+        {},
+        {},
+        vk_properties.limits,
+        vk_properties.sparseProperties
+    };
+
+    memcpy(properties.deviceName, vk_properties.deviceName, sizeof(properties.deviceName));
+    memcpy(properties.pipelineCacheUUID, vk_properties.pipelineCacheUUID, sizeof(properties.pipelineCacheUUID));
+
+    return properties;
+}
+
 FormatProperties PhysicalDevice::GetPhysicalDeviceFormatProperties(Format format) const
 {
     assert(m_physical_device);

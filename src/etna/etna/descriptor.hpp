@@ -67,6 +67,12 @@ class WriteDescriptorSet {
   public:
     WriteDescriptorSet(DescriptorSet descriptor_set, Binding binding, DescriptorType descriptor_type) noexcept;
 
+    WriteDescriptorSet(const WriteDescriptorSet&) = delete;
+    WriteDescriptorSet& operator=(const WriteDescriptorSet&) = delete;
+
+    WriteDescriptorSet(WriteDescriptorSet&&) noexcept = default;
+    WriteDescriptorSet& operator=(WriteDescriptorSet&&) noexcept = default;
+
     operator VkWriteDescriptorSet() const noexcept { return state; }
 
     void AddBuffer(Buffer buffer, size_t offset = 0, size_t size = VK_WHOLE_SIZE);
@@ -74,6 +80,8 @@ class WriteDescriptorSet {
     VkWriteDescriptorSet state{};
 
   private:
+    friend class Device;
+
     std::vector<VkDescriptorBufferInfo> m_descriptor_buffer_infos;
 };
 

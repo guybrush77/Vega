@@ -24,6 +24,15 @@ void Buffer::UnmapMemory()
     vmaUnmapMemory(m_allocator, m_allocation);
 }
 
+void Buffer::FlushMappedMemoryRanges(std::initializer_list<MappedMemoryRange> memory_ranges)
+{
+    assert(m_buffer);
+
+    for (const auto& memory_range : memory_ranges) {
+        vmaFlushAllocation(m_allocator, m_allocation, memory_range.offset, memory_range.size);
+    }
+}
+
 UniqueBuffer Buffer::Create(VmaAllocator allocator, const VkBufferCreateInfo& create_info, MemoryUsage memory_usage)
 {
     VmaAllocationCreateInfo allocation_info{};
