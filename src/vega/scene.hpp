@@ -40,7 +40,7 @@ struct RotateGeoNode;
 struct ScaleGeoNode;
 struct InstanceGeoNode;
 
-struct Scene;
+class Scene;
 
 using MeshVerticesPtr = MeshVertices*;
 using MeshIndicesPtr  = MeshIndices*;
@@ -412,7 +412,8 @@ struct DrawRecord final {
 
 using DrawList = std::vector<DrawRecord>;
 
-struct Scene {
+class Scene {
+  public:
     Scene();
 
     Scene(const Scene&) = delete;
