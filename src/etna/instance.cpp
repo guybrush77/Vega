@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <string_view>
 
 namespace etna {
@@ -222,8 +223,8 @@ PhysicalDeviceProperties PhysicalDevice::GetPhysicalDeviceProperties() const
         vk_properties.sparseProperties
     };
 
-    memcpy(properties.deviceName, vk_properties.deviceName, sizeof(properties.deviceName));
-    memcpy(properties.pipelineCacheUUID, vk_properties.pipelineCacheUUID, sizeof(properties.pipelineCacheUUID));
+    std::memcpy(properties.deviceName, vk_properties.deviceName, sizeof(properties.deviceName));
+    std::memcpy(properties.pipelineCacheUUID, vk_properties.pipelineCacheUUID, sizeof(properties.pipelineCacheUUID));
 
     return properties;
 }

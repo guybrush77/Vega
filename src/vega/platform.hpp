@@ -14,9 +14,10 @@
 
 #define BEGIN_DISABLE_WARNINGS \
     _Pragma("GCC diagnostic push") \
-    _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") /* conversion may change the sign of result */ \
-    _Pragma("GCC diagnostic ignored \"-Wconversion\"")      /* conversion may change the value of result */ \
-    _Pragma("GCC diagnostic ignored \"-Wvolatile\"")        /* assignment with volatile left operand is deprecated */
+    _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"")     /* conversion may change the sign of result */ \
+    _Pragma("GCC diagnostic ignored \"-Wconversion\"")          /* conversion may change the value of result */ \
+    _Pragma("GCC diagnostic ignored \"-Wvolatile\"")            /* assignment with volatile operand is deprecated */ \
+    _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"") /* var may be uninitialized in this function */
 
 #define END_DISABLE_WARNINGS _Pragma("GCC diagnostic pop")
 

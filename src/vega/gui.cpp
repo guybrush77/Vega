@@ -349,8 +349,8 @@ void CameraWindow::Draw()
         // TODO: Remove four lines below
         auto near_string = std::to_string(perspective.near);
         auto far_string  = std::to_string(perspective.far);
-        std::strncpy(near_text.data(), near_string.c_str(), near_text.size());
-        std::strncpy(far_text.data(), far_string.c_str(), far_text.size());
+        std::strncpy(near_text.data(), near_string.c_str(), near_text.size() - 1);
+        std::strncpy(far_text.data(), far_string.c_str(), far_text.size() - 1);
 
         bool fovy_changed = SliderAngle(
             "Fov V",

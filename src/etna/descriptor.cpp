@@ -101,7 +101,11 @@ std::vector<DescriptorSet> DescriptorPool::AllocateDescriptorSets(
     };
 
     std::vector<VkDescriptorSet> vk_descriptor_sets(count);
-    vkAllocateDescriptorSets(m_device, &allocate_info, vk_descriptor_sets.data());
+
+    if (auto result = vkAllocateDescriptorSets(m_device, &allocate_info, vk_descriptor_sets.data());
+        result != VK_SUCCESS) {
+        throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
+    }
 
     return std::vector<DescriptorSet>(vk_descriptor_sets.begin(), vk_descriptor_sets.end());
 }

@@ -129,16 +129,17 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
                     auto position_idx = static_cast<size_t>(3) * index.vertex;
                     auto normal_idx   = static_cast<size_t>(3) * index.normal;
 
-                    auto vertex = VertexPN{
+                    auto position = glm::vec3(
+                        attributes.vertices[position_idx + 0],
+                        attributes.vertices[position_idx + 1],
+                        attributes.vertices[position_idx + 2]);
 
-                        .position = { attributes.vertices[position_idx + 0],
-                                      attributes.vertices[position_idx + 1],
-                                      attributes.vertices[position_idx + 2] },
+                    auto normal = glm::vec3(
+                        attributes.normals[normal_idx + 0],
+                        attributes.normals[normal_idx + 1],
+                        attributes.normals[normal_idx + 2]);
 
-                        .normal = { attributes.normals[normal_idx + 0],
-                                    attributes.normals[normal_idx + 1],
-                                    attributes.normals[normal_idx + 2] }
-                    };
+                    auto vertex = VertexPN(position, normal);
 
                     vertices.push_back(vertex);
 

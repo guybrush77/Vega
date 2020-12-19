@@ -2,16 +2,17 @@
 
 #include "utils/cast.hpp"
 
+#include <atomic>
 #include <ranges>
 
 namespace {
 
 struct ValueToJson final {
-    void operator()(int i) { json[key] = i; }
-    void operator()(float f) { json[key] = f; }
-    void operator()(const std::string& s) { json[key] = s; }
+    void operator()(int i) { j[key] = i; }
+    void operator()(float f) { j[key] = f; }
+    void operator()(const std::string& s) { j[key] = s; }
 
-    json&              json;
+    json&              j;
     const std::string& key;
 };
 

@@ -79,7 +79,7 @@ struct ID {
 
     constexpr bool operator==(const ID&) const noexcept = default;
     struct Hash {
-        constexpr size_t operator()(ID id) const noexcept { return id.value; }
+        constexpr size_t operator()(ID id) const noexcept { return static_cast<size_t>(id.value); }
     };
 };
 
@@ -103,8 +103,8 @@ struct PropertyDictionary {
 };
 
 struct MeshVertices final {
-    template <VertexType T>
-    MeshVertices(std::vector<T> vertices) : m_vertices(std::move(vertices))
+    template <VertexType T, typename A>
+    MeshVertices(std::vector<T, A> vertices) : m_vertices(std::move(vertices))
     {
         using etna::narrow_cast;
 

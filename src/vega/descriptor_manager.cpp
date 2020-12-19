@@ -1,5 +1,7 @@
 #include "descriptor_manager.hpp"
 
+#include <cstring>
+
 DescriptorManager::DescriptorManager(
     etna::Device                      device,
     uint32_t                          num_frames,
@@ -15,8 +17,10 @@ DescriptorManager::DescriptorManager(
         m_offset_multiplier = (m_offset_multiplier + min_alignment - 1) & ~(min_alignment - 1);
     }
 
-    m_descriptor_pool =
-        device.CreateDescriptorPool({ DescriptorPoolSize{ DescriptorType::UniformBuffer, num_frames } });
+    m_descriptor_pool = device.CreateDescriptorPool({
+
+        DescriptorPoolSize{ DescriptorType::UniformBuffer, num_frames },
+        DescriptorPoolSize{ DescriptorType::UniformBufferDynamic, num_frames } });
 
     auto descriptor_sets = m_descriptor_pool->AllocateDescriptorSets(num_frames, descriptor_set_layout);
 
@@ -72,7 +76,7 @@ DescriptorManager::Set(size_t frame_index, size_t transform_index, const ModelTr
 
     auto offset = transform_index * m_offset_multiplier;
 
-    memcpy(frame_state.model.mapped_memory + offset, &model_transform, m_offset_multiplier);
+    std::memcpy(frame_state.model.mapped_memory + offset, &model_transform, m_offset_multiplier);
 
     return etna::narrow_cast<uint32_t>(offset);
 }
@@ -81,7 +85,7 @@ void DescriptorManager::Set(size_t frame_index, const CameraTransform& camera_tr
 {
     auto& frame_state = m_frame_states[frame_index];
 
-    memcpy(frame_state.camera.mapped_memory, &camera_transform, sizeof(camera_transform));
+    std::memcpy(frame_state.camera.mapped_memory, &camera_transform, sizeof(camera_transform));
 }
 
 void DescriptorManager::UpdateDescriptorSet(size_t frame_index)
