@@ -528,16 +528,13 @@ int main()
     LoadObj(&scene, "../../../data/models/suzanne.obj");
 
     auto preffered_format = SurfaceFormatKHR{ Format::B8G8R8A8Srgb, ColorSpaceKHR::SrgbNonlinear };
+    auto surface_format   = FindOptimalSurfaceFormatKHR(gpu, *surface, { preffered_format });
 
-    auto surface_format = FindOptimalSurfaceFormatKHR(gpu, *surface, { preffered_format });
+    auto candidate_formats = { Format::D24UnormS8Uint, Format::D32SfloatS8Uint, Format::D16Unorm };
+    auto depth_format =
+        FindSupportedFormat(gpu, candidate_formats, ImageTiling::Optimal, FormatFeature::DepthStencilAttachment);
 
-    Format depth_format = FindSupportedFormat(
-        gpu,
-        { Format::D24UnormS8Uint, Format::D32SfloatS8Uint, Format::D16Unorm },
-        ImageTiling::Optimal,
-        FormatFeature::DepthStencilAttachment);
-
-    Extent2D extent{};
+    auto extent = Extent2D{};
     {
         int width{}, height{};
         glfwGetWindowSize(window.get(), &width, &height);
@@ -684,7 +681,7 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
-    auto draw_list = scene.GetDrawList();
+    auto draw_list = scene.ComputeDrawList();
 
     auto mesh_store = MeshStore(*device);
 
@@ -699,12 +696,14 @@ int main()
 
     auto descriptor_manager = DescriptorManager(*device, frame_count, *descriptor_set_layout, gpu_properties.limits);
 
+    auto aabb = scene.ComputeAxisAlignedBoundingBox();
+
     auto camera = Camera::Create(
         Orientation::RightHanded,
         Forward{ Axis::PositiveY },
         Up{ Axis::PositiveZ },
         ObjectView::Front,
-        { { -1, -1, -1 }, { 1, 1, 1 } }, // TODO: get aabb from DrawList
+        aabb,
         45_deg,
         aspect);
 

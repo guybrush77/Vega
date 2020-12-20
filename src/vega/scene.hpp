@@ -42,6 +42,8 @@ struct InstanceGeoNode;
 
 class Scene;
 
+using ScenePtr = Scene*;
+
 using MeshVerticesPtr = MeshVertices*;
 using MeshIndicesPtr  = MeshIndices*;
 using UniqueMesh      = std::unique_ptr<Mesh>;
@@ -57,20 +59,18 @@ using NodeRef    = Node&;
 using NodeArray  = std::vector<NodePtr>;
 
 using MaterialNodePtr     = MaterialNode*;
-using RootMaterialNodePtr = RootMaterialNode*;
+using MaterialRootPtr     = RootMaterialNode*;
 using MaterialClassPtr    = ClassMaterialNode*;
 using MaterialInstancePtr = InstanceMaterialNode*;
 
 using GeoNodePtr       = GeoNode*;
-using RootGeoNodePtr   = RootGeoNode*;
+using GeometryRootPtr  = RootGeoNode*;
 using TranslateNodePtr = TranslateGeoNode*;
 using RotateNodePtr    = RotateGeoNode*;
 using ScaleNodePtr     = ScaleGeoNode*;
 using MeshInstancePtr  = InstanceGeoNode*;
 
 using UniqueMeshManager = std::unique_ptr<MeshManager>;
-
-using ScenePtr = Scene*;
 
 using json = nlohmann::json;
 
@@ -186,7 +186,7 @@ struct Mesh final : PropertyDictionary {
     Mesh& operator=(Mesh&&) = default;
 
     auto GetID() const noexcept -> ID { return m_id; }
-    auto BoundingBox() const noexcept -> const AABB& { return m_aabb; }
+    auto GetAxisAlignedBoundingBox() const noexcept -> const AABB& { return m_aabb; }
     auto Vertices() const noexcept -> const MeshVertices& { return m_vertices; }
     auto Indices() const noexcept -> const MeshIndices& { return m_indices; }
 
@@ -424,12 +424,14 @@ class Scene {
 
     ~Scene() noexcept;
 
-    auto GetGeometryRootPtr() noexcept -> RootGeoNodePtr;
-    auto GetMaterialRootPtr() noexcept -> RootMaterialNodePtr;
+    auto GetGeometryRootPtr() noexcept -> GeometryRootPtr;
+    auto GetMaterialRootPtr() noexcept -> MaterialRootPtr;
 
     auto CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) -> MeshPtr;
 
-    auto GetDrawList() const -> DrawList;
+    auto ComputeDrawList() const -> DrawList;
+
+    auto ComputeAxisAlignedBoundingBox() const -> AABB;
 
     json ToJson() const;
 

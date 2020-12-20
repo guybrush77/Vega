@@ -205,16 +205,15 @@ Scene::Scene()
     m_mesh_manager = std::make_unique<MeshManager>();
 }
 
-DrawList Scene::GetDrawList() const
+DrawList Scene::ComputeDrawList() const
 {
     using namespace std::ranges;
 
-    auto geo_root = static_cast<GeoNodePtr>(m_geometry.get());
+    auto geometry_root = static_cast<GeoNodePtr>(m_geometry.get());
 
-    NodeAccess::ApplyTransform(geo_root, glm::identity<glm::mat4>());
+    NodeAccess::ApplyTransform(geometry_root, glm::identity<glm::mat4>());
 
-    auto draw_list = DrawList{};
-
+    auto draw_list        = DrawList{};
     auto material_classes = m_materials->GetChildren();
 
     for (auto material_class : material_classes | views::transform(pointer_cast<MaterialClassPtr>)) {
@@ -230,6 +229,45 @@ DrawList Scene::GetDrawList() const
     }
 
     return draw_list;
+}
+
+AABB Scene::ComputeAxisAlignedBoundingBox() const
+{
+    using namespace std::ranges;
+
+    auto out = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
+
+    auto geometry_root = static_cast<GeoNodePtr>(m_geometry.get());
+
+    NodeAccess::ApplyTransform(geometry_root, glm::identity<glm::mat4>());
+
+    auto draw_list        = DrawList{};
+    auto material_classes = m_materials->GetChildren();
+
+    for (auto material_class : material_classes | views::transform(pointer_cast<MaterialClassPtr>)) {
+        auto material_instances = material_class->GetChildren();
+
+        for (auto material_instance : material_instances | views::transform(pointer_cast<MaterialInstancePtr>)) {
+            auto mesh_instances = material_instance->GetChildren();
+
+            for (auto mesh_instance : mesh_instances | views::transform(pointer_cast<MeshInstancePtr>)) {
+                if (auto* mesh = mesh_instance->GetMeshPtr()) {
+                    auto& model = *mesh_instance->GetTransformPtr();
+                    auto& aabb  = mesh->GetAxisAlignedBoundingBox();
+                    auto  vec_a = model * glm::vec4(aabb.min, 1);
+                    auto  vec_b = model * glm::vec4(aabb.max, 1);
+                    out.min.x   = std::min({ out.min.x, vec_a.x, vec_b.x });
+                    out.min.y   = std::min({ out.min.y, vec_a.y, vec_b.y });
+                    out.min.z   = std::min({ out.min.z, vec_a.z, vec_b.z });
+                    out.max.x   = std::max({ out.max.x, vec_a.x, vec_b.x });
+                    out.max.y   = std::max({ out.max.y, vec_a.y, vec_b.y });
+                    out.max.z   = std::max({ out.max.z, vec_a.z, vec_b.z });
+                }
+            }
+        }
+    }
+
+    return out;
 }
 
 json RootGeoNode::ToJson() const
@@ -395,9 +433,9 @@ void PropertyDictionary::SetPropertyPrivate(Key key, Value value)
     m_dictionary->insert_or_assign(std::move(key), std::move(value));
 }
 
-RootGeoNodePtr Scene::GetGeometryRootPtr() noexcept
+GeometryRootPtr Scene::GetGeometryRootPtr() noexcept
 {
-    return static_cast<RootGeoNodePtr>(m_geometry.get());
+    return static_cast<GeometryRootPtr>(m_geometry.get());
 }
 
 json Scene::ToJson() const
@@ -419,9 +457,9 @@ MeshPtr Scene::CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mes
 Scene::~Scene()
 {}
 
-RootMaterialNodePtr Scene::GetMaterialRootPtr() noexcept
+MaterialRootPtr Scene::GetMaterialRootPtr() noexcept
 {
-    return static_cast<RootMaterialNodePtr>(m_materials.get());
+    return static_cast<MaterialRootPtr>(m_materials.get());
 }
 
 MaterialInstancePtr ClassMaterialNode::AddMaterialInstanceNode()

@@ -99,7 +99,7 @@ RenderContext::Status RenderContext::StartRenderLoop()
 
         ProcessUserInput();
 
-        auto draw_list = m_scene->GetDrawList();
+        auto draw_list = m_scene->ComputeDrawList();
         auto extent    = framebuffers.extent;
 
         auto camera_transform = CameraTransform{ m_camera->GetViewMatrix(), m_camera->GetPerspectiveMatrix() };
