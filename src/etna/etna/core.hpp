@@ -106,7 +106,7 @@ enum class Result {
 
 ETNA_DEFINE_ENUM_ANALOGUE(Result)
 
-const char* to_string(Result value);
+const char* to_string(Result value) noexcept;
 
 enum class PhysicalDeviceType {
     Other         = VK_PHYSICAL_DEVICE_TYPE_OTHER,
@@ -118,7 +118,7 @@ enum class PhysicalDeviceType {
 
 ETNA_DEFINE_ENUM_ANALOGUE(PhysicalDeviceType)
 
-const char* to_string(PhysicalDeviceType value);
+const char* to_string(PhysicalDeviceType value) noexcept;
 
 enum class AttachmentStoreOp { Store = VK_ATTACHMENT_STORE_OP_STORE, DontCare = VK_ATTACHMENT_STORE_OP_DONT_CARE };
 
@@ -404,6 +404,8 @@ enum class Format {
 
 ETNA_DEFINE_ENUM_ANALOGUE(Format)
 
+const char* to_string(Format value) noexcept;
+
 enum class ColorSpaceKHR {
     SrgbNonlinear             = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
     DisplayP3NonlinearEXT     = VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT,
@@ -426,6 +428,8 @@ enum class ColorSpaceKHR {
 };
 
 ETNA_DEFINE_ENUM_ANALOGUE(ColorSpaceKHR)
+
+const char* to_string(ColorSpaceKHR value) noexcept;
 
 enum class PresentModeKHR {
     Immediate               = VK_PRESENT_MODE_IMMEDIATE_KHR,
@@ -815,7 +819,7 @@ enum class DescriptorPoolFlags : VkDescriptorPoolCreateFlags {
 
 ETNA_DEFINE_FLAGS_ANALOGUE(DescriptorPoolFlags, VkDescriptorPoolCreateFlags)
 
-const char* to_string(DescriptorPoolFlags value);
+const char* to_string(DescriptorPoolFlags value) noexcept;
 
 enum class ImageAspect : VkImageAspectFlags {
     Color           = VK_IMAGE_ASPECT_COLOR_BIT,

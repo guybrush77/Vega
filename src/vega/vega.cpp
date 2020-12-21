@@ -8,6 +8,7 @@
 #include "render_context.hpp"
 #include "scene.hpp"
 #include "swapchain_manager.hpp"
+#include "utils/misc.hpp"
 #include "utils/resource.hpp"
 
 BEGIN_DISABLE_WARNINGS
@@ -31,6 +32,8 @@ END_DISABLE_WARNINGS
 #include <optional>
 #include <unordered_map>
 #include <vector>
+
+enum class KhronosValidation { Disable, Enable };
 
 struct GLFW {
     GLFW()
@@ -397,7 +400,7 @@ void GlfwErrorCallback(int, const char* description)
     spdlog::error("GLFW: {}", description);
 }
 
-GlfwWindow CreateWindow(const char* window_name)
+GlfwWindow CreateGlfwWindow(const char* window_name)
 {
     GLFWmonitor* primary_monitor = glfwGetPrimaryMonitor();
 
@@ -424,136 +427,143 @@ GlfwWindow CreateWindow(const char* window_name)
     return GlfwWindow(window);
 }
 
+auto CreateEtnaInstance(KhronosValidation khronos_validation) -> etna::UniqueInstance
+{
+    using namespace etna;
+
+    throw_runtime_error_if(false == glfwVulkanSupported(), "GLFW Vulkan not supported!");
+
+    auto count           = 0U;
+    auto glfw_extensions = glfwGetRequiredInstanceExtensions(&count);
+    auto extensions      = std::vector<const char*>(glfw_extensions, glfw_extensions + count);
+    auto layers          = std::vector<const char*>();
+
+    if (khronos_validation == KhronosValidation::Enable) {
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        layers.push_back("VK_LAYER_KHRONOS_validation");
+    }
+
+    return CreateInstance(
+        "Vega",
+        Version{ 0, 1, 0 },
+        extensions,
+        layers,
+        VulkanDebugCallback,
+        DebugUtilsMessageSeverity::Warning | DebugUtilsMessageSeverity::Error,
+        DebugUtilsMessageType::General | DebugUtilsMessageType::Performance | DebugUtilsMessageType::Validation);
+}
+
+auto GetEtnaGpu(etna::Instance instance)
+{
+    auto gpus                      = instance.EnumeratePhysicalDevices();
+    auto gpu                       = gpus.front();
+    auto queue_family_properties   = gpu.GetPhysicalDeviceQueueFamilyProperties();
+    bool is_presentation_supported = false;
+
+    for (uint32_t index = 0; index < queue_family_properties.size(); ++index) {
+        is_presentation_supported |= (GLFW_TRUE == glfwGetPhysicalDevicePresentationSupport(instance, gpu, index));
+    }
+
+    throw_runtime_error_if(false == is_presentation_supported, "Failed to detect GPU queue that supports presentation");
+
+    return gpu;
+}
+
+etna::UniqueSurfaceKHR CreateEtnaSurface(etna::Instance instance, GLFWwindow* glfw_window)
+{
+    auto vk_surface = VkSurfaceKHR{};
+
+    auto success = (VK_SUCCESS == glfwCreateWindowSurface(instance, glfw_window, nullptr, &vk_surface));
+
+    throw_runtime_error_if(false == success, "Failed to create window surface");
+
+    return etna::UniqueSurfaceKHR(etna::SurfaceKHR(instance, vk_surface));
+}
+
+etna::UniqueDevice GetEtnaDevice(etna::Instance instance, etna::PhysicalDevice gpu, const QueueFamilies& queue_families)
+{
+    auto queue_family_indices = RemoveDuplicates({
+
+        queue_families.graphics.family_index,
+        queue_families.compute.family_index,
+        queue_families.transfer.family_index,
+        queue_families.presentation.family_index });
+
+    auto builder = etna::Device::Builder();
+
+    for (auto queue_family_index : queue_family_indices) {
+        builder.AddQueue(queue_family_index, 1);
+    }
+
+    builder.AddEnabledExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    return instance.CreateDevice(gpu, builder.state);
+}
+
+etna::Extent2D ComputeEtnaExtent(etna::PhysicalDevice gpu, GLFWwindow* glfw_window, etna::SurfaceKHR surface)
+{
+    int width{}, height{};
+    glfwGetWindowSize(glfw_window, &width, &height);
+
+    auto extent       = etna::Extent2D{ etna::narrow_cast<uint32_t>(width), etna::narrow_cast<uint32_t>(height) };
+    auto capabilities = gpu.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface);
+
+    extent.width  = std::clamp(extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+    extent.height = std::clamp(extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+    if (capabilities.currentExtent.width != UINT32_MAX) {
+        extent = capabilities.currentExtent;
+    }
+
+    return extent;
+}
+
 int main()
 {
 #ifdef NDEBUG
-    const bool enable_validation = false;
+    const KhronosValidation khronos_validation = KhronosValidation::Disable;
 #else
-    const bool enable_validation = true;
+    const KhronosValidation khronos_validation = KhronosValidation::Enable;
 #endif
 
     using namespace etna;
 
-    if (glfwVulkanSupported() == false) {
-        throw std::runtime_error("GLFW Vulkan not supported!");
-    }
+    auto instance       = CreateEtnaInstance(khronos_validation);
+    auto gpu            = GetEtnaGpu(instance.get());
+    auto gpu_properties = gpu.GetPhysicalDeviceProperties();
 
-    spdlog::info("GLFW {}", glfwGetVersionString());
+    spdlog::info("GPU Info: {}, {}", gpu_properties.deviceName, to_string(gpu_properties.deviceType));
+    spdlog::info("GLFW Version: {}", glfwGetVersionString());
 
     glfwSetErrorCallback(GlfwErrorCallback);
 
-    UniqueInstance instance;
+    auto glfw_window              = CreateGlfwWindow("Vega Viewer");
+    auto surface                  = CreateEtnaSurface(instance.get(), glfw_window.get());
+    auto extent                   = ComputeEtnaExtent(gpu, glfw_window.get(), surface.get());
+    auto aspect                   = ComputeAspect(extent);
+    auto preffered_surface_format = SurfaceFormatKHR{ Format::B8G8R8A8Srgb, ColorSpaceKHR::SrgbNonlinear };
+    auto surface_format           = FindOptimalSurfaceFormatKHR(gpu, surface.get(), { preffered_surface_format });
+    auto depth_format             = FindSupportedFormat(
+        gpu,
+        { Format::D24UnormS8Uint, Format::D32SfloatS8Uint, Format::D16Unorm },
+        ImageTiling::Optimal,
+        FormatFeature::DepthStencilAttachment);
+
+    spdlog::info("Surface Format: {}, {}", to_string(surface_format.format), to_string(surface_format.colorSpace));
+
+    auto queue_families = GetQueueFamilyInfo(gpu, surface.get());
+    auto device         = GetEtnaDevice(instance.get(), gpu, queue_families);
+    auto queues         = Queues{};
     {
-        std::vector<const char*> extensions;
-        std::vector<const char*> layers;
-
-        auto count           = 0U;
-        auto glfw_extensions = glfwGetRequiredInstanceExtensions(&count);
-
-        extensions.insert(extensions.end(), glfw_extensions, glfw_extensions + count);
-
-        if (enable_validation) {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-            layers.push_back("VK_LAYER_KHRONOS_validation");
-        }
-
-        instance = CreateInstance(
-            "Vega",
-            Version{ 0, 1, 0 },
-            extensions,
-            layers,
-            VulkanDebugCallback,
-            DebugUtilsMessageSeverity::Warning | DebugUtilsMessageSeverity::Error,
-            DebugUtilsMessageType::General | DebugUtilsMessageType::Performance | DebugUtilsMessageType::Validation);
-    }
-
-    PhysicalDevice gpu;
-    {
-        auto gpus = instance->EnumeratePhysicalDevices();
-        gpu       = gpus.front();
-
-        auto properties = gpu.GetPhysicalDeviceQueueFamilyProperties();
-        bool supported  = false;
-        for (uint32_t index = 0; index < properties.size(); ++index) {
-            supported |= (GLFW_TRUE == glfwGetPhysicalDevicePresentationSupport(*instance, gpu, index));
-        }
-        if (supported == false) {
-            throw std::runtime_error("No gpu queue supports presentation!");
-        }
-    }
-
-    auto gpu_properties = gpu.GetPhysicalDeviceProperties();
-
-    auto window = CreateWindow("Vega Viewer");
-
-    UniqueSurfaceKHR surface;
-    {
-        VkSurfaceKHR vk_surface{};
-
-        if (VK_SUCCESS != glfwCreateWindowSurface(*instance, window.get(), nullptr, &vk_surface)) {
-            throw std::runtime_error("Failed to create window surface!");
-        }
-
-        surface.reset(SurfaceKHR(*instance, vk_surface));
-    }
-
-    auto [graphics, compute, transfer, presentation] = GetQueueFamilyInfo(gpu, *surface);
-
-    UniqueDevice device;
-    {
-        auto queue_family_indices = RemoveDuplicates(
-            { graphics.family_index, compute.family_index, transfer.family_index, presentation.family_index });
-
-        auto builder = Device::Builder();
-
-        for (auto queue_family_index : queue_family_indices) {
-            builder.AddQueue(queue_family_index, 1);
-        }
-
-        builder.AddEnabledExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-
-        device = instance->CreateDevice(gpu, builder.state);
-    }
-
-    auto queues = Queues{};
-    {
-        queues.graphics     = device->GetQueue(graphics.family_index);
-        queues.compute      = device->GetQueue(compute.family_index);
-        queues.transfer     = device->GetQueue(transfer.family_index);
-        queues.presentation = device->GetQueue(presentation.family_index);
+        queues.graphics     = device->GetQueue(queue_families.graphics.family_index);
+        queues.compute      = device->GetQueue(queue_families.compute.family_index);
+        queues.transfer     = device->GetQueue(queue_families.transfer.family_index);
+        queues.presentation = device->GetQueue(queue_families.presentation.family_index);
     }
 
     auto scene = Scene();
 
     LoadObj(&scene, "../../../data/models/suzanne.obj");
-
-    auto preffered_format = SurfaceFormatKHR{ Format::B8G8R8A8Srgb, ColorSpaceKHR::SrgbNonlinear };
-    auto surface_format   = FindOptimalSurfaceFormatKHR(gpu, *surface, { preffered_format });
-
-    auto candidate_formats = { Format::D24UnormS8Uint, Format::D32SfloatS8Uint, Format::D16Unorm };
-    auto depth_format =
-        FindSupportedFormat(gpu, candidate_formats, ImageTiling::Optimal, FormatFeature::DepthStencilAttachment);
-
-    auto extent = Extent2D{};
-    {
-        int width{}, height{};
-        glfwGetWindowSize(window.get(), &width, &height);
-        extent = Extent2D{ narrow_cast<uint32_t>(width), narrow_cast<uint32_t>(height) };
-
-        auto capabilities = gpu.GetPhysicalDeviceSurfaceCapabilitiesKHR(*surface);
-
-        if (capabilities.currentExtent.width != UINT32_MAX) {
-            extent = capabilities.currentExtent;
-        } else {
-            extent.width =
-                std::clamp(extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-            extent.height =
-                std::clamp(extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-        }
-    }
-
-    // Aspect
-    auto aspect = ComputeAspect(extent);
 
     // Create pipeline renderpass
     UniqueRenderPass renderpass;
@@ -689,7 +699,7 @@ int main()
         mesh_store.Add(draw_record.mesh);
     }
 
-    mesh_store.Upload(queues.transfer, transfer.family_index);
+    mesh_store.Upload(queues.transfer, queue_families.transfer.family_index);
 
     uint32_t image_count = 3;
     uint32_t frame_count = 2;
@@ -711,15 +721,16 @@ int main()
         Gui(*instance,
             gpu,
             *device,
-            graphics.family_index,
+            queue_families.graphics.family_index,
             queues.graphics,
             *gui_renderpass,
-            window.get(),
+            glfw_window.get(),
             extent,
             image_count,
             image_count);
 
     gui.AddWindow<CameraWindow>(&camera);
+    gui.AddWindow<SceneWindow>(&scene);
 
     bool running = true;
 
@@ -736,14 +747,14 @@ int main()
             queues.presentation,
             PresentModeKHR::Fifo);
 
-        FrameManager frame_manager(*device, graphics.family_index, frame_count);
+        FrameManager frame_manager(*device, queue_families.graphics.family_index, frame_count);
 
         auto render_context = RenderContext(
             *device,
             queues.graphics,
             *pipeline,
             *pipeline_layout,
-            window.get(),
+            glfw_window.get(),
             &swapchain_manager,
             &frame_manager,
             &descriptor_manager,
@@ -765,7 +776,7 @@ int main()
             int width  = 0;
             int height = 0;
             while (width == 0 && height == 0) {
-                glfwGetWindowSize(window.get(), &width, &height);
+                glfwGetWindowSize(glfw_window.get(), &width, &height);
                 if (width == 0 && height == 0) {
                     glfwWaitEvents();
                 }

@@ -13,6 +13,7 @@ struct GLFWwindow;
 struct ImFont;
 
 class Camera;
+class Scene;
 
 struct Fonts {
     ImFont* regular   = nullptr;
@@ -37,6 +38,16 @@ class CameraWindow : public Window {
 
   private:
     Camera* m_camera = nullptr;
+};
+
+class SceneWindow : public Window {
+  public:
+    SceneWindow(Scene* scene) : m_scene(scene) {}
+
+    void Draw() override;
+
+  private:
+    Scene* m_scene = nullptr;
 };
 
 class Gui {

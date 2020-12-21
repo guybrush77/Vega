@@ -17,11 +17,10 @@ BEGIN_DISABLE_WARNINGS
 
 #include <glm/gtc/matrix_access.hpp>
 
-#include <spdlog/spdlog.h>
-
 END_DISABLE_WARNINGS
 
 #include <charconv>
+#include <string>
 
 namespace {
 
@@ -84,7 +83,6 @@ Gui::Gui(
     {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        spdlog::info("ImGui {}", ImGui::GetVersion());
     }
 
     // Create Descriptor Pool
@@ -304,13 +302,8 @@ void CameraWindow::Draw()
             "%.1f deg",
             ImGuiSliderFlags_AlwaysClamp);
 
-        bool camera_up_changed = SliderInt(
-            "Camera Up",
-            &label_index,
-            0,
-            1,
-            label,
-            ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput);
+        bool camera_up_changed =
+            SliderInt("Camera Up", &label_index, 0, 1, label, ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput);
 
         bool distance_changed = SliderFloat(
             "Distance",
@@ -343,8 +336,8 @@ void CameraWindow::Draw()
         auto far_text    = std::array<char, 16>();
 
         // TODO: Re-enable this code
-        //std::to_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
-        //std::to_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+        // std::to_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+        // std::to_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
 
         // TODO: Remove four lines below
         auto near_string = std::to_string(perspective.near);
@@ -376,8 +369,8 @@ void CameraWindow::Draw()
 
         if (fovy_changed || near_changed || far_changed) {
             // TODO: Re-enable this code
-            //std::from_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
-            //std::from_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+            // std::from_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
+            // std::from_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
 
             // TODO: Remove the two lines below
             perspective.near = std::stof(std::string(near_text.data()));
@@ -448,5 +441,13 @@ void CameraWindow::Draw()
 
     PopItemWidth();
 
+    End();
+}
+
+void SceneWindow::Draw()
+{
+    using namespace ImGui;
+
+    Begin("Scene");
     End();
 }
