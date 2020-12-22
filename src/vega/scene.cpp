@@ -22,9 +22,7 @@ namespace glm {
 
 static void to_json(json& json, const glm::vec3& vec)
 {
-    json["x"] = vec.x;
-    json["y"] = vec.y;
-    json["z"] = vec.z;
+    json = { vec.x, vec.y, vec.z };
 }
 
 static void to_json(json& json, const glm::mat4& m)
@@ -54,14 +52,9 @@ static void to_json(json& json, ID id)
     json = id.value;
 }
 
-static void to_json(json& json, MeshInstancePtr mesh)
+static void to_json(json& json, MeshNodePtr mesh_node)
 {
-    json = mesh->ID();
-}
-
-static void to_json(json& json, Radians radians)
-{
-    json["radians"] = radians.value;
+    json = mesh_node->GetID();
 }
 
 static void to_json(json& json, const Mesh& mesh)
@@ -85,6 +78,55 @@ static void to_json(json& json, const MeshIndices& mesh_indices)
     json["indices.size"] = mesh_indices.Size();
 }
 
+struct RotateValues final {
+    const glm::vec3 axis;
+    const float     angle;
+};
+
+static void to_json(json& json, const RotateValues& values)
+{
+    json["rotate.axis"]  = values.axis;
+    json["rotate.angle"] = values.angle;
+}
+
+struct TranslateValues final {
+    const glm::vec3 distance;
+};
+
+static void to_json(json& json, const TranslateValues& values)
+{
+    json["translate"] = values.distance;
+}
+
+struct ScaleValues final {
+    const float factor;
+};
+
+static void to_json(json& json, const ScaleValues& values)
+{
+    json["scale"] = values.factor;
+}
+
+struct InstantiateValues final {
+    const glm::mat4* transform;
+};
+
+static void to_json(json& json, const InstantiateValues& values)
+{
+    json["transform"] = *values.transform;
+}
+
+struct InstantiateRefs final {
+    const ID material_instance;
+    const ID mesh;
+};
+
+static void to_json(json& json, const InstantiateRefs& values)
+{
+    json["material.instance"] = values.material_instance;
+    json["mesh"]              = values.mesh;
+}
+
 struct MeshStructure final {
     const MeshVertices* vertices;
     const MeshIndices*  indices;
@@ -96,14 +138,30 @@ static void to_json(json& json, const MeshStructure& geometry)
     json["indices"]  = *geometry.indices;
 }
 
+json Mesh::ToJson() const
+{
+    json json;
+
+    json["mesh.id"]        = m_id;
+    json["mesh.span"]      = m_aabb;
+    json["mesh.structure"] = MeshStructure{ &m_vertices, &m_indices };
+
+    // TODO
+    // if (HasProperties()) {
+    //    json["mesh.properties"] = PropertyDictionary::ToJson();
+    //}
+
+    return json;
+}
+
 static ID GetUniqueID() noexcept
 {
     static std::atomic_int id = 0;
     id++;
-    return { id };
+    return ID(id);
 }
 
-struct NodeAccess {
+struct ObjectAccess {
     template <typename T, typename... Args>
     static auto MakeUnique(Args&&... args)
     {
@@ -114,36 +172,67 @@ struct NodeAccess {
     static auto GetChildren(const T* parent)
     {
         NodeArray ret;
-        ret.reserve(parent->m_nodes.size());
-        for (const auto& node : parent->m_nodes) {
+        ret.reserve(parent->m_children.size());
+        for (const auto& node : parent->m_children) {
             ret.push_back(node.get());
         }
         return ret;
     }
 
-    static void AddMeshInstancePtr(MeshInstancePtr mesh_instance, MaterialInstancePtr material_instance)
+    static void AddMeshInstancePtr(MeshNodePtr object_instance, MaterialInstancePtr material_instance)
     {
-        assert(mesh_instance && material_instance);
-        material_instance->AddMeshInstancePtr(mesh_instance);
+        assert(object_instance && material_instance);
+        // material_instance->AddInstantiateObjectNodePtr(object_instance); // TODO
     }
 
-    static void ApplyTransform(GeoNodePtr node, const glm::mat4& matrix) { node->ApplyTransform(matrix); }
+    static void ApplyTransform(NodePtr node, const glm::mat4& matrix) { node->ApplyTransform(matrix); }
 
     template <typename T>
     static void ThisToJson(const T* node, json& json)
     {
-        json["node.class"] = typeid(*node).name();
-        json["node.id"]    = node->m_id;
+        json["object.class"] = node->metadata.object_class;
+        json["object.id"]    = node->m_id;
 
         if (node->HasProperties()) {
-            json["node.properties"] = node->PropertyDictionary::ToJson();
+            // json["object.properties"] = node->PropertyDictionary::ToJson(); // TODO
         }
     }
 
-    static void ChildrenToJson(const std::vector<UniqueNode>& nodes, json& json) { json["sublist"] = nodes; }
+    static void ChildrenToJson(const std::vector<UniqueNode>& nodes, json& json) { json["pack"] = nodes; }
 };
 
-struct MeshManager {
+class MaterialManager {
+  public:
+    MaterialPtr CreateMaterial()
+    {
+        auto material_id         = GetUniqueID();
+        auto material            = UniqueMaterial(new Material(material_id));
+        auto material_ptr        = material.get();
+        m_materials[material_id] = std::move(material);
+
+        return material_ptr;
+    }
+
+    json ToJson() const
+    {
+        /*
+        auto mesh_refs = std::vector<std::reference_wrapper<Mesh>>{};
+        mesh_refs.reserve(m_meshes.size());
+        for (auto& pair : m_meshes) {
+            mesh_refs.push_back(*pair.second);
+        }
+        return nlohmann::json(mesh_refs);
+        */
+        // TODO
+        return {};
+    }
+
+  private:
+    std::unordered_map<ID, UniqueMaterial, ID::Hash> m_materials;
+};
+
+class MeshManager {
+  public:
     MeshPtr CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices)
     {
         auto mesh     = UniqueMesh(new Mesh(GetUniqueID(), aabb, std::move(mesh_vertices), std::move(mesh_indices)));
@@ -168,50 +257,50 @@ struct MeshManager {
     std::unordered_map<ID, UniqueMesh, ID::Hash> m_meshes;
 };
 
-TranslateNodePtr InternalGeoNode::AddTranslateNode(glm::vec3 amount)
+TranslateNodePtr InternalNode::AddTranslateNode(glm::vec3 amount)
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<TranslateGeoNode>(GetUniqueID(), amount));
-    return static_cast<TranslateNodePtr>(m_nodes.back().get());
+    m_children.push_back(ObjectAccess::MakeUnique<TranslateNode>(GetUniqueID(), amount));
+    return static_cast<TranslateNodePtr>(m_children.back().get());
 }
 
-RotateNodePtr InternalGeoNode::AddRotateNode(glm::vec3 axis, Radians angle)
+RotateNodePtr InternalNode::AddRotateNode(glm::vec3 axis, Radians angle)
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<RotateGeoNode>(GetUniqueID(), axis, angle));
-    return static_cast<RotateNodePtr>(m_nodes.back().get());
+    m_children.push_back(ObjectAccess::MakeUnique<RotateNode>(GetUniqueID(), axis, angle));
+    return static_cast<RotateNodePtr>(m_children.back().get());
 }
 
-ScaleNodePtr InternalGeoNode::AddScaleNode(float factor)
+ScaleNodePtr InternalNode::AddScaleNode(float factor)
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<ScaleGeoNode>(GetUniqueID(), factor));
-    return static_cast<ScaleNodePtr>(m_nodes.back().get());
+    m_children.push_back(ObjectAccess::MakeUnique<ScaleNode>(GetUniqueID(), factor));
+    return static_cast<ScaleNodePtr>(m_children.back().get());
 }
 
-MeshInstancePtr InternalGeoNode::AddInstanceNode(MeshPtr mesh, MaterialInstancePtr material)
+MeshNodePtr InternalNode::AddMeshNode(MeshPtr mesh, MaterialInstancePtr material)
 {
     assert(mesh && material);
-    m_nodes.push_back(NodeAccess::MakeUnique<InstanceGeoNode>(GetUniqueID(), mesh, material));
-    return static_cast<MeshInstancePtr>(m_nodes.back().get());
+    m_children.push_back(ObjectAccess::MakeUnique<MeshNode>(GetUniqueID(), mesh, material));
+    return static_cast<MeshNodePtr>(m_children.back().get());
 }
 
-NodeArray InternalGeoNode::GetChildren() const
+NodeArray InternalNode::GetChildren() const
 {
-    return NodeAccess::GetChildren(this);
+    return ObjectAccess::GetChildren(this);
 }
 
 Scene::Scene()
 {
-    m_materials    = NodeAccess::MakeUnique<RootMaterialNode>(GetUniqueID());
-    m_geometry     = NodeAccess::MakeUnique<RootGeoNode>(GetUniqueID());
+    // m_materials    = ObjectAccess::MakeUnique<RootMaterialNode>(GetUniqueID()); // TODO
+    m_root_node    = ObjectAccess::MakeUnique<RootNode>(GetUniqueID());
     m_mesh_manager = std::make_unique<MeshManager>();
 }
 
 DrawList Scene::ComputeDrawList() const
 {
     using namespace std::ranges;
+    /*
+    auto root = static_cast<NodePtr>(m_root_node.get());
 
-    auto geometry_root = static_cast<GeoNodePtr>(m_geometry.get());
-
-    NodeAccess::ApplyTransform(geometry_root, glm::identity<glm::mat4>());
+    ObjectAccess::ApplyTransform(root, glm::identity<glm::mat4>());
 
     auto draw_list        = DrawList{};
     auto material_classes = m_materials->GetChildren();
@@ -222,24 +311,26 @@ DrawList Scene::ComputeDrawList() const
         for (auto material_instance : material_instances | views::transform(pointer_cast<MaterialInstancePtr>)) {
             auto mesh_instances = material_instance->GetChildren();
 
-            for (auto mesh_instance : mesh_instances | views::transform(pointer_cast<MeshInstancePtr>)) {
+            for (auto mesh_instance : mesh_instances | views::transform(pointer_cast<MeshNodePtr>)) {
                 draw_list.push_back({ mesh_instance->GetMeshPtr(), mesh_instance->GetTransformPtr() });
             }
         }
     }
-
-    return draw_list;
+    */
+    // TODO
+    // return draw_list;
+    return {};
 }
 
 AABB Scene::ComputeAxisAlignedBoundingBox() const
 {
     using namespace std::ranges;
-
+    /*
     auto out = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
 
-    auto geometry_root = static_cast<GeoNodePtr>(m_geometry.get());
+    auto root = static_cast<ObjectNodePtr>(m_root_node.get());
 
-    NodeAccess::ApplyTransform(geometry_root, glm::identity<glm::mat4>());
+    ObjectAccess::ApplyTransform(root, glm::identity<glm::mat4>());
 
     auto draw_list        = DrawList{};
     auto material_classes = m_materials->GetChildren();
@@ -250,7 +341,7 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
         for (auto material_instance : material_instances | views::transform(pointer_cast<MaterialInstancePtr>)) {
             auto mesh_instances = material_instance->GetChildren();
 
-            for (auto mesh_instance : mesh_instances | views::transform(pointer_cast<MeshInstancePtr>)) {
+            for (auto mesh_instance : mesh_instances | views::transform(pointer_cast<InstantiateObjectNodePtr>)) {
                 if (auto* mesh = mesh_instance->GetMeshPtr()) {
                     auto& model = *mesh_instance->GetTransformPtr();
                     auto& aabb  = mesh->GetAxisAlignedBoundingBox();
@@ -268,110 +359,113 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
     }
 
     return out;
+    */
+
+    // TODO
+    return {};
 }
 
-json RootGeoNode::ToJson() const
+json RootNode::ToJson() const
 {
     json json;
 
-    NodeAccess::ThisToJson(this, json);
-    NodeAccess::ChildrenToJson(m_nodes, json);
+    ObjectAccess::ThisToJson(this, json);
+    ObjectAccess::ChildrenToJson(m_children, json);
 
     return json;
 }
 
-void RootGeoNode::ApplyTransform(const glm::mat4& matrix) noexcept
+void RootNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
-    for (auto& node : m_nodes) {
-        NodeAccess::ApplyTransform(static_cast<GeoNodePtr>(node.get()), matrix);
+    for (auto& node : m_children) {
+        ObjectAccess::ApplyTransform(static_cast<NodePtr>(node.get()), matrix);
     }
 }
 
-json InstanceGeoNode::ToJson() const
+json MeshNode::ToJson() const
 {
     json json;
 
-    NodeAccess::ThisToJson(this, json);
+    ObjectAccess::ThisToJson(this, json);
 
-    json["node.ref.material"] = m_material_instance->ID();
-    json["node.ref.mesh"]     = m_mesh->GetID();
-    json["node.transform"]    = m_transform;
+    json["node.refs"]   = InstantiateRefs{ {} /*m_material_instance->GetID()*/, m_mesh->GetID() }; // TODO
+    json["node.values"] = InstantiateValues{ &m_transform };
 
     return json;
 }
 
-void InstanceGeoNode::ApplyTransform(const glm::mat4& matrix) noexcept
+void MeshNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     m_transform = matrix;
 }
 
-InstanceGeoNode::InstanceGeoNode(NodeID id, MeshPtr mesh, MaterialInstancePtr material) noexcept
-    : GeoNode(id), m_mesh(mesh), m_material_instance(material)
+MeshNode::MeshNode(ID id, MeshPtr mesh, MaterialInstancePtr material) noexcept
+    : Node(id), m_mesh(mesh), m_material_instance(material)
 {
-    NodeAccess::AddMeshInstancePtr(this, material);
+    ObjectAccess::AddMeshInstancePtr(this, material);
 }
 
-json TranslateGeoNode::ToJson() const
+json TranslateNode::ToJson() const
 {
     json json;
 
-    NodeAccess::ThisToJson(this, json);
-    NodeAccess::ChildrenToJson(m_nodes, json);
+    ObjectAccess::ThisToJson(this, json);
+    ObjectAccess::ChildrenToJson(m_children, json);
 
-    json["node.translate"] = m_distance;
+    json["node.values"] = TranslateValues{ m_amount };
 
     return json;
 }
 
-void TranslateGeoNode::ApplyTransform(const glm::mat4& matrix) noexcept
+void TranslateNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
-    for (auto& node : m_nodes) {
-        auto geo_node = static_cast<GeoNodePtr>(node.get());
-        NodeAccess::ApplyTransform(geo_node, matrix * glm::translate(m_distance));
+    for (auto& node : m_children) {
+        auto node_ptr = static_cast<NodePtr>(node.get());
+        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::translate(m_amount));
     }
 }
 
-json RotateGeoNode::ToJson() const
+json RotateNode::ToJson() const
 {
     json json;
 
-    NodeAccess::ThisToJson(this, json);
-    NodeAccess::ChildrenToJson(m_nodes, json);
+    ObjectAccess::ThisToJson(this, json);
+    ObjectAccess::ChildrenToJson(m_children, json);
 
-    json["node.rotate.axis"]  = m_axis;
-    json["node.rotate.angle"] = m_angle;
+    json["node.values"] = RotateValues{ m_axis, m_angle.value };
 
     return json;
 }
 
-void RotateGeoNode::ApplyTransform(const glm::mat4& matrix) noexcept
+void RotateNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
-    for (auto& node : m_nodes) {
-        auto geo_node = static_cast<GeoNodePtr>(node.get());
-        NodeAccess::ApplyTransform(geo_node, matrix * glm::rotate(m_angle.value, m_axis));
+    for (auto& node : m_children) {
+        auto node_ptr = static_cast<NodePtr>(node.get());
+        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::rotate(m_angle.value, m_axis));
     }
 }
 
-json ScaleGeoNode::ToJson() const
+json ScaleNode::ToJson() const
 {
     json json;
 
-    NodeAccess::ThisToJson(this, json);
-    NodeAccess::ChildrenToJson(m_nodes, json);
+    ObjectAccess::ThisToJson(this, json);
+    ObjectAccess::ChildrenToJson(m_children, json);
 
-    json["node.scale"] = m_factor;
+    json["node.values"] = ScaleValues{ m_factor };
 
     return json;
 }
 
-void ScaleGeoNode::ApplyTransform(const glm::mat4& matrix) noexcept
+void ScaleNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
-    for (auto& node : m_nodes) {
-        auto geo_node = static_cast<GeoNodePtr>(node.get());
-        NodeAccess::ApplyTransform(geo_node, matrix * glm::scale(glm::vec3{ m_factor, m_factor, m_factor }));
+    for (auto& node : m_children) {
+        auto node_ptr = static_cast<NodePtr>(node.get());
+        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::scale(glm::vec3{ m_factor, m_factor, m_factor }));
     }
 }
 
+/*
 const Value& PropertyDictionary::GetProperty(const Key& key) const noexcept
 {
     if (m_dictionary) {
@@ -432,19 +526,25 @@ void PropertyDictionary::SetPropertyPrivate(Key key, Value value)
     }
     m_dictionary->insert_or_assign(std::move(key), std::move(value));
 }
+*/
 
-GeometryRootPtr Scene::GetGeometryRootPtr() noexcept
+RootNodePtr Scene::GetRootNodePtr() noexcept
 {
-    return static_cast<GeometryRootPtr>(m_geometry.get());
+    return static_cast<RootNodePtr>(m_root_node.get());
+}
+
+MaterialPtr Scene::CreateMaterial()
+{
+    return m_material_manager->CreateMaterial();
 }
 
 json Scene::ToJson() const
 {
     json json;
 
-    json["materials"] = m_materials->ToJson();
-    json["geometry"]  = m_geometry->ToJson();
-    json["meshes"]    = m_mesh_manager->ToJson();
+    // json["materials"] = m_materials->ToJson(); // TODO
+    json["scene"]  = m_root_node->ToJson();
+    json["meshes"] = m_mesh_manager->ToJson();
 
     return json;
 }
@@ -457,49 +557,47 @@ MeshPtr Scene::CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mes
 Scene::~Scene()
 {}
 
-MaterialRootPtr Scene::GetMaterialRootPtr() noexcept
-{
-    return static_cast<MaterialRootPtr>(m_materials.get());
-}
-
+/*
 MaterialInstancePtr ClassMaterialNode::AddMaterialInstanceNode()
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<InstanceMaterialNode>(GetUniqueID()));
-    return static_cast<MaterialInstancePtr>(m_nodes.back().get());
+    m_children.push_back(ObjectAccess::MakeUnique<InstanceMaterialNode>(GetUniqueID()));
+    return static_cast<MaterialInstancePtr>(m_children.back().get());
 }
 
 NodeArray ClassMaterialNode::GetChildren() const
 {
-    return NodeAccess::GetChildren(this);
+    return ObjectAccess::GetChildren(this);
 }
+*/
 
-json ClassMaterialNode::ToJson() const
+json Material::ToJson() const
 {
     json json;
 
-    NodeAccess::ThisToJson(this, json);
-    NodeAccess::ChildrenToJson(m_nodes, json);
+    ObjectAccess::ThisToJson(this, json);
+    ObjectAccess::ChildrenToJson(m_children, json);
 
     return json;
 }
-
+/*
+* 
 MaterialClassPtr RootMaterialNode::AddMaterialClassNode()
 {
-    m_nodes.push_back(NodeAccess::MakeUnique<ClassMaterialNode>(GetUniqueID()));
-    return static_cast<MaterialClassPtr>(m_nodes.back().get());
+    m_children.push_back(ObjectAccess::MakeUnique<ClassMaterialNode>(GetUniqueID()));
+    return static_cast<MaterialClassPtr>(m_children.back().get());
 }
 
 NodeArray RootMaterialNode::GetChildren() const
 {
-    return NodeAccess::GetChildren(this);
+    return ObjectAccess::GetChildren(this);
 }
 
 json RootMaterialNode::ToJson() const
 {
     json json;
 
-    NodeAccess::ThisToJson(this, json);
-    NodeAccess::ChildrenToJson(m_nodes, json);
+    ObjectAccess::ThisToJson(this, json);
+    ObjectAccess::ChildrenToJson(m_children, json);
 
     return json;
 }
@@ -508,33 +606,19 @@ json InstanceMaterialNode::ToJson() const
 {
     json json;
 
-    NodeAccess::ThisToJson(this, json);
+    ObjectAccess::ThisToJson(this, json);
 
-    auto refs = std::vector<MeshInstancePtr>(m_nodes.size());
+    auto refs = std::vector<InstantiateObjectNodePtr>(m_children.size());
 
-    std::ranges::transform(m_nodes, refs.begin(), pointer_cast<MeshInstancePtr>);
+    std::ranges::transform(m_children, refs.begin(), pointer_cast<InstantiateObjectNodePtr>);
 
     json["node.refs.geo"] = refs;
 
     return json;
 }
 
-void InstanceMaterialNode::AddMeshInstancePtr(MeshInstancePtr mesh_instance)
+void InstanceMaterialNode::AddInstantiateObjectNodePtr(InstantiateObjectNodePtr object_instance)
 {
-    m_nodes.push_back(static_cast<NodePtr>(mesh_instance));
+    m_children.push_back(static_cast<NodePtr>(object_instance));
 }
-
-json Mesh::ToJson() const
-{
-    json json;
-
-    json["mesh.id"]        = m_id;
-    json["mesh.span"]      = m_aabb;
-    json["mesh.structure"] = MeshStructure{ &m_vertices, &m_indices };
-
-    if (HasProperties()) {
-        json["mesh.properties"] = PropertyDictionary::ToJson();
-    }
-
-    return json;
-}
+*/

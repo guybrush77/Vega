@@ -1,6 +1,7 @@
 #include "gui.hpp"
 #include "camera.hpp"
 #include "platform.hpp"
+#include "scene.hpp"
 #include "utils/resource.hpp"
 
 #include "etna/command.hpp"
@@ -443,11 +444,139 @@ void CameraWindow::Draw()
 
     End();
 }
+/*
+void DrawNodeProperties(NodePtr node, int* ptr_id)
+{
+    if (node->HasProperties()) {
+        auto& id         = *ptr_id;
+        auto  json       = node->ToJson();
+        auto& properties = json["node.properties"];
 
+        for (auto& [key, value] : properties.items()) {
+            ImGui::PushID(id++);
+            ImGui::Text(key.c_str());
+            ImGui::PopID();
+
+            ImGui::SameLine();
+
+            if (value.is_string()) {
+                std::string str = value;
+                ImGui::Text(str.c_str());
+            }
+        }
+    }
+}
+
+void DrawNodeFields(NodePtr node, int* ptr_id)
+{
+    static constexpr auto editable = ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue;
+    static constexpr auto readonly = ImGuiInputTextFlags_ReadOnly;
+
+    const auto& metadata = node->GetMetaData();
+
+    if (metadata.node_fields.empty()) {
+        return;
+    }
+
+    auto  json   = node->ToJson();
+    auto& values = json["node.values"];
+    auto& id     = *ptr_id;
+
+    for (size_t i = 0; i < metadata.node_fields.size(); ++i) {
+        auto& field = metadata.node_fields[i];
+
+        auto flags = editable;
+
+        if (false == field.is_editable) {
+            flags = readonly;
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+        }
+
+        switch (field.type) {
+        case Metadata::FieldType::Float: {
+            float value = values[field.name];
+
+            ImGui::PushID(id++);
+
+            if (ImGui::InputFloat(field.label, &value, 0.01f, 1.0f, "%.3f", flags)) {
+                values[field.name] = value;
+                node->FromJson(json);
+            }
+
+            ImGui::PopID();
+            break;
+        }
+        case Metadata::FieldType::Vec3: {
+            std::array<float, 3> value = values[field.name];
+
+            ImGui::PushID(id++);
+
+            if (ImGui::InputFloat3(field.label, value.data(), "%.3f", flags)) {
+                values[field.name] = value;
+                node->FromJson(json);
+            }
+
+            ImGui::PopID();
+            break;
+        }
+        case Metadata::FieldType::Mat4: {
+            std::array<float, 16> value = values[field.name];
+
+            ImGui::PushID(id++);
+            ImGui::Text(field.label);
+            ImGui::PopID();
+
+            ImGui::PushID(id++);
+            ImGui::InputFloat4("", value.data() + 0, "%.3f", flags);
+            ImGui::PopID();
+
+            ImGui::PushID(id++);
+            ImGui::InputFloat4("", value.data() + 4, "%.3f", flags);
+            ImGui::PopID();
+
+            ImGui::PushID(id++);
+            ImGui::InputFloat4("", value.data() + 8, "%.3f", flags);
+            ImGui::PopID();
+
+            ImGui::PushID(id++);
+            ImGui::InputFloat4("", value.data() + 12, "%.3f", flags);
+            ImGui::PopID();
+
+            break;
+        }
+        }
+
+        if (false == field.is_editable) {
+            ImGui::PopStyleVar();
+        }
+    }
+}
+
+void DrawNode(NodePtr node)
+{
+    using namespace ImGui;
+
+    const auto& metadata = node->GetMetaData();
+
+    auto id = node->GetID() << 8;
+
+    PushID(id++);
+
+    if (TreeNode(metadata.node_name)) {
+        DrawNodeProperties(node, &id);
+        DrawNodeFields(node, &id);
+        std::ranges::for_each(node->GetChildren(), [](NodePtr node) { DrawNode(node); });
+        TreePop();
+    }
+
+    PopID();
+}
+*/
 void SceneWindow::Draw()
 {
     using namespace ImGui;
 
     Begin("Scene");
+//    DrawNode(m_scene->GetRootObjectPtr());
     End();
 }

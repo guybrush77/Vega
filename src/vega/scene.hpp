@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utils/math.hpp"
+#include "utils/misc.hpp"
 #include "vertex.hpp"
 
 BEGIN_DISABLE_WARNINGS
@@ -14,75 +15,104 @@ END_DISABLE_WARNINGS
 
 #include <any>
 #include <memory>
-#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 #include <vector>
 
-struct ID;
-
-struct MeshVertices;
-struct MeshIndices;
-struct Mesh;
-struct MeshManager;
-
-struct Node;
-
-struct MaterialNode;
-struct RootMaterialNode;
-struct ClassMaterialNode;
-struct InstanceMaterialNode;
-
-struct GeoNode;
-struct RootGeoNode;
-struct TranslateGeoNode;
-struct RotateGeoNode;
-struct ScaleGeoNode;
-struct InstanceGeoNode;
-
+class Material;
+class MaterialInstance;
+class Mesh;
+class MaterialManager;
+class MeshManager;
+class MeshNode;
+class Node;
+class RootNode;
+class RotateNode;
+class ScaleNode;
 class Scene;
+class TranslateNode;
 
-using ScenePtr = Scene*;
+using MaterialPtr         = Material*;
+using MaterialInstancePtr = MaterialInstance*;
+using MeshPtr             = Mesh*;
+using MeshNodePtr         = MeshNode*;
+using NodePtr             = Node*;
+using RootNodePtr         = RootNode*;
+using RotateNodePtr       = RotateNode*;
+using ScaleNodePtr        = ScaleNode*;
+using ScenePtr            = Scene*;
+using TranslateNodePtr    = TranslateNode*;
 
-using MeshVerticesPtr = MeshVertices*;
-using MeshIndicesPtr  = MeshIndices*;
-using UniqueMesh      = std::unique_ptr<Mesh>;
-using MeshPtr         = Mesh*;
+using UniqueMaterial        = std::unique_ptr<Material>;
+using UniqueMesh            = std::unique_ptr<Mesh>;
+using UniqueMaterialManager = std::unique_ptr<MaterialManager>;
+using UniqueMeshManager     = std::unique_ptr<MeshManager>;
+using UniqueNode            = std::unique_ptr<Node>;
 
+using MaterialArray = std::vector<MaterialPtr>;
+using NodeArray     = std::vector<NodePtr>;
+
+struct Metadata;
+
+using MetadataRef = const Metadata&;
+
+// TODO
+
+/*
 using Key        = std::string;
 using Value      = std::variant<int, float, std::string>;
 using Dictionary = std::unordered_map<Key, Value>;
-
-using UniqueNode = std::unique_ptr<Node>;
-using NodePtr    = Node*;
-using NodeRef    = Node&;
-using NodeArray  = std::vector<NodePtr>;
-
-using MaterialNodePtr     = MaterialNode*;
-using MaterialRootPtr     = RootMaterialNode*;
-using MaterialClassPtr    = ClassMaterialNode*;
-using MaterialInstancePtr = InstanceMaterialNode*;
-
-using GeoNodePtr       = GeoNode*;
-using GeometryRootPtr  = RootGeoNode*;
-using TranslateNodePtr = TranslateGeoNode*;
-using RotateNodePtr    = RotateGeoNode*;
-using ScaleNodePtr     = ScaleGeoNode*;
-using MeshInstancePtr  = InstanceGeoNode*;
-
-using UniqueMeshManager = std::unique_ptr<MeshManager>;
+*/
 
 using json = nlohmann::json;
 
-struct ID {
-    int value;
+enum class ValueType { Null, Float, Vec3 };
+
+inline const char* to_string(ValueType value_type) noexcept
+{
+    switch (value_type) {
+    case ValueType::Null: return "Null";
+    case ValueType::Float: return "Float";
+    case ValueType::Vec3: return "Vec3";
+    default: throw_runtime_error("ValueType: Bad enum value");
+    };
+}
+
+struct Field final {
+    using IsEditable = bool;
+
+    const char* name{};
+    const char* label{};
+    const char* description{};
+    ValueType   value_type{};
+    IsEditable  is_editable{};
+};
+
+struct Metadata final {
+    const char* object_class{};
+    const char* object_label{};
+    const char* object_description{};
+
+    std::vector<Field> fields;
+};
+
+struct ID final {
+    std::uint64_t value = 0;
+
+    constexpr ID() noexcept = default;
+    constexpr ID(std::uint64_t value) noexcept : value(value) {}
+
+    constexpr operator std::uint64_t() const noexcept { return value; }
 
     constexpr bool operator==(const ID&) const noexcept = default;
+
     struct Hash {
         constexpr size_t operator()(ID id) const noexcept { return static_cast<size_t>(id.value); }
     };
 };
 
+/*
 struct PropertyDictionary {
     auto GetProperty(const Key& key) const noexcept -> const Value&;
     bool HasProperty(const Key& key) const noexcept;
@@ -101,8 +131,56 @@ struct PropertyDictionary {
 
     std::unique_ptr<Dictionary> m_dictionary;
 };
+*/
 
-struct MeshVertices final {
+class ValueRef final {
+  public:
+    ValueRef() noexcept = default;
+
+    explicit ValueRef(float* value) noexcept : m_type(ValueType::Float), value(value) {}
+    explicit ValueRef(glm::vec3* value) noexcept : m_type(ValueType::Vec3), value(value) {}
+
+    operator float&() const
+    {
+        throw_runtime_error_if(m_type != ValueType::Float, "Cannot convert {} to float", to_string(m_type));
+        return *static_cast<float*>(value);
+    }
+
+    operator glm::vec3 &() const
+    {
+        throw_runtime_error_if(m_type != ValueType::Float, "Cannot convert {} to glm::vec3", to_string(m_type));
+        return *static_cast<glm::vec3*>(value);
+    }
+
+  private:
+    using ValuePtr = void*;
+
+    ValueType m_type = ValueType::Null;
+    ValuePtr  value  = nullptr;
+};
+
+class Object {
+  public:
+    virtual ~Object() noexcept = default;
+
+    auto GetID() const noexcept { return m_id; }
+
+    virtual bool HasProperties() const noexcept { return false; }
+    virtual auto GetMetadata() const -> MetadataRef = 0;
+    virtual auto ToJson() const -> json             = 0;
+
+    virtual auto GetField(std::string_view field_name) -> ValueRef = 0;
+
+  protected:
+    friend struct ObjectAccess;
+
+    Object(ID id) noexcept : m_id(id) {}
+
+    ID m_id;
+};
+
+class MeshVertices final {
+  public:
     template <VertexType T, typename A>
     MeshVertices(std::vector<T, A> vertices) : m_vertices(std::move(vertices))
     {
@@ -140,7 +218,8 @@ struct MeshVertices final {
     const void* m_data        = nullptr;
 };
 
-struct MeshIndices final {
+class MeshIndices final {
+  public:
     template <IndexType T>
     MeshIndices(std::vector<T> indices) : m_indices(indices)
     {
@@ -178,7 +257,8 @@ struct MeshIndices final {
     const void* m_data       = nullptr;
 };
 
-struct Mesh final : PropertyDictionary {
+class Mesh final {
+  public:
     Mesh(const Mesh&) = delete;
     Mesh& operator=(const Mesh&) = delete;
 
@@ -193,7 +273,7 @@ struct Mesh final : PropertyDictionary {
     json ToJson() const;
 
   private:
-    friend struct MeshManager;
+    friend class MeshManager;
 
     Mesh(ID id, AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) noexcept
         : m_id(id), m_aabb(aabb), m_vertices(std::move(mesh_vertices)), m_indices(std::move(mesh_indices))
@@ -205,157 +285,165 @@ struct Mesh final : PropertyDictionary {
     MeshIndices  m_indices;
 };
 
-struct NodeID final : ID {
-    constexpr NodeID() noexcept : ID({}) {}
-    constexpr NodeID(ID id) noexcept : ID(id) {}
-};
+class Material final : public Object {
+  public:
+    Material(const Material&) = delete;
+    Material& operator=(const Material&) = delete;
 
-struct Node : PropertyDictionary {
-    virtual ~Node() noexcept = default;
+    Material(Material&&) = default;
+    Material& operator=(Material&&) = default;
 
-    auto ID() const noexcept { return m_id; }
+    auto GetMetadata() const -> MetadataRef override { return metadata; }
 
-    virtual auto GetChildren() const -> NodeArray = 0;
-    virtual auto ToJson() const -> json           = 0;
+    auto GetField(std::string_view) -> ValueRef override { return {}; }
 
-  protected:
-    friend struct NodeAccess;
-
-    Node(NodeID id) noexcept : m_id(id) {}
-
-    NodeID m_id;
-};
-
-struct MaterialNode : Node {
-    MaterialNode(NodeID id) noexcept : Node(id) {}
-};
-
-struct RootMaterialNode final : MaterialNode {
-    RootMaterialNode(const RootMaterialNode&) = delete;
-    RootMaterialNode& operator=(const RootMaterialNode&) = delete;
-
-    auto AddMaterialClassNode() -> MaterialClassPtr;
-
-    auto GetChildren() const -> NodeArray override;
+    auto AddMaterialInstance() -> MaterialInstancePtr;
 
     json ToJson() const override;
 
   private:
-    friend struct NodeAccess;
+    friend class MaterialManager;
+    friend struct ObjectAccess;
 
-    RootMaterialNode(NodeID id) noexcept : MaterialNode(id) {}
+    Material(ID id) noexcept : Object(id){};
 
-    std::vector<UniqueNode> m_nodes;
+    inline static Metadata metadata = { "root.material", "Material", nullptr };
+
+    std::vector<UniqueNode> m_children;
 };
 
-struct ClassMaterialNode final : MaterialNode {
-    ClassMaterialNode(const ClassMaterialNode&) = delete;
-    ClassMaterialNode& operator=(const ClassMaterialNode&) = delete;
-
-    auto AddMaterialInstanceNode() -> MaterialInstancePtr;
-
-    auto GetChildren() const -> NodeArray override;
-
-    json ToJson() const override;
-
-  private:
-    friend struct NodeAccess;
-
-    ClassMaterialNode(NodeID id) noexcept : MaterialNode(id){};
-
-    std::vector<UniqueNode> m_nodes;
-};
-
+/*
 struct InstanceMaterialNode final : MaterialNode {
     InstanceMaterialNode(const InstanceMaterialNode&) = delete;
     InstanceMaterialNode& operator=(const InstanceMaterialNode&) = delete;
 
-    auto GetChildren() const -> NodeArray override { return m_nodes; }
+    auto GetMetaData() const -> MetaDataRef override { return metadata; }
+
+    auto GetChildren() const -> NodeArray override { return m_children; }
 
     json ToJson() const override;
 
   private:
-    friend struct NodeAccess;
+    friend struct ObjectAccess;
 
     InstanceMaterialNode(NodeID id) noexcept : MaterialNode(id) {}
 
-    void AddMeshInstancePtr(MeshInstancePtr mesh_instance);
+    void AddInstantiateObjectNodePtr(InstantiateObjectNodePtr object_instance);
 
-    NodeArray m_nodes;
+    inline static const char*    node_class = "instance.material";
+    inline static const Metadata metadata   = { "Material Instance" };
+
+    NodeArray m_children;
 };
+*/
 
-struct GeoNode : Node {
-    GeoNode(NodeID id) noexcept : Node(id) {}
+class Node : public Object {
+  public:
+    Node(ID id) noexcept : Object(id) {}
 
-  private:
+    virtual auto GetChildren() const -> NodeArray = 0;
+
+  protected:
+    friend struct ObjectAccess;
+
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept = 0;
-
-    friend struct NodeAccess;
 };
 
-struct InternalGeoNode : GeoNode {
+class InternalNode : public Node {
+  public:
     auto AddTranslateNode(glm::vec3 amount) -> TranslateNodePtr;
     auto AddRotateNode(glm::vec3 axis, Radians angle) -> RotateNodePtr;
     auto AddScaleNode(float factor) -> ScaleNodePtr;
-    auto AddInstanceNode(MeshPtr mesh, MaterialInstancePtr material) -> MeshInstancePtr;
+    auto AddMeshNode(MeshPtr mesh, MaterialInstancePtr material) -> MeshNodePtr;
 
     auto GetChildren() const -> NodeArray override;
 
   protected:
-    friend struct NodeAccess;
+    friend struct ObjectAccess;
 
-    InternalGeoNode(NodeID id) noexcept : GeoNode(id) {}
+    InternalNode(ID id) noexcept : Node(id) {}
 
-    std::vector<UniqueNode> m_nodes;
+    std::vector<UniqueNode> m_children;
 };
 
-struct RootGeoNode final : InternalGeoNode {
-    RootGeoNode(const RootGeoNode&) = delete;
-    RootGeoNode& operator=(const RootGeoNode&) = delete;
+class RootNode final : public InternalNode {
+  public:
+    RootNode(const RootNode&) = delete;
+    RootNode& operator=(const RootNode&) = delete;
+
+    auto GetMetadata() const -> MetadataRef override { return metadata; }
+
+    auto GetField(std::string_view) -> ValueRef override { return {}; }
 
     json ToJson() const override;
 
   private:
-    friend struct NodeAccess;
+    friend struct ObjectAccess;
 
-    RootGeoNode(NodeID id) noexcept : InternalGeoNode(id) {}
+    inline static Metadata metadata = { "root.node", "Root", nullptr };
+
+    RootNode(ID id) noexcept : InternalNode(id) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 };
 
-struct TranslateGeoNode final : InternalGeoNode {
-    TranslateGeoNode(const TranslateGeoNode&) = delete;
-    TranslateGeoNode& operator=(const TranslateGeoNode&) = delete;
+class TranslateNode final : public InternalNode {
+    TranslateNode(const TranslateNode&) = delete;
+    TranslateNode& operator=(const TranslateNode&) = delete;
+
+    auto GetMetadata() const -> MetadataRef override { return metadata; }
+
+    auto GetField(std::string_view field_name) -> ValueRef override
+    {
+        return field_name == "translate.amount" ? ValueRef(&m_amount) : ValueRef();
+    }
 
     json ToJson() const override;
 
   private:
-    friend struct NodeAccess;
+    friend struct ObjectAccess;
 
-    TranslateGeoNode(NodeID id, glm::vec3 distance) noexcept : InternalGeoNode(id), m_distance(distance) {}
+    inline static Metadata metadata = {
+        "translate.node",
+        "Translate",
+        nullptr,
+        { Field{ "translate.amount", "Amount", nullptr, ValueType::Vec3, Field::IsEditable{ true } } }
+    };
+
+    TranslateNode(ID id, glm::vec3 amount) noexcept : InternalNode(id), m_amount(amount) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
-    glm::vec3 m_distance;
+    glm::vec3 m_amount;
 };
 
-struct RotateGeoNode final : InternalGeoNode {
-    RotateGeoNode(const RotateGeoNode&) = delete;
-    RotateGeoNode& operator=(const RotateGeoNode&) = delete;
+class RotateNode final : public InternalNode {
+  public:
+    RotateNode(const RotateNode&) = delete;
+    RotateNode& operator=(const RotateNode&) = delete;
+
+    auto GetMetadata() const -> MetadataRef override { return metadata; }
+
+    auto GetField(std::string_view field_name) -> ValueRef override
+    {
+        return field_name == "rotate.axis" ? ValueRef(&m_axis)
+                                           : field_name == "rotate.angle" ? ValueRef(&m_angle.value) : ValueRef();
+    }
 
     json ToJson() const override;
 
-    auto Axis() const noexcept { return m_axis; }
-    auto Angle() const noexcept { return m_angle; }
-
-    void SetAxis(const glm::vec3& axis) noexcept { m_axis = axis; }
-    void SetAngle(Radians angle) noexcept { m_angle = angle; }
-
   private:
-    friend struct NodeAccess;
+    friend struct ObjectAccess;
 
-    RotateGeoNode(NodeID id, glm::vec3 axis, Radians angle) noexcept : InternalGeoNode(id), m_axis(axis), m_angle(angle)
-    {}
+    inline static Metadata metadata = {
+        "rotate.node",
+        "Rotate",
+        nullptr,
+        { Field{ "rotate.axis", "Axis", nullptr, ValueType::Vec3, Field::IsEditable{ true } },
+          Field{ "rotate.angle", "Angle", nullptr, ValueType::Float, Field::IsEditable{ true } } }
+    };
+
+    RotateNode(ID id, glm::vec3 axis, Radians angle) noexcept : InternalNode(id), m_axis(axis), m_angle(angle) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
@@ -363,29 +451,47 @@ struct RotateGeoNode final : InternalGeoNode {
     Radians   m_angle;
 };
 
-struct ScaleGeoNode final : InternalGeoNode {
-    ScaleGeoNode(const ScaleGeoNode&) = delete;
-    ScaleGeoNode& operator=(const ScaleGeoNode&) = delete;
+class ScaleNode final : public InternalNode {
+  public:
+    ScaleNode(const ScaleNode&) = delete;
+    ScaleNode& operator=(const ScaleNode&) = delete;
+
+    auto GetMetadata() const -> MetadataRef override { return metadata; }
+
+    auto GetField(std::string_view field_name) -> ValueRef override
+    {
+        return field_name == "scale.factor" ? ValueRef(&m_factor) : ValueRef();
+    }
 
     json ToJson() const override;
 
   private:
-    friend struct NodeAccess;
+    friend struct ObjectAccess;
 
-    ScaleGeoNode(NodeID id, float factor) noexcept : InternalGeoNode(id), m_factor(factor) {}
+    inline static Metadata metadata = {
+        "scale.node",
+        "Scale",
+        nullptr,
+        { Field{ "scale.factor", "Factor", nullptr, ValueType::Float, Field::IsEditable{ true } } }
+    };
+
+    ScaleNode(ID id, float factor) noexcept : InternalNode(id), m_factor(factor) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
     float m_factor;
 };
 
-struct InstanceGeoNode final : GeoNode {
-    InstanceGeoNode(const InstanceGeoNode&) = delete;
-    InstanceGeoNode& operator=(const InstanceGeoNode&) = delete;
+class MeshNode final : public Node {
+  public:
+    MeshNode(const MeshNode&) = delete;
+    MeshNode& operator=(const MeshNode&) = delete;
 
+    auto GetMetadata() const -> MetadataRef override { return metadata; }
+    auto GetField(std::string_view) -> ValueRef override { return {}; } // TODO
     auto GetChildren() const -> NodeArray override { return NodeArray{}; }
 
-    auto GetMeshPtr() const noexcept { return m_mesh; }
+    //    auto GetMeshPtr() const noexcept { return m_mesh; }
 
     auto GetMaterialInstancePtr() const noexcept { return m_material_instance; }
 
@@ -394,11 +500,13 @@ struct InstanceGeoNode final : GeoNode {
     json ToJson() const override;
 
   private:
-    friend struct NodeAccess;
+    friend struct ObjectAccess;
+
+    inline static Metadata metadata{}; // TODO
+
+    MeshNode(ID id, MeshPtr mesh, MaterialInstancePtr material) noexcept;
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
-
-    InstanceGeoNode(NodeID id, MeshPtr mesh, MaterialInstancePtr material) noexcept;
 
     MeshPtr             m_mesh              = nullptr;
     MaterialInstancePtr m_material_instance = nullptr;
@@ -424,8 +532,9 @@ class Scene {
 
     ~Scene() noexcept;
 
-    auto GetGeometryRootPtr() noexcept -> GeometryRootPtr;
-    auto GetMaterialRootPtr() noexcept -> MaterialRootPtr;
+    auto GetRootNodePtr() noexcept -> RootNodePtr;
+
+    auto CreateMaterial() -> MaterialPtr;
 
     auto CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) -> MeshPtr;
 
@@ -436,7 +545,7 @@ class Scene {
     json ToJson() const;
 
   private:
-    UniqueNode        m_materials;
-    UniqueNode        m_geometry;
-    UniqueMeshManager m_mesh_manager;
+    UniqueNode            m_root_node;
+    UniqueMaterialManager m_material_manager;
+    UniqueMeshManager     m_mesh_manager;
 };

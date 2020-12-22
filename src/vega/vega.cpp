@@ -106,11 +106,12 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
         throw std::runtime_error("Failed to load file");
     }
 
-    auto material_root     = scene->GetMaterialRootPtr();
-    auto material_class    = material_root->AddMaterialClassNode();
-    auto material_instance = material_class->AddMaterialInstanceNode();
+    auto material = scene->CreateMaterial();
+    //auto material_class    = material_root->AddMaterialClassNode();
+    //auto material_instance = material_class->AddMaterialInstanceNode();
 
-    auto geometry_root = scene->GetGeometryRootPtr();
+    auto root_node  = scene->GetRootNodePtr();
+    auto scale_node = root_node->AddScaleNode(1.0f);
 
     auto index_map = std::unordered_map<Index, uint32_t, Index::Hash>{};
     auto vertices  = std::vector<VertexPN>{};
@@ -164,11 +165,10 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
 
         auto mesh = scene->CreateMesh(aabb, std::move(vertices), std::move(indices));
 
-        mesh->SetProperty("name", shape.name);
+        //mesh->SetProperty("name", shape.name); // TODO
 
-        auto mesh_instance = geometry_root->AddInstanceNode(mesh, material_instance);
-
-        mesh_instance->SetProperty("name", shape.name);
+        auto translate_node = scale_node->AddTranslateNode({ 0, 0, 0 });
+        translate_node->AddMeshNode(mesh, {}); // TODO
     }
 }
 
@@ -517,7 +517,7 @@ etna::Extent2D ComputeEtnaExtent(etna::PhysicalDevice gpu, GLFWwindow* glfw_wind
 
     return extent;
 }
-
+#include <iostream> // TODO
 int main()
 {
 #ifdef NDEBUG
@@ -563,7 +563,11 @@ int main()
 
     auto scene = Scene();
 
-    LoadObj(&scene, "../../../data/models/suzanne.obj");
+    LoadObj(&scene, "C:\\Users\\slobodan\\Downloads\\3dModels\\skull\\12140_Skull_v3_L2.obj");
+
+    std::cout << scene.ToJson().dump(4) << "\n";
+
+    //    return 0;
 
     // Create pipeline renderpass
     UniqueRenderPass renderpass;
