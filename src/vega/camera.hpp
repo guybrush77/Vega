@@ -113,8 +113,10 @@ struct Offset final {
 struct Perspective final {
     Radians fovy;
     float   aspect;
+    float   near_min;
     float   near;
     float   far;
+    float   far_max;
 };
 
 struct CameraLimits final {
@@ -153,9 +155,7 @@ class Camera {
         ObjectView  object_view,
         AABB        object,
         Degrees     fovy,
-        float       aspect,
-        float       near = 0,
-        float       far  = std::numeric_limits<float>::infinity());
+        float       aspect);
 
     virtual ~Camera() noexcept = default;
 
@@ -163,7 +163,7 @@ class Camera {
     auto GetPerspectiveMatrix() const noexcept -> glm::mat4;
     auto GetSphericalCoordinates() const noexcept -> SphericalCoordinates;
     auto GetOffset() const noexcept -> Offset;
-    auto GetPerspective() const noexcept -> Perspective;
+    auto GetPerspective() const noexcept -> const Perspective&;
     auto GetBasis() const noexcept -> Basis;
     auto GetObject() const noexcept -> AABB;
     auto GetLimits() const noexcept -> const CameraLimits&;

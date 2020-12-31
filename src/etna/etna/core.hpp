@@ -17,18 +17,6 @@
     struct composable_flags<type> : std::true_type {}; \
     using type##Mask = Mask<type>;
 
-template <typename>
-struct etna_vertex_attribute_type_trait;
-
-#define DECLARE_VERTEX_ATTRIBUTE_TYPE(attribute_type, vulkan_type) \
-    template <> \
-    struct etna_vertex_attribute_type_trait<attribute_type> { \
-        static constexpr etna::Format value = vulkan_type; \
-    };
-
-#define formatof(vertex_type, field) \
-    etna_vertex_attribute_type_trait<decltype(std::declval<vertex_type>().field)>::value
-
 namespace etna {
 
 using Location = uint32_t;

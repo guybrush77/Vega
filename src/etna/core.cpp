@@ -13,6 +13,16 @@ class etna_error : public std::exception {
     virtual char const* what() const noexcept override { return "TODO"; }
 };
 
+void throw_etna_error(const char* file, int line, Result result)
+{
+    throw etna_error(file, line, result);
+}
+
+void throw_etna_error(const char* file, int line, const char* description)
+{
+    throw etna_error(file, line, description);
+}
+
 const char* to_string(Result value) noexcept
 {
     switch (value) {
@@ -370,16 +380,6 @@ const char* to_string(DescriptorPoolFlags value) noexcept
     case DescriptorPoolFlags::UpdateAfterBind: return "UpdateAfterBind";
     default: return "invalid";
     }
-}
-
-void throw_etna_error(const char* file, int line, Result result)
-{
-    throw etna_error(file, line, result);
-}
-
-void throw_etna_error(const char* file, int line, const char* description)
-{
-    throw etna_error(file, line, description);
 }
 
 } // namespace etna

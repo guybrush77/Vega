@@ -1,6 +1,8 @@
 #include "gui.hpp"
 #include "camera.hpp"
 #include "platform.hpp"
+#include "scene.hpp"
+#include "utils/cast.hpp"
 #include "utils/resource.hpp"
 
 #include "etna/command.hpp"
@@ -267,136 +269,220 @@ bool Gui::IsAnyWindowHovered() const noexcept
     return ImGui::IsAnyWindowHovered();
 }
 
+void AddLabel(const char* label, const char* tooltip)
+{
+    ImGui::SameLine();
+    ImGui::Text(label);
+
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(tooltip);
+    }
+}
+
 void CameraWindow::Draw()
 {
-    using namespace ImGui;
+    static const auto width = ImGui::CalcTextSize("Camera Up ").x;
 
-    static const auto width  = CalcTextSize("Camera Up").x;
-    const auto&       limits = m_camera->GetLimits();
+    const auto& limits = m_camera->GetLimits();
 
-    Begin("Camera");
+    auto id = m_base_id;
 
-    PushItemWidth(-width);
+    ImGui::Begin("Camera");
+
+    ImGui::PushItemWidth(-width);
 
     {
-        Text("View");
+        ImGui::Text("View");
 
-        auto coordinates = m_camera->GetSphericalCoordinates();
-        auto offset      = m_camera->GetOffset();
-        auto label       = ToString(coordinates.camera_up);
-        auto label_index = static_cast<int>(coordinates.camera_up);
+        auto coordinates     = m_camera->GetSphericalCoordinates();
+        auto offset          = m_camera->GetOffset();
+        auto camera_up_label = ToString(coordinates.camera_up);
+        auto camera_up_index = static_cast<int>(coordinates.camera_up);
 
-        bool elevation_changed = SliderAngle(
-            "Elevation",
-            &coordinates.elevation.value,
-            limits.elevation.min.value,
-            limits.elevation.max.value,
-            "%.1f deg",
-            ImGuiSliderFlags_AlwaysClamp);
+        bool camera_elevation;
+        {
+            ImGui::PushID(id++);
 
-        bool azimuth_changed = SliderAngle(
-            "Azimuth",
-            &coordinates.azimuth.value,
-            limits.azimuth.min.value,
-            limits.azimuth.max.value,
-            "%.1f deg",
-            ImGuiSliderFlags_AlwaysClamp);
+            camera_elevation = ImGui::SliderAngle(
+                "",
+                &coordinates.elevation.value,
+                limits.elevation.min.value,
+                limits.elevation.max.value,
+                "%.1f deg",
+                ImGuiSliderFlags_AlwaysClamp);
 
-        bool camera_up_changed =
-            SliderInt("Camera Up", &label_index, 0, 1, label, ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput);
+            ImGui::PopID();
 
-        bool distance_changed = SliderFloat(
-            "Distance",
-            &coordinates.distance,
-            limits.distance.min,
-            limits.distance.max,
-            nullptr,
-            ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
+            AddLabel("Elevation", "Camera Elevation");
+        }
 
-        if (elevation_changed || azimuth_changed || distance_changed || camera_up_changed) {
-            coordinates.camera_up = static_cast<CameraUp>(label_index);
+        bool camera_azimuth;
+        {
+            ImGui::PushID(id++);
+
+            camera_azimuth = ImGui::SliderAngle(
+                "",
+                &coordinates.azimuth.value,
+                limits.azimuth.min.value,
+                limits.azimuth.max.value,
+                "%.1f deg",
+                ImGuiSliderFlags_AlwaysClamp);
+
+            ImGui::PopID();
+
+            AddLabel("Azimuth", "Camera Azimuth");
+        }
+
+        bool camera_up;
+        {
+            ImGui::PushID(id++);
+
+            camera_up = ImGui::SliderInt(
+                "",
+                &camera_up_index,
+                0,
+                1,
+                camera_up_label,
+                ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput);
+
+            ImGui::PopID();
+
+            AddLabel("Camera Up", "Is Camera Inverted");
+        }
+
+        bool camera_distance;
+        {
+            ImGui::PushID(id++);
+
+            camera_distance = ImGui::SliderFloat(
+                "",
+                &coordinates.distance,
+                limits.distance.min,
+                limits.distance.max,
+                nullptr,
+                ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
+
+            ImGui::PopID();
+
+            AddLabel("Distance", "Camera Distance");
+        }
+
+        bool offset_horizontal;
+        {
+            ImGui::PushID(id++);
+
+            offset_horizontal = ImGui::SliderFloat("", &offset.horizontal, limits.offset_x.min, limits.offset_x.max);
+
+            ImGui::PopID();
+
+            AddLabel("Track H", "Camera Track Horizontal");
+        }
+
+        bool offset_vertical;
+        {
+            ImGui::PushID(id++);
+
+            offset_vertical = ImGui::SliderFloat("", &offset.vertical, limits.offset_y.min, limits.offset_y.max);
+
+            ImGui::PopID();
+
+            AddLabel("Track V", "Camera Track Vertical");
+        }
+
+        if (camera_elevation || camera_azimuth || camera_up || camera_distance) {
+            coordinates.camera_up = static_cast<CameraUp>(camera_up_index);
             m_camera->UpdateSphericalCoordinates(coordinates);
         }
 
-        bool offset_h_changed = SliderFloat("Track H", &offset.horizontal, limits.offset_x.min, limits.offset_x.max);
-        bool offset_v_changed = SliderFloat("Track V", &offset.vertical, limits.offset_y.min, limits.offset_y.max);
-
-        if (offset_h_changed || offset_v_changed) {
+        if (offset_horizontal || offset_vertical) {
             m_camera->UpdateOffset(offset);
         }
     }
 
-    Dummy({ 0, 20 });
+    ImGui::Dummy({ 0, 20 });
 
     {
-        Text("Perspective");
+        ImGui::Text("Perspective");
 
         auto perspective = m_camera->GetPerspective();
-        auto near_text   = std::array<char, 16>();
-        auto far_text    = std::array<char, 16>();
 
-        // TODO: Re-enable this code
-        // std::to_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
-        // std::to_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+        bool fovy;
+        {
+            ImGui::PushID(id++);
 
-        // TODO: Remove four lines below
-        auto near_string = std::to_string(perspective.near);
-        auto far_string  = std::to_string(perspective.far);
-        std::strncpy(near_text.data(), near_string.c_str(), near_text.size() - 1);
-        std::strncpy(far_text.data(), far_string.c_str(), far_text.size() - 1);
+            fovy = ImGui::SliderAngle(
+                "",
+                &perspective.fovy.value,
+                limits.fov_y.min.value,
+                limits.fov_y.max.value,
+                "%.1f deg",
+                ImGuiSliderFlags_AlwaysClamp);
 
-        bool fovy_changed = SliderAngle(
-            "Fov V",
-            &perspective.fovy.value,
-            limits.fov_y.min.value,
-            limits.fov_y.max.value,
-            "%.1f deg",
-            ImGuiSliderFlags_AlwaysClamp);
+            ImGui::PopID();
 
-        bool near_changed = ImGui::InputText(
-            "Near",
-            near_text.data(),
-            sizeof(near_text),
-            ImGuiInputTextFlags_CharsScientific | ImGuiInputTextFlags_AutoSelectAll |
-                ImGuiInputTextFlags_EnterReturnsTrue);
+            AddLabel("Fov V", "Field of View Vertical");
+        }
 
-        bool far_changed = ImGui::InputText(
-            "Far",
-            far_text.data(),
-            sizeof(far_text),
-            ImGuiInputTextFlags_CharsScientific | ImGuiInputTextFlags_AutoSelectAll |
-                ImGuiInputTextFlags_EnterReturnsTrue);
+        bool clip_planes;
+        {
+            ImGui::PushID(id++);
 
-        if (fovy_changed || near_changed || far_changed) {
-            // TODO: Re-enable this code
-            // std::from_chars(near_text.data(), near_text.data() + near_text.size(), perspective.near);
-            // std::from_chars(far_text.data(), far_text.data() + far_text.size(), perspective.far);
+            clip_planes = ImGui::DragFloatRange2(
+                "",
+                &perspective.near,
+                &perspective.far,
+                perspective.far_max / 10000.0f,
+                perspective.near_min,
+                perspective.far_max,
+                "%.1f",
+                "%.1f",
+                ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoRoundToFormat | ImGuiSliderFlags_Logarithmic);
 
-            // TODO: Remove the two lines below
-            perspective.near = std::stof(std::string(near_text.data()));
-            perspective.far  = std::stof(std::string(far_text.data()));
+            ImGui::PopID();
+
+            AddLabel("Near/Far", "Near/Far Clipping Planes");
+        }
+
+        if (fovy || clip_planes) {
             m_camera->UpdatePerspective(perspective);
         }
     }
 
-    Dummy({ 0, 20 });
+    ImGui::Dummy({ 0, 20 });
 
     {
-        Text("Coordinate System");
+        ImGui::Text("Coordinate System");
 
-        auto basis        = m_camera->GetBasis();
-        auto perspective  = m_camera->GetPerspective();
-        auto object       = m_camera->GetObject();
-        auto labels       = ToStringArray<Axis>();
-        auto labels_count = static_cast<int>(labels.size());
+        auto basis         = m_camera->GetBasis();
+        auto labels        = ToStringArray<Axis>();
+        auto labels_count  = static_cast<int>(labels.size());
+        auto forward_index = basis.forward.ToInt();
+        auto up_index      = basis.up.ToInt();
 
-        auto forward_index   = basis.forward.ToInt();
-        bool forward_changed = Combo("Forward", &forward_index, labels.data(), labels_count);
-        auto forward         = Forward::FromInt(forward_index);
+        bool forward_changed;
+        {
+            ImGui::PushID(id++);
 
-        auto up_index   = basis.up.ToInt();
-        bool up_changed = Combo("Up", &up_index, labels.data(), labels_count);
-        auto up         = Up::FromInt(up_index);
+            forward_changed = ImGui::Combo("", &forward_index, labels.data(), labels_count);
+
+            ImGui::PopID();
+
+            AddLabel("Forward", "Camera Forward Direction");
+        }
+
+        bool up_changed;
+        {
+            ImGui::PushID(id++);
+
+            up_changed = ImGui::Combo("", &up_index, labels.data(), labels_count);
+
+            ImGui::PopID();
+
+            AddLabel("Up", "Camera Up Direction");
+        }
+
+        auto forward = Forward::FromInt(forward_index);
+        auto up      = Up::FromInt(up_index);
 
         bool forward_x = forward == Axis::PositiveX || forward == Axis::NegativeX;
         bool forward_y = forward == Axis::PositiveY || forward == Axis::NegativeY;
@@ -426,6 +512,9 @@ void CameraWindow::Draw()
         }
 
         if (up != basis.up || forward != basis.forward) {
+            const auto& object      = m_camera->GetObject();
+            const auto& perspective = m_camera->GetPerspective();
+
             *m_camera = Camera::Create(
                 Orientation::RightHanded,
                 forward,
@@ -433,15 +522,149 @@ void CameraWindow::Draw()
                 ObjectView::Front,
                 object,
                 ToDegrees(perspective.fovy),
-                perspective.aspect,
-                perspective.near,
-                perspective.far);
+                perspective.aspect);
         }
     }
 
-    PopItemWidth();
+    ImGui::PopItemWidth();
 
-    End();
+    ImGui::End();
+}
+
+struct DrawProperty final {
+    void operator()(int i)
+    {
+        int value = i;
+        ImGui::InputInt(label, &value, 0, 0, ImGuiInputTextFlags_ReadOnly);
+    }
+    void operator()(float f)
+    {
+        float value = f;
+        ImGui::InputFloat(label, &value, 0, 0, "%.3f", ImGuiInputTextFlags_ReadOnly);
+    }
+    void operator()(const std::string& s)
+    {
+        char buffer[64];
+
+        size_t size  = std::min(s.size(), sizeof(buffer) - 1);
+        buffer[size] = 0;
+
+        std::memcpy(buffer, s.c_str(), size);
+
+        ImGui::InputText(label, buffer, sizeof(buffer), ImGuiInputTextFlags_ReadOnly);
+    }
+
+    const char* label = nullptr;
+};
+
+void DrawObjectProperties(ObjectPtr object, int* ptr_id)
+{
+    auto& id = *ptr_id;
+
+    for (const auto& [key, value] : object->Properties()) {
+        ImGui::PushID(id++);
+        std::visit(DrawProperty{ key.c_str() }, value);
+        ImGui::PopID();
+    }
+}
+
+void DrawObjectFields(ObjectPtr object, int* ptr_id)
+{
+    static constexpr auto editable = ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue;
+    static constexpr auto readonly = ImGuiInputTextFlags_ReadOnly;
+
+    auto& metadata = object->GetMetadata();
+    auto& id       = *ptr_id;
+
+    if (object->HasProperties()) {
+        DrawObjectProperties(object, ptr_id);
+    }
+
+    for (const auto& field : metadata.fields) {
+        auto flags           = editable;
+        auto float_step      = 0.01f;
+        auto float_step_fast = 1.0f;
+        auto int_step        = 1;
+        auto int_step_fast   = 100;
+
+        if (false == field.is_editable) {
+            flags           = readonly;
+            float_step      = 0;
+            float_step_fast = 0;
+            int_step        = 0;
+            int_step_fast   = 0;
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+        }
+
+        ImGui::PushID(id++);
+
+        switch (field.value_type) {
+        case ValueType::Float: {
+            float& value = object->GetField(field.name);
+            ImGui::InputFloat(field.label, &value, float_step, float_step_fast, "%.3f", flags);
+            break;
+        }
+        case ValueType::Int: {
+            int& value = object->GetField(field.name);
+            ImGui::InputInt(field.label, &value, int_step, int_step_fast, flags);
+            break;
+        }
+        case ValueType::Reference: {
+            Object& value = object->GetField(field.name);
+            DrawObjectFields(&value, ptr_id);
+            break;
+        }
+        case ValueType::String: {
+            std::string& value = object->GetField(field.name);
+
+            char buffer[64];
+
+            size_t size  = std::min(value.size(), sizeof(buffer) - 1);
+            buffer[size] = 0;
+
+            std::memcpy(buffer, value.c_str(), size);
+
+            if (ImGui::InputText(field.label, buffer, sizeof(value), flags)) {
+                value = buffer;
+            }
+            break;
+        }
+        case ValueType::Vec3: {
+            glm::vec3& value = object->GetField(field.name);
+            ImGui::InputFloat3(field.label, &value[0], "%.3f", flags);
+            break;
+        }
+        }
+
+        ImGui::PopID();
+
+        if (false == field.is_editable) {
+            ImGui::PopStyleVar();
+        }
+    }
+}
+
+void DrawNode(NodePtr node)
+{
+    using namespace ImGui;
+
+    const auto& metadata = node->GetMetadata();
+
+    auto id = node->GetID().value;
+
+    assert(id <= 0x00fffff0); // TODO
+
+    id = id << 8;
+
+    PushID(id++);
+
+    if (TreeNode(metadata.object_label)) {
+        DrawObjectFields(node, &id);
+        std::ranges::for_each(node->GetChildren(), [](NodePtr node) { DrawNode(node); });
+        TreePop();
+    }
+
+    PopID();
 }
 
 void SceneWindow::Draw()
@@ -449,5 +672,6 @@ void SceneWindow::Draw()
     using namespace ImGui;
 
     Begin("Scene");
+    DrawNode(m_scene->GetRootNodePtr());
     End();
 }

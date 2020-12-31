@@ -62,6 +62,16 @@ static Axis GetAxis(glm::vec3 vec)
     throw std::invalid_argument("GetAxis: invalid argument");
 }
 
+static std::pair<float, float> ComputeClipPlanes(const AABB& aabb)
+{
+    auto dim = std::min({ aabb.ExtentX(), aabb.ExtentY(), aabb.ExtentZ() });
+
+    auto len = floorf(log10f(dim)) + 1.0f;
+    auto num = powf(10.0f, len);
+
+    return { num / 100.0f, num * 100.0f };
+}
+
 } // namespace
 
 Camera Camera::Create(
@@ -71,9 +81,7 @@ Camera Camera::Create(
     ObjectView  object_view,
     AABB        object,
     Degrees     fovy,
-    float       aspect,
-    float       near,
-    float       far)
+    float       aspect)
 {
     using namespace glm;
 
@@ -135,7 +143,8 @@ Camera Camera::Create(
     fovy_rad = std::clamp(fovy_rad, ToRadians(limits.fov_y.min), ToRadians(limits.fov_y.max));
 
     auto basis       = Basis{ forward, up, right, orientation };
-    auto perspective = Perspective{ fovy_rad, aspect, near, far };
+    auto [near, far] = ComputeClipPlanes(object);
+    auto perspective = Perspective{ fovy_rad, aspect, 0.0f, near, far, far };
 
     return Camera(basis, elevation, azimuth, distance, perspective, object, limits);
 }
@@ -194,7 +203,7 @@ Offset Camera::GetOffset() const noexcept
     return m_offset;
 }
 
-Perspective Camera::GetPerspective() const noexcept
+const Perspective& Camera::GetPerspective() const noexcept
 {
     return m_perspective;
 }

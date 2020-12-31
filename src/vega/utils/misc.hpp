@@ -1,19 +1,23 @@
 #pragma once
 
-#include <fmt/format.h>
+namespace detail {
 
-void throw_runtime_error_impl(const std::string& s);
+void throw_runtime_error_impl(const char* message);
 
-template <typename... Args>
-inline void throw_runtime_error(const char* format, Args... args)
+} // namespace detail
+
+namespace utils {
+
+inline void throw_runtime_error(const char* message)
 {
-    throw_runtime_error_impl(fmt::format(format, args...));
+    detail::throw_runtime_error_impl(message);
 }
 
-template <typename... Args>
-inline void throw_runtime_error_if(bool condition, const char* format, Args... args)
+inline void throw_runtime_error_if(bool condition, const char* message)
 {
     if (condition) {
-        throw_runtime_error_impl(fmt::format(format, args...));
+        detail::throw_runtime_error_impl(message);
     }
 }
+
+} // namespace utils

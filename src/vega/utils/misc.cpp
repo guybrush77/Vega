@@ -1,6 +1,12 @@
 #include "misc.hpp"
 
-void throw_runtime_error_impl(const std::string& s)
+#include <stdexcept>
+
+namespace detail {
+
+void throw_runtime_error_impl(const char* message)
 {
-    throw std::runtime_error(s);
+    throw std::runtime_error(message);
 }
+
+} // namespace detail

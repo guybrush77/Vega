@@ -35,6 +35,17 @@ END_DISABLE_WARNINGS
 
 enum class KhronosValidation { Disable, Enable };
 
+struct VertexPN final {
+    constexpr VertexPN(const glm::vec3& position, const glm::vec3 normal) noexcept : position(position), normal(normal)
+    {}
+    glm::vec3 position;
+    glm::vec3 normal;
+};
+
+DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
+
+DECLARE_VERTEX_TYPE(VertexPN, Position3f | Normal3f)
+
 struct GLFW {
     GLFW()
     {
@@ -106,11 +117,10 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
         throw std::runtime_error("Failed to load file");
     }
 
-    auto material_root     = scene->GetMaterialRootPtr();
-    auto material_class    = material_root->AddMaterialClassNode();
-    auto material_instance = material_class->AddMaterialInstanceNode();
+    auto material          = scene->CreateMaterial();
+    auto material_instance = material->CreateMaterialInstance();
 
-    auto geometry_root = scene->GetGeometryRootPtr();
+    auto root_node = scene->GetRootNodePtr();
 
     auto index_map = std::unordered_map<Index, uint32_t, Index::Hash>{};
     auto vertices  = std::vector<VertexPN>{};
@@ -164,11 +174,13 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
 
         auto mesh = scene->CreateMesh(aabb, std::move(vertices), std::move(indices));
 
-        mesh->SetProperty("name", shape.name);
+        mesh->SetProperty("Name", shape.name);
 
-        auto mesh_instance = geometry_root->AddInstanceNode(mesh, material_instance);
+        auto t_node = root_node->AddTranslateNode({ 0, 0, 0 });
+        auto r_node = t_node->AddRotateNode({ 0, 0, 1 }, 0_rad);
+        auto s_node = r_node->AddScaleNode(1);
 
-        mesh_instance->SetProperty("name", shape.name);
+        s_node->AddMeshNode(mesh, material_instance);
     }
 }
 
@@ -431,7 +443,7 @@ auto CreateEtnaInstance(KhronosValidation khronos_validation) -> etna::UniqueIns
 {
     using namespace etna;
 
-    throw_runtime_error_if(false == glfwVulkanSupported(), "GLFW Vulkan not supported!");
+    utils::throw_runtime_error_if(false == glfwVulkanSupported(), "GLFW Vulkan not supported!");
 
     auto count           = 0U;
     auto glfw_extensions = glfwGetRequiredInstanceExtensions(&count);
@@ -464,7 +476,7 @@ auto GetEtnaGpu(etna::Instance instance)
         is_presentation_supported |= (GLFW_TRUE == glfwGetPhysicalDevicePresentationSupport(instance, gpu, index));
     }
 
-    throw_runtime_error_if(false == is_presentation_supported, "Failed to detect GPU queue that supports presentation");
+    utils::throw_runtime_error_if(!is_presentation_supported, "Failed to detect GPU queue that supports presentation");
 
     return gpu;
 }
@@ -475,7 +487,7 @@ etna::UniqueSurfaceKHR CreateEtnaSurface(etna::Instance instance, GLFWwindow* gl
 
     auto success = (VK_SUCCESS == glfwCreateWindowSurface(instance, glfw_window, nullptr, &vk_surface));
 
-    throw_runtime_error_if(false == success, "Failed to create window surface");
+    utils::throw_runtime_error_if(false == success, "Failed to create window surface");
 
     return etna::UniqueSurfaceKHR(etna::SurfaceKHR(instance, vk_surface));
 }
