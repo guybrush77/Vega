@@ -37,7 +37,7 @@ class CameraWindow : public Window {
     void Draw() override;
 
   private:
-    int     m_base_id = 0xfffff100;
+    int     m_base_id = 0x7ffff100;
     Camera* m_camera = nullptr;
 };
 

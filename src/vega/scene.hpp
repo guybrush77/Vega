@@ -201,9 +201,9 @@ class MeshVertices final {
         vertices_ref.shrink_to_fit();
 
         m_vertex_attributes = to_string(vertex_flags<T>());
-        m_vertex_size       = narrow_cast<uint32_t>(sizeof(vertices_ref[0]));
-        m_count             = narrow_cast<uint32_t>(vertices_ref.size());
-        m_size              = narrow_cast<uint32_t>(m_vertex_size * m_count);
+        m_vertex_size       = narrow_cast<int>(sizeof(vertices_ref[0]));
+        m_count             = narrow_cast<int>(vertices_ref.size());
+        m_size              = narrow_cast<int>(m_vertex_size * m_count);
         m_data              = static_cast<const void*>(vertices_ref.data());
     }
 
@@ -248,9 +248,9 @@ class MeshIndices final {
         auto bits = 8 * sizeof(indices_ref[0]);
 
         m_type       = "int" + std::to_string(bits);
-        m_index_size = narrow_cast<uint32_t>(sizeof(indices_ref[0]));
-        m_count      = narrow_cast<uint32_t>(indices_ref.size());
-        m_size       = narrow_cast<uint32_t>(m_index_size * m_count);
+        m_index_size = narrow_cast<int>(sizeof(indices_ref[0]));
+        m_count      = narrow_cast<int>(indices_ref.size());
+        m_size       = narrow_cast<int>(m_index_size * m_count);
         m_data       = static_cast<const void*>(indices_ref.data());
     }
 
@@ -335,7 +335,7 @@ class Material : public Object {
 
     Material(ID id) noexcept : Object(id){};
 
-    inline static Metadata metadata = { "material", "Material", nullptr };
+    inline static Metadata metadata = { "material", "Material", nullptr, {} };
 
     std::vector<UniqueMaterialInstance> m_instances;
 };
@@ -357,7 +357,7 @@ class MaterialInstance final : public Material {
 
     void AddMeshNodePtr(MeshNodePtr mesh_node);
 
-    inline static Metadata metadata = { "material.instance", "Material Instance", nullptr };
+    inline static Metadata metadata = { "material.instance", "Material Instance", nullptr, {} };
 
     MeshNodePtrArray m_mesh_nodes;
 };

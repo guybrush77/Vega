@@ -375,7 +375,7 @@ ValueRef RootNode::GetField(std::string_view)
     return {};
 }
 
-Metadata RootNode::metadata = { "root.node", "Root", nullptr };
+Metadata RootNode::metadata = { "root.node", "Root", nullptr, {} };
 
 json RootNode::ToJson() const
 {

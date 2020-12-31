@@ -10,13 +10,13 @@ bool MeshStore::Add(MeshPtr mesh)
         return false;
     }
 
-    auto vertices_size  = mesh->GetVertices().GetSize();
+    auto vertices_size  = narrow_cast<uint32_t>(mesh->GetVertices().GetSize());
+    auto vertices_count = narrow_cast<uint32_t>(mesh->GetVertices().GetCount());
     auto vertices_data  = mesh->GetVertices().GetData();
-    auto vertices_count = mesh->GetVertices().GetCount();
 
-    auto indices_size  = mesh->GetIndices().GetSize();
+    auto indices_size  = narrow_cast<uint32_t>(mesh->GetIndices().GetSize());
+    auto indices_count = narrow_cast<uint32_t>(mesh->GetIndices().GetCount());
     auto indices_data  = mesh->GetIndices().GetData();
-    auto indices_count = mesh->GetIndices().GetCount();
 
     auto cpu_vertex_buffer = m_device.CreateBuffer(vertices_size, BufferUsage::TransferSrc, MemoryUsage::CpuOnly);
     auto cpu_index_buffer  = m_device.CreateBuffer(indices_size, BufferUsage::TransferSrc, MemoryUsage::CpuOnly);

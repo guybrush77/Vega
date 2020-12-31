@@ -272,10 +272,12 @@ bool Gui::IsAnyWindowHovered() const noexcept
 void AddLabel(const char* label, const char* tooltip)
 {
     ImGui::SameLine();
-    ImGui::Text(label);
+    ImGui::TextUnformatted(label);
 
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(tooltip);
+        ImGui::BeginTooltip();
+        ImGui::TextUnformatted(tooltip);
+        ImGui::EndTooltip();
     }
 }
 
@@ -599,6 +601,8 @@ void DrawObjectFields(ObjectPtr object, int* ptr_id)
         ImGui::PushID(id++);
 
         switch (field.value_type) {
+        case ValueType::Null:
+            break;
         case ValueType::Float: {
             float& value = object->GetField(field.name);
             ImGui::InputFloat(field.label, &value, float_step, float_step_fast, "%.3f", flags);
@@ -652,7 +656,7 @@ void DrawNode(NodePtr node)
 
     auto id = node->GetID().value;
 
-    assert(id <= 0x00fffff0); // TODO
+    assert(id <= 0x007ffff0); // TODO
 
     id = id << 8;
 

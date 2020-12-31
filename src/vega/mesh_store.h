@@ -11,13 +11,13 @@
 struct MeshRecord final {
     struct Vertex final {
         etna::Buffer buffer;
-        int          size;
-        int          count;
+        uint32_t     size;
+        uint32_t     count;
     } vertices;
     struct Indexfinal {
         etna::Buffer buffer;
-        int          size;
-        int          count;
+        uint32_t     size;
+        uint32_t     count;
     } indices;
 };
 
@@ -41,13 +41,13 @@ class MeshStore {
     struct MeshRecordPrivate final {
         struct Vertex final {
             etna::UniqueBuffer buffer;
-            int                size;
-            int                count;
+            uint32_t           size;
+            uint32_t           count;
         } vertices;
         struct Indexfinal {
             etna::UniqueBuffer buffer;
-            int                size;
-            int                count;
+            uint32_t           size;
+            uint32_t           count;
         } indices;
     };
 

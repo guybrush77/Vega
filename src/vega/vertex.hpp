@@ -7,6 +7,9 @@ enum VertexFlags { Position3f = 1, Normal3f = 2 };
 
 std::string to_string(VertexFlags value);
 
+template <typename>
+struct vertex_type_traits;
+
 template <typename T>
 constexpr VertexFlags vertex_flags() noexcept
 {
@@ -23,9 +26,6 @@ struct vertex_attribute_type_traits;
     };
 
 #define formatof(vertex_type, field) vertex_attribute_type_traits<decltype(std::declval<vertex_type>().field)>::value
-
-template <typename>
-struct vertex_type_traits;
 
 #define DECLARE_VERTEX_TYPE(vertex_type, vertex_attributes) \
     template <> \
