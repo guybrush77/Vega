@@ -2,6 +2,7 @@
 
 #include "camera.hpp"
 #include "gui.hpp"
+#include "lights.hpp"
 #include "mesh_store.h"
 #include "scene.hpp"
 
@@ -19,11 +20,13 @@ RenderContext::RenderContext(
     DescriptorManager*   descriptor_manager,
     Gui*                 gui,
     Camera*              camera,
+    Lights*              lights,
     MeshStore*           mesh_store,
     Scene*               scene)
     : m_device(device), m_graphics_queue(graphics_queue), m_pipeline(pipeline), m_pipeline_layout(pipeline_layout),
       m_window(window), m_swapchain_manager(swapchain_manager), m_frame_manager(frame_manager),
-      m_descriptor_manager(descriptor_manager), m_gui(gui), m_camera(camera), m_mesh_store(mesh_store), m_scene(scene)
+      m_descriptor_manager(descriptor_manager), m_gui(gui), m_camera(camera), m_lights(lights),
+      m_mesh_store(mesh_store), m_scene(scene)
 {}
 
 void RenderContext::ProcessUserInput()
@@ -102,9 +105,29 @@ RenderContext::Status RenderContext::StartRenderLoop()
         auto draw_list = m_scene->ComputeDrawList();
         auto extent    = framebuffers.extent;
 
-        auto camera_transform = CameraTransform{ m_camera->GetViewMatrix(), m_camera->GetPerspectiveMatrix() };
+        auto view        = m_camera->ComputeViewMatrix();
+        auto perspective = m_camera->ComputePerspectiveMatrix();
 
-        m_descriptor_manager->Set(frame.index, camera_transform);
+        auto camera = CameraUniform{ view, perspective };
+
+        m_descriptor_manager->Set(frame.index, camera);
+
+        auto key_color = m_lights->KeyRef().ComputePremultipliedColor();
+        auto key_dir   = m_lights->KeyRef().ComputeDir();
+
+        auto fill_color = m_lights->FillRef().ComputePremultipliedColor();
+        auto fill_dir   = m_lights->FillRef().ComputeDir();
+
+        auto lights = LightsUniform{};
+        {
+            lights.key.color = glm::vec4(key_color.r, key_color.g, key_color.b, 0);
+            lights.key.dir   = glm::vec4(key_dir.x, key_dir.y, key_dir.z, 0) * view;
+
+            lights.fill.color = glm::vec4(fill_color.r, fill_color.g, fill_color.b, 0);
+            lights.fill.dir   = glm::vec4(fill_dir.x, fill_dir.y, fill_dir.z, 0) * view;
+        }
+
+        m_descriptor_manager->Set(frame.index, lights);
 
         auto clear_color    = ClearColor::Transparent;
         auto clear_depth    = ClearDepthStencil::Default;
@@ -124,7 +147,7 @@ RenderContext::Status RenderContext::StartRenderLoop()
         frame.cmd_buffers.draw.SetScissor(scissor);
 
         for (size_t i = 0; i < draw_list.size(); ++i) {
-            auto model_transform = ModelTransform{ *draw_list[i].transform };
+            auto model_transform = ModelUniform{ *draw_list[i].transform };
             auto offset          = m_descriptor_manager->Set(frame.index, i, model_transform);
             auto mesh            = m_mesh_store->GetMeshRecord(draw_list[i].mesh);
 

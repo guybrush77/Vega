@@ -1,5 +1,6 @@
 #pragma once
 
+#include "platform.hpp"
 #include "utils/cast.hpp"
 #include "utils/math.hpp"
 #include "utils/misc.hpp"
@@ -93,7 +94,7 @@ struct ID final {
     };
 };
 
-enum class ValueType { Null, Float, Int, Reference, String, Vec3 };
+enum class ValueType { Null, Float, Float3, Int, Reference, String };
 
 std::string to_string(ValueType value_type);
 
@@ -102,10 +103,10 @@ class ValueRef final {
     ValueRef() noexcept = default;
 
     explicit ValueRef(float* value) noexcept : m_type(ValueType::Float), value(value) {}
+    explicit ValueRef(Float3* value) noexcept : m_type(ValueType::Float3), value(value) {}
     explicit ValueRef(int* value) noexcept : m_type(ValueType::Int), value(value) {}
     explicit ValueRef(Object* value) noexcept : m_type(ValueType::Reference), value(value) {}
     explicit ValueRef(std::string* value) noexcept : m_type(ValueType::String), value(value) {}
-    explicit ValueRef(glm::vec3* value) noexcept : m_type(ValueType::Vec3), value(value) {}
 
     operator float&() const
     {
@@ -131,10 +132,10 @@ class ValueRef final {
         return *static_cast<std::string*>(value);
     }
 
-    operator glm::vec3 &() const
+    operator Float3&() const
     {
-        utils::throw_runtime_error_if(m_type != ValueType::Vec3, "Conversion error");
-        return *static_cast<glm::vec3*>(value);
+        utils::throw_runtime_error_if(m_type != ValueType::Float3, "Conversion error");
+        return *static_cast<Float3*>(value);
     }
 
   private:
@@ -376,8 +377,8 @@ class Node : public Object {
 
 class InternalNode : public Node {
   public:
-    auto AddTranslateNode(glm::vec3 amount) -> TranslateNodePtr;
-    auto AddRotateNode(glm::vec3 axis, Radians angle) -> RotateNodePtr;
+    auto AddTranslateNode(float x, float y, float z) -> TranslateNodePtr;
+    auto AddRotateNode(float x, float y, float z, Radians angle) -> RotateNodePtr;
     auto AddScaleNode(float factor) -> ScaleNodePtr;
     auto AddMeshNode(MeshPtr mesh, MaterialInstancePtr material) -> MeshNodePtr;
 
@@ -427,11 +428,11 @@ class TranslateNode final : public InternalNode {
 
     static Metadata metadata;
 
-    TranslateNode(ID id, glm::vec3 amount) noexcept : InternalNode(id), m_amount(amount) {}
+    TranslateNode(ID id, float x, float y, float z) noexcept : InternalNode(id), m_amount(x, y, z) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
-    glm::vec3 m_amount;
+    Float3 m_amount;
 };
 
 class RotateNode final : public InternalNode {
@@ -450,12 +451,14 @@ class RotateNode final : public InternalNode {
 
     static Metadata metadata;
 
-    RotateNode(ID id, glm::vec3 axis, Radians angle) noexcept : InternalNode(id), m_axis(axis), m_angle(angle) {}
+    RotateNode(ID id, float x, float y, float z, Radians angle) noexcept
+        : InternalNode(id), m_axis(x, y, z), m_angle(angle)
+    {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
-    glm::vec3 m_axis;
-    Radians   m_angle;
+    Float3  m_axis;
+    Radians m_angle;
 };
 
 class ScaleNode final : public InternalNode {

@@ -18,14 +18,10 @@ struct ValueToJson final {
 
 } // namespace
 
-namespace glm {
-
-static void to_json(json& json, const glm::vec3& vec)
+static void to_json(json& json, const Float3& vec)
 {
     json = { vec.x, vec.y, vec.z };
 }
-
-} // namespace glm
 
 static void to_json(json& json, const UniqueNode& node)
 {
@@ -91,8 +87,8 @@ static void to_json(json& json, const DictionaryValues& values)
 }
 
 struct RotateValues final {
-    const glm::vec3 axis;
-    const float     angle;
+    const Float3 axis;
+    const float  angle;
 };
 
 static void to_json(json& json, const RotateValues& values)
@@ -102,12 +98,12 @@ static void to_json(json& json, const RotateValues& values)
 }
 
 struct TranslateValues final {
-    const glm::vec3 distance;
+    const Float3 amount;
 };
 
 static void to_json(json& json, const TranslateValues& values)
 {
-    json["translate"] = values.distance;
+    json["translate"] = values.amount;
 }
 
 struct ScaleValues final {
@@ -274,8 +270,8 @@ Metadata Mesh::metadata = {
     "object.mesh",
     "Mesh",
     nullptr,
-    { Field{ "aabb.min", "Min", nullptr, ValueType::Vec3, Field::IsEditable{ false } },
-      Field{ "aabb.max", "Max", nullptr, ValueType::Vec3, Field::IsEditable{ false } },
+    { Field{ "aabb.min", "Min", nullptr, ValueType::Float3, Field::IsEditable{ false } },
+      Field{ "aabb.max", "Max", nullptr, ValueType::Float3, Field::IsEditable{ false } },
       Field{ "vertex.attributes", "Vertex Attributes", nullptr, ValueType::String, Field::IsEditable{ false } },
       Field{ "vertex.size", "Vertex Size", nullptr, ValueType::Int, Field::IsEditable{ false } },
       Field{ "vertex.count", "Vertex Count", nullptr, ValueType::Int, Field::IsEditable{ false } },
@@ -284,15 +280,15 @@ Metadata Mesh::metadata = {
       Field{ "index.count", "Index Count", nullptr, ValueType::Int, Field::IsEditable{ false } } }
 };
 
-TranslateNodePtr InternalNode::AddTranslateNode(glm::vec3 amount)
+TranslateNodePtr InternalNode::AddTranslateNode(float x, float y, float z)
 {
-    m_children.push_back(ObjectAccess::MakeUnique<TranslateNode>(GetUniqueID(), amount));
+    m_children.push_back(ObjectAccess::MakeUnique<TranslateNode>(GetUniqueID(), x, y, z));
     return static_cast<TranslateNodePtr>(m_children.back().get());
 }
 
-RotateNodePtr InternalNode::AddRotateNode(glm::vec3 axis, Radians angle)
+RotateNodePtr InternalNode::AddRotateNode(float x, float y, float z, Radians angle)
 {
-    m_children.push_back(ObjectAccess::MakeUnique<RotateNode>(GetUniqueID(), axis, angle));
+    m_children.push_back(ObjectAccess::MakeUnique<RotateNode>(GetUniqueID(), x, y, z, angle));
     return static_cast<RotateNodePtr>(m_children.back().get());
 }
 
@@ -354,8 +350,8 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
                 if (auto* mesh = mesh_node->GetMeshPtr()) {
                     auto& model = *mesh_node->GetTransformPtr();
                     auto& aabb  = mesh->GetBoundingBox();
-                    auto  vec_a = model * glm::vec4(aabb.min, 1);
-                    auto  vec_b = model * glm::vec4(aabb.max, 1);
+                    auto  vec_a = model * glm::vec4(aabb.min.x, aabb.min.y, aabb.min.z, 1);
+                    auto  vec_b = model * glm::vec4(aabb.max.x, aabb.max.y, aabb.max.z, 1);
                     out.min.x   = std::min({ out.min.x, vec_a.x, vec_b.x });
                     out.min.y   = std::min({ out.min.y, vec_a.y, vec_b.y });
                     out.min.z   = std::min({ out.min.z, vec_a.z, vec_b.z });
@@ -443,7 +439,7 @@ Metadata TranslateNode::metadata = {
     "translate.node",
     "Translate",
     nullptr,
-    { Field{ "translate.amount", "Amount", nullptr, ValueType::Vec3, Field::IsEditable{ true } } }
+    { Field{ "translate.amount", "Amount", nullptr, ValueType::Float3, Field::IsEditable{ true } } }
 };
 
 json TranslateNode::ToJson() const
@@ -462,7 +458,8 @@ void TranslateNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     for (auto& node : m_children) {
         auto node_ptr = static_cast<NodePtr>(node.get());
-        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::translate(m_amount));
+        auto amount   = glm::vec3(m_amount.x, m_amount.y, m_amount.z);
+        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::translate(amount));
     }
 }
 
@@ -492,7 +489,7 @@ Metadata RotateNode::metadata = {
     "rotate.node",
     "Rotate",
     nullptr,
-    { Field{ "rotate.axis", "Axis", nullptr, ValueType::Vec3, Field::IsEditable{ true } },
+    { Field{ "rotate.axis", "Axis", nullptr, ValueType::Float3, Field::IsEditable{ true } },
       Field{ "rotate.angle", "Angle", nullptr, ValueType::Float, Field::IsEditable{ true } } }
 };
 
@@ -500,7 +497,8 @@ void RotateNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     for (auto& node : m_children) {
         auto node_ptr = static_cast<NodePtr>(node.get());
-        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::rotate(m_angle.value, m_axis));
+        auto axis     = glm::vec3(m_axis.x, m_axis.y, m_axis.z);
+        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::rotate(m_angle.value, axis));
     }
 }
 
@@ -631,7 +629,7 @@ std::string to_string(ValueType value_type)
     case ValueType::Int: return "Int";
     case ValueType::Reference: return "Reference";
     case ValueType::String: return "String";
-    case ValueType::Vec3: return "Vec3";
+    case ValueType::Float3: return "Float3";
     default: utils::throw_runtime_error("ValueType: Bad enum value");
     };
     return {};

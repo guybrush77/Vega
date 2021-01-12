@@ -12,6 +12,7 @@ struct GLFWwindow;
 
 class Gui;
 class Camera;
+class Lights;
 class MeshStore;
 class Scene;
 
@@ -31,6 +32,7 @@ class RenderContext {
         DescriptorManager*   descriptor_manager,
         Gui*                 gui,
         Camera*              camera,
+        Lights*              lights,
         MeshStore*           mesh_store,
         Scene*               scene);
 
@@ -49,6 +51,7 @@ class RenderContext {
     DescriptorManager*   m_descriptor_manager    = nullptr;
     Gui*                 m_gui                   = nullptr;
     Camera*              m_camera                = nullptr;
+    Lights*              m_lights                = nullptr;
     MeshStore*           m_mesh_store            = nullptr;
     Scene*               m_scene                 = nullptr;
     MouseLook            m_mouse_look            = MouseLook::None;

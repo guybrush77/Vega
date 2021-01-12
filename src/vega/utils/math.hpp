@@ -1,19 +1,35 @@
 #pragma once
 
-#include "platform.hpp"
-
-BEGIN_DISABLE_WARNINGS
-
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/vec3.hpp>
-
-END_DISABLE_WARNINGS
-
 #include <compare>
 
+struct Float3 final {
+    constexpr Float3() noexcept : x(0), y(0), z(0) {}
+    constexpr Float3(float x, float y, float z) noexcept : x(x), y(y), z(z) {}
+
+    union {
+        float x, r;
+    };
+    union {
+        float y, g;
+    };
+    union {
+        float z, b;
+    };
+};
+
+inline Float3 operator+(Float3 lhs, Float3 rhs) noexcept
+{
+    return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z };
+}
+
+inline Float3 operator*(float scalar, Float3 rhs) noexcept
+{
+    return { scalar * rhs.x, scalar * rhs.y, scalar * rhs.z };
+}
+
 struct AABB final {
-    glm::vec3 min;
-    glm::vec3 max;
+    Float3 min;
+    Float3 max;
 
     auto Center() const noexcept { return 0.5f * (min + max); }
     auto ExtentX() const noexcept { return max.x - min.x; }
@@ -69,9 +85,17 @@ struct Degrees final {
     constexpr Degrees() noexcept = default;
     constexpr explicit Degrees(float value) noexcept : value(value) {}
 
-    Degrees operator-() noexcept { return Degrees(-value); }
-    Degrees& operator+=(Degrees rhs) noexcept { value += rhs.value; return *this; }
-    Degrees& operator-=(Degrees rhs) noexcept { value -= rhs.value; return *this; }
+    Degrees  operator-() noexcept { return Degrees(-value); }
+    Degrees& operator+=(Degrees rhs) noexcept
+    {
+        value += rhs.value;
+        return *this;
+    }
+    Degrees& operator-=(Degrees rhs) noexcept
+    {
+        value -= rhs.value;
+        return *this;
+    }
 
     float value = 0;
 };

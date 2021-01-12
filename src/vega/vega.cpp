@@ -176,8 +176,8 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
 
         mesh->SetProperty("Name", shape.name);
 
-        auto t_node = root_node->AddTranslateNode({ 0, 0, 0 });
-        auto r_node = t_node->AddRotateNode({ 0, 0, 1 }, 0_rad);
+        auto t_node = root_node->AddTranslateNode(0, 0, 0);
+        auto r_node = t_node->AddRotateNode(0, 0, 1, 0_rad);
         auto s_node = r_node->AddScaleNode(1);
 
         s_node->AddMeshNode(mesh, material_instance);
@@ -657,6 +657,8 @@ int main()
             .AddDescriptorSetLayoutBinding(Binding{ 0 }, DescriptorType::UniformBufferDynamic, 1, ShaderStage::Vertex);
         builder.AddDescriptorSetLayoutBinding(Binding{ 1 }, DescriptorType::UniformBuffer, 1, ShaderStage::Vertex);
 
+        builder.AddDescriptorSetLayoutBinding(Binding{ 10 }, DescriptorType::UniformBuffer, 1, ShaderStage::Fragment);
+
         descriptor_set_layout = device->CreateDescriptorSetLayout(builder.state);
     }
 
@@ -729,6 +731,17 @@ int main()
         45_deg,
         aspect);
 
+    auto lights = Lights();
+    {
+        lights.KeyRef().MultiplierRef() = 0.7f;
+        lights.KeyRef().ElevationRef()  = ToRadians(45_deg).value;
+        lights.KeyRef().AzimuthRef()    = ToRadians(-45_deg).value;
+
+        lights.FillRef().MultiplierRef() = 0.05f;
+        lights.FillRef().ElevationRef()  = ToRadians(5_deg).value;
+        lights.FillRef().AzimuthRef()    = ToRadians(25_deg).value;
+    }
+
     auto gui =
         Gui(*instance,
             gpu,
@@ -743,6 +756,7 @@ int main()
 
     gui.AddWindow<CameraWindow>(&camera);
     gui.AddWindow<SceneWindow>(&scene);
+    gui.AddWindow<LightsWindow>(&lights);
 
     bool running = true;
 
@@ -772,6 +786,7 @@ int main()
             &descriptor_manager,
             &gui,
             &camera,
+            &lights,
             &mesh_store,
             &scene);
 

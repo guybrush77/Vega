@@ -149,7 +149,7 @@ Camera Camera::Create(
     return Camera(basis, elevation, azimuth, distance, perspective, object, limits);
 }
 
-glm::mat4 Camera::GetViewMatrix() const noexcept
+glm::mat4 Camera::ComputeViewMatrix() const noexcept
 {
     using namespace glm;
 
@@ -159,7 +159,8 @@ glm::mat4 Camera::GetViewMatrix() const noexcept
     auto up        = m_basis.up.Vector();
     auto right     = m_basis.right.Vector();
     auto view      = rotate(rotate(identity<mat4>(), elevation, right), azimuth, up);
-    auto center    = m_object.Center();
+    auto objcenter = m_object.Center();
+    auto center    = glm::vec3(objcenter.x, objcenter.y, objcenter.z);
     auto eye       = -m_coords.distance * forward * mat3(view) + center;
     bool flip      = m_coords.elevation >= Radians::HalfPi || m_coords.elevation <= -Radians::HalfPi;
 
@@ -171,7 +172,7 @@ glm::mat4 Camera::GetViewMatrix() const noexcept
     return view;
 }
 
-glm::mat4 Camera::GetPerspectiveMatrix() const noexcept
+glm::mat4 Camera::ComputePerspectiveMatrix() const noexcept
 {
     auto dim  = std::min({ m_object.ExtentX(), m_object.ExtentY(), m_object.ExtentZ() });
     auto near = std::max(dim * 0.01f, m_perspective.near);
@@ -180,7 +181,7 @@ glm::mat4 Camera::GetPerspectiveMatrix() const noexcept
     return glm::perspectiveRH(m_perspective.fovy.value, m_perspective.aspect, near, far);
 }
 
-SphericalCoordinates Camera::GetSphericalCoordinates() const noexcept
+SphericalCoordinates Camera::ComputeSphericalCoordinates() const noexcept
 {
     using namespace glm;
 

@@ -1,5 +1,6 @@
 #include "gui.hpp"
 #include "camera.hpp"
+#include "lights.hpp"
 #include "platform.hpp"
 #include "scene.hpp"
 #include "utils/cast.hpp"
@@ -140,7 +141,7 @@ Gui::Gui(
         auto data    = const_cast<unsigned char*>(regular.data);
         auto size    = narrow_cast<int>(regular.size);
 
-        m_fonts.regular = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, 24.0f, &font_config);
+        m_fonts.regular = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, 30.0f, &font_config);
 
         auto monospace = GetResource("fonts/RobotoMono-Regular.ttf");
         data           = const_cast<unsigned char*>(monospace.data);
@@ -148,7 +149,7 @@ Gui::Gui(
 
         font_config.FontDataOwnedByAtlas = false;
 
-        m_fonts.monospace = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, 24.0f, &font_config);
+        m_fonts.monospace = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, 30.0f, &font_config);
     }
 
     // Upload Fonts
@@ -296,7 +297,7 @@ void CameraWindow::Draw()
     {
         ImGui::Text("View");
 
-        auto coordinates     = m_camera->GetSphericalCoordinates();
+        auto coordinates     = m_camera->ComputeSphericalCoordinates();
         auto offset          = m_camera->GetOffset();
         auto camera_up_label = ToString(coordinates.camera_up);
         auto camera_up_index = static_cast<int>(coordinates.camera_up);
@@ -601,8 +602,7 @@ void DrawObjectFields(ObjectPtr object, int* ptr_id)
         ImGui::PushID(id++);
 
         switch (field.value_type) {
-        case ValueType::Null:
-            break;
+        case ValueType::Null: break;
         case ValueType::Float: {
             float& value = object->GetField(field.name);
             ImGui::InputFloat(field.label, &value, float_step, float_step_fast, "%.3f", flags);
@@ -633,9 +633,9 @@ void DrawObjectFields(ObjectPtr object, int* ptr_id)
             }
             break;
         }
-        case ValueType::Vec3: {
-            glm::vec3& value = object->GetField(field.name);
-            ImGui::InputFloat3(field.label, &value[0], "%.3f", flags);
+        case ValueType::Float3: {
+            Float3& value = object->GetField(field.name);
+            ImGui::InputFloat3(field.label, &value.x, "%.3f", flags);
             break;
         }
         }
@@ -650,8 +650,6 @@ void DrawObjectFields(ObjectPtr object, int* ptr_id)
 
 void DrawNode(NodePtr node)
 {
-    using namespace ImGui;
-
     const auto& metadata = node->GetMetadata();
 
     auto id = node->GetID().value;
@@ -660,22 +658,49 @@ void DrawNode(NodePtr node)
 
     id = id << 8;
 
-    PushID(id++);
+    ImGui::PushID(id++);
 
-    if (TreeNode(metadata.object_label)) {
+    if (ImGui::TreeNode(metadata.object_label)) {
         DrawObjectFields(node, &id);
         std::ranges::for_each(node->GetChildren(), [](NodePtr node) { DrawNode(node); });
-        TreePop();
+        ImGui::TreePop();
     }
 
-    PopID();
+    ImGui::PopID();
 }
 
 void SceneWindow::Draw()
 {
-    using namespace ImGui;
-
-    Begin("Scene");
+    ImGui::Begin("Scene");
     DrawNode(m_scene->GetRootNodePtr());
-    End();
+    ImGui::End();
+}
+
+void LightsWindow::Draw()
+{
+    ImGui::Begin("Lights");
+
+    ImGui::TextUnformatted("Key Light");
+    {
+        auto* multiplier = &m_lights->KeyRef().MultiplierRef();
+
+        ImGui::ColorEdit3("Color##key", &m_lights->KeyRef().ColorRef());
+        ImGui::SliderFloat("Multiplier##key", multiplier, 0, 2, "%.2f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderAngle("Elevation##key", &m_lights->KeyRef().ElevationRef(), -90, 90);
+        ImGui::SliderAngle("Azimuth##key", &m_lights->KeyRef().AzimuthRef(), -90, 90);
+    }
+
+    ImGui::Dummy({ 0, 20 });
+
+    ImGui::TextUnformatted("Fill Light");
+    {
+        auto* multiplier = &m_lights->FillRef().MultiplierRef();
+
+        ImGui::ColorEdit3("Color##fill", &m_lights->FillRef().ColorRef());
+        ImGui::SliderFloat("Multiplier##fill", multiplier, 0, 2, "%.2f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderAngle("Elevation##fill", &m_lights->FillRef().ElevationRef(), -90, 90);
+        ImGui::SliderAngle("Azimuth##fill", &m_lights->FillRef().AzimuthRef(), -90, 90);
+    }
+
+    ImGui::End();
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lights.hpp"
 #include "platform.hpp"
 
 #include "etna/buffer.hpp"
@@ -12,13 +13,23 @@ BEGIN_DISABLE_WARNINGS
 
 END_DISABLE_WARNINGS
 
-struct ModelTransform final {
+struct ModelUniform final {
     glm::mat4 model;
 };
 
-struct CameraTransform final {
+struct CameraUniform final {
     glm::mat4 view;
     glm::mat4 projection;
+};
+
+struct LightDescription final {
+    glm::vec4 color;
+    glm::vec4 dir;
+};
+
+struct LightsUniform final {
+    LightDescription key;
+    LightDescription fill;
 };
 
 class DescriptorManager {
@@ -42,9 +53,11 @@ class DescriptorManager {
     auto DescriptorSet(size_t frame_index) const noexcept { return m_frame_states[frame_index].descriptor_set; }
     auto DescriptorSetLayout() const noexcept { return m_descriptor_set_layout; }
 
-    auto Set(size_t frame_index, size_t transform_index, const ModelTransform& model_transform) noexcept -> uint32_t;
+    auto Set(size_t frame_index, size_t transform_index, const ModelUniform& model) noexcept -> uint32_t;
 
-    void Set(size_t frame_index, const CameraTransform& camera_transform) noexcept;
+    void Set(size_t frame_index, const CameraUniform& camera) noexcept;
+
+    void Set(size_t frame_index, const LightsUniform& lights) noexcept;
 
     void UpdateDescriptorSet(size_t frame_index);
 
@@ -63,6 +76,11 @@ class DescriptorManager {
             etna::UniqueBuffer buffer{};
             std::byte*         mapped_memory{};
         } camera;
+
+        struct Lights final {
+            etna::UniqueBuffer buffer{};
+            std::byte*         mapped_memory{};
+        } lights;
     };
 
     etna::Device               m_device;

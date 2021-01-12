@@ -11,7 +11,7 @@ DescriptorManager::DescriptorManager(
 {
     using namespace etna;
 
-    m_offset_multiplier = sizeof(ModelTransform);
+    m_offset_multiplier = sizeof(ModelUniform);
 
     if (auto min_alignment = gpu_limits.minUniformBufferOffsetAlignment; min_alignment > 0) {
         m_offset_multiplier = (m_offset_multiplier + min_alignment - 1) & ~(min_alignment - 1);
@@ -31,7 +31,10 @@ DescriptorManager::DescriptorManager(
         MemoryUsage::CpuToGpu);
 
     auto camera_buffers =
-        device.CreateBuffers(num_frames, sizeof(CameraTransform), BufferUsage::UniformBuffer, MemoryUsage::CpuToGpu);
+        device.CreateBuffers(num_frames, sizeof(CameraUniform), BufferUsage::UniformBuffer, MemoryUsage::CpuToGpu);
+
+    auto lights_buffers =
+        device.CreateBuffers(num_frames, sizeof(LightsUniform), BufferUsage::UniformBuffer, MemoryUsage::CpuToGpu);
 
     auto write_descriptor_sets = std::vector<WriteDescriptorSet>();
 
@@ -41,12 +44,14 @@ DescriptorManager::DescriptorManager(
     for (size_t i = 0; i < num_frames; ++i) {
         auto model_buffer_memory  = static_cast<std::byte*>(model_buffers[i]->MapMemory());
         auto camera_buffer_memory = static_cast<std::byte*>(camera_buffers[i]->MapMemory());
+        auto lights_buffer_memory = static_cast<std::byte*>(lights_buffers[i]->MapMemory());
 
         auto frame_state = FrameState{
 
             descriptor_sets[i],
             { std::move(model_buffers[i]), model_buffer_memory },
-            { std::move(camera_buffers[i]), camera_buffer_memory }
+            { std::move(camera_buffers[i]), camera_buffer_memory },
+            { std::move(lights_buffers[i]), lights_buffer_memory }
         };
 
         m_frame_states.push_back(std::move(frame_state));
@@ -56,6 +61,9 @@ DescriptorManager::DescriptorManager(
 
         write_descriptor_sets.emplace_back(descriptor_sets[i], Binding{ 1 }, DescriptorType::UniformBuffer);
         write_descriptor_sets.back().AddBuffer(*m_frame_states[i].camera.buffer);
+
+        write_descriptor_sets.emplace_back(descriptor_sets[i], Binding{ 10 }, DescriptorType::UniformBuffer);
+        write_descriptor_sets.back().AddBuffer(*m_frame_states[i].lights.buffer);
     }
 
     m_device.UpdateDescriptorSets(write_descriptor_sets);
@@ -66,26 +74,33 @@ DescriptorManager::~DescriptorManager() noexcept
     for (auto& frame_state : m_frame_states) {
         frame_state.model.buffer->UnmapMemory();
         frame_state.camera.buffer->UnmapMemory();
+        frame_state.lights.buffer->UnmapMemory();
     }
 }
 
-uint32_t
-DescriptorManager::Set(size_t frame_index, size_t transform_index, const ModelTransform& model_transform) noexcept
+uint32_t DescriptorManager::Set(size_t frame_index, size_t transform_index, const ModelUniform& model) noexcept
 {
     auto& frame_state = m_frame_states[frame_index];
 
     auto offset = transform_index * m_offset_multiplier;
 
-    std::memcpy(frame_state.model.mapped_memory + offset, &model_transform, m_offset_multiplier);
+    std::memcpy(frame_state.model.mapped_memory + offset, &model, m_offset_multiplier);
 
     return etna::narrow_cast<uint32_t>(offset);
 }
 
-void DescriptorManager::Set(size_t frame_index, const CameraTransform& camera_transform) noexcept
+void DescriptorManager::Set(size_t frame_index, const CameraUniform& camera) noexcept
 {
     auto& frame_state = m_frame_states[frame_index];
 
-    std::memcpy(frame_state.camera.mapped_memory, &camera_transform, sizeof(camera_transform));
+    std::memcpy(frame_state.camera.mapped_memory, &camera, sizeof(camera));
+}
+
+void DescriptorManager::Set(size_t frame_index, const LightsUniform& lights) noexcept
+{
+    auto& frame_state = m_frame_states[frame_index];
+
+    std::memcpy(frame_state.lights.mapped_memory, &lights, sizeof(lights));
 }
 
 void DescriptorManager::UpdateDescriptorSet(size_t frame_index)
@@ -96,4 +111,5 @@ void DescriptorManager::UpdateDescriptorSet(size_t frame_index)
 
     frame_state.model.buffer->FlushMappedMemoryRanges({ MappedMemoryRange{} });
     frame_state.camera.buffer->FlushMappedMemoryRanges({ MappedMemoryRange{} });
+    frame_state.lights.buffer->FlushMappedMemoryRanges({ MappedMemoryRange{} });
 }

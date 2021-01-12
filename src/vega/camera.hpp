@@ -159,9 +159,10 @@ class Camera {
 
     virtual ~Camera() noexcept = default;
 
-    auto GetViewMatrix() const noexcept -> glm::mat4;
-    auto GetPerspectiveMatrix() const noexcept -> glm::mat4;
-    auto GetSphericalCoordinates() const noexcept -> SphericalCoordinates;
+    auto ComputeViewMatrix() const noexcept -> glm::mat4;
+    auto ComputePerspectiveMatrix() const noexcept -> glm::mat4;
+    auto ComputeSphericalCoordinates() const noexcept -> SphericalCoordinates;
+
     auto GetOffset() const noexcept -> Offset;
     auto GetPerspective() const noexcept -> const Perspective&;
     auto GetBasis() const noexcept -> Basis;
