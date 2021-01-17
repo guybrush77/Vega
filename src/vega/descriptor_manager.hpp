@@ -53,7 +53,7 @@ class DescriptorManager {
     auto DescriptorSet(size_t frame_index) const noexcept { return m_frame_states[frame_index].descriptor_set; }
     auto DescriptorSetLayout() const noexcept { return m_descriptor_set_layout; }
 
-    auto Set(size_t frame_index, size_t transform_index, const ModelUniform& model) noexcept -> uint32_t;
+    auto Set(size_t frame_index, size_t transform_index, const ModelUniform& model) -> uint32_t;
 
     void Set(size_t frame_index, const CameraUniform& camera) noexcept;
 
@@ -62,7 +62,7 @@ class DescriptorManager {
     void UpdateDescriptorSet(size_t frame_index);
 
   private:
-    static constexpr int kMaxTransforms = 64;
+    static constexpr int kMaxTransforms = 128;
 
     struct FrameState final {
         etna::DescriptorSet descriptor_set;

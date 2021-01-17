@@ -1,4 +1,4 @@
-#include "mesh_store.h"
+#include "mesh_store.hpp"
 
 #include "etna/command.hpp"
 
@@ -37,11 +37,11 @@ bool MeshStore::Add(MeshPtr mesh)
     return rv.second;
 }
 
-void MeshStore::Upload(etna::Queue transfer_queue, uint32_t transfer_queue_family_index)
+void MeshStore::Upload()
 {
     using namespace etna;
 
-    auto cmd_pool   = m_device.CreateCommandPool(transfer_queue_family_index, CommandPoolCreate::Transient);
+    auto cmd_pool   = m_device.CreateCommandPool(m_transfer_queue.FamilyIndex(), CommandPoolCreate::Transient);
     auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
 
     cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
@@ -75,7 +75,7 @@ void MeshStore::Upload(etna::Queue transfer_queue, uint32_t transfer_queue_famil
 
     cmd_buffer->End();
 
-    transfer_queue.Submit(*cmd_buffer);
+    m_transfer_queue.Submit(*cmd_buffer);
 
     m_device.WaitIdle();
 

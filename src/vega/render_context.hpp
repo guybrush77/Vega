@@ -18,8 +18,10 @@ class Scene;
 
 class RenderContext {
   public:
-    enum Status { WindowClosed, SwapchainOutOfDate };
+    enum class Status { WindowClosed, SwapchainOutOfDate, GuiEvent };
     enum class MouseLook { None, Orbit, Zoom, Track };
+
+    RenderContext() noexcept = default;
 
     RenderContext(
         etna::Device         device,
@@ -36,9 +38,16 @@ class RenderContext {
         MeshStore*           mesh_store,
         Scene*               scene);
 
+    RenderContext(const RenderContext&) = delete;
+    RenderContext& operator=(const RenderContext&) = delete;
+
+    RenderContext(RenderContext&&) = default;
+    RenderContext& operator=(RenderContext&&) = default;
+
     void ProcessUserInput();
 
     auto StartRenderLoop() -> Status;
+    void StopRenderLoop();
 
   private:
     etna::Device         m_device;
@@ -56,4 +65,5 @@ class RenderContext {
     Scene*               m_scene                 = nullptr;
     MouseLook            m_mouse_look            = MouseLook::None;
     bool                 m_is_any_window_hovered = false;
+    bool                 m_is_running            = false;
 };

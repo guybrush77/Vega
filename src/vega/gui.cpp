@@ -13,6 +13,7 @@ BEGIN_DISABLE_WARNINGS
 
 #include "examples/imgui_impl_glfw.h"
 #include "examples/imgui_impl_vulkan.h"
+#include "imgui-filebrowser/imfilebrowser.h"
 #include "imgui.h"
 
 #define GLFW_INCLUDE_NONE
@@ -34,18 +35,72 @@ static Gui& Self(GLFWwindow* window)
 
 } // namespace
 
+class CameraWindow {
+  public:
+    CameraWindow(Camera* camera) noexcept : m_camera(camera) {}
+
+    void Draw();
+
+  private:
+    Camera* m_camera  = nullptr;
+};
+
+class SceneWindow {
+  public:
+    SceneWindow(Scene* scene) noexcept : m_scene(scene) {}
+
+    void Draw();
+
+  private:
+    Scene* m_scene = nullptr;
+};
+
+class LightsWindow {
+  public:
+    LightsWindow(Lights* lights) noexcept : m_lights(lights) {}
+
+    void Draw();
+
+  private:
+    Lights* m_lights = nullptr;
+};
+
+class FileBrowserWindow {
+  public:
+    FileBrowserWindow() noexcept
+    {
+        m_file_browser.SetTitle("Import");
+        m_file_browser.SetTypeFilters({ ".obj" });
+        m_file_browser.SetWindowSize(1000, 800);
+    }
+
+    void Open() { m_file_browser.Open(); }
+
+    void Draw() { m_file_browser.Display(); }
+
+    bool HasSelectedPath() { return m_file_browser.HasSelected(); }
+
+    auto GetSelectedPath()
+    {
+        auto path = m_file_browser.GetSelected();
+        m_file_browser.ClearSelected();
+        return path;
+    }
+
+  private:
+    ImGui::FileBrowser m_file_browser = ImGui::FileBrowser(ImGuiFileBrowserFlags_CloseOnEsc);
+};
+
 Gui::Gui(
-    etna::Instance       instance,
-    etna::PhysicalDevice gpu,
-    etna::Device         device,
-    uint32_t             queue_family_index,
-    etna::Queue          graphics_queue,
-    etna::RenderPass     renderpass,
-    GLFWwindow*          window,
-    etna::Extent2D       extent,
-    uint32_t             min_image_count,
-    uint32_t             image_count)
-    : m_graphics_queue(graphics_queue), m_extent(extent)
+    Parameters  parameters,
+    Callbacks   callbacks,
+    GLFWwindow* window,
+    uint32_t    min_image_count,
+    uint32_t    image_count,
+    Camera*     camera,
+    Scene*      scene,
+    Lights*     lights)
+    : m_callbacks(std::move(callbacks)), m_graphics_queue(parameters.graphics_queue), m_extent(parameters.extent)
 {
     using namespace etna;
 
@@ -104,18 +159,18 @@ Gui::Gui(
             { DescriptorType::StorageBufferDynamic, 1 },
             { DescriptorType::InputAttachment, 1 }
         };
-        m_descriptor_pool = device.CreateDescriptorPool(pool_sizes);
+        m_descriptor_pool = parameters.device.CreateDescriptorPool(pool_sizes);
     }
 
     // Init Vulkan
     {
         auto init_info = ImGui_ImplVulkan_InitInfo{
 
-            .Instance        = instance,
-            .PhysicalDevice  = gpu,
-            .Device          = device,
-            .QueueFamily     = queue_family_index,
-            .Queue           = graphics_queue,
+            .Instance        = parameters.instance,
+            .PhysicalDevice  = parameters.gpu,
+            .Device          = parameters.device,
+            .QueueFamily     = parameters.graphics_queue.FamilyIndex(),
+            .Queue           = parameters.graphics_queue,
             .PipelineCache   = nullptr,
             .DescriptorPool  = *m_descriptor_pool,
             .MinImageCount   = min_image_count,
@@ -125,7 +180,7 @@ Gui::Gui(
             .CheckVkResultFn = nullptr
         };
         ImGui_ImplGlfw_InitForVulkan(window, true);
-        ImGui_ImplVulkan_Init(&init_info, renderpass);
+        ImGui_ImplVulkan_Init(&init_info, parameters.renderpass);
     }
 
     // Set Style
@@ -154,18 +209,24 @@ Gui::Gui(
 
     // Upload Fonts
     {
-        auto command_pool   = device.CreateCommandPool(queue_family_index, CommandPoolCreate::Transient);
+        auto queue_index    = parameters.graphics_queue.FamilyIndex();
+        auto command_pool   = parameters.device.CreateCommandPool(queue_index, CommandPoolCreate::Transient);
         auto command_buffer = command_pool->AllocateCommandBuffer();
 
         command_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
         ImGui_ImplVulkan_CreateFontsTexture(*command_buffer);
         command_buffer->End();
 
-        graphics_queue.Submit(*command_buffer);
+        parameters.graphics_queue.Submit(*command_buffer);
 
-        device.WaitIdle();
+        parameters.device.WaitIdle();
         ImGui_ImplVulkan_DestroyFontUploadObjects();
     }
+
+    m_windows.camera      = std::make_unique<CameraWindow>(camera);
+    m_windows.scene       = std::make_unique<SceneWindow>(scene);
+    m_windows.lights      = std::make_unique<LightsWindow>(lights);
+    m_windows.filebrowser = std::make_unique<FileBrowserWindow>();
 }
 
 Gui::~Gui() noexcept
@@ -222,6 +283,22 @@ void Gui::UpdateViewport(etna::Extent2D extent, uint32_t min_image_count)
     m_extent = extent;
 }
 
+void Gui::ShowMenuBar()
+{
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Import")) {
+                m_windows.filebrowser->Open();
+            }
+            if (ImGui::MenuItem("Exit")) {
+                m_callbacks.OnWindowClose();
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+}
+
 void Gui::Draw(
     etna::CommandBuffer cmd_buffer,
     etna::Framebuffer   framebuffer,
@@ -235,8 +312,15 @@ void Gui::Draw(
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    for (auto& window : m_windows) {
-        window->Draw();
+    ShowMenuBar();
+
+    m_windows.camera->Draw();
+    m_windows.scene->Draw();
+    m_windows.lights->Draw();
+    m_windows.filebrowser->Draw();
+
+    if (m_windows.filebrowser->HasSelectedPath()) {
+        m_callbacks.OnFileOpen(m_windows.filebrowser->GetSelectedPath().string());
     }
 
     ImGui::Render();
@@ -284,11 +368,9 @@ void AddLabel(const char* label, const char* tooltip)
 
 void CameraWindow::Draw()
 {
-    static const auto width = ImGui::CalcTextSize("Camera Up ").x;
+    static const auto width = ImGui::CalcTextSize("Elevation ").x;
 
     const auto& limits = m_camera->GetLimits();
-
-    auto id = m_base_id;
 
     ImGui::Begin("Camera");
 
@@ -304,7 +386,7 @@ void CameraWindow::Draw()
 
         bool camera_elevation;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/elevation");
 
             camera_elevation = ImGui::SliderAngle(
                 "",
@@ -321,7 +403,7 @@ void CameraWindow::Draw()
 
         bool camera_azimuth;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/azimuth");
 
             camera_azimuth = ImGui::SliderAngle(
                 "",
@@ -338,7 +420,7 @@ void CameraWindow::Draw()
 
         bool camera_up;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/camera_up");
 
             camera_up = ImGui::SliderInt(
                 "",
@@ -350,12 +432,12 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Camera Up", "Is Camera Inverted");
+            AddLabel("Camera", "Is Camera Inverted");
         }
 
         bool camera_distance;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/distance");
 
             camera_distance = ImGui::SliderFloat(
                 "",
@@ -372,7 +454,7 @@ void CameraWindow::Draw()
 
         bool offset_horizontal;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/track_h");
 
             offset_horizontal = ImGui::SliderFloat("", &offset.horizontal, limits.offset_x.min, limits.offset_x.max);
 
@@ -383,7 +465,7 @@ void CameraWindow::Draw()
 
         bool offset_vertical;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/track_v");
 
             offset_vertical = ImGui::SliderFloat("", &offset.vertical, limits.offset_y.min, limits.offset_y.max);
 
@@ -411,7 +493,7 @@ void CameraWindow::Draw()
 
         bool fovy;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/fov_v");
 
             fovy = ImGui::SliderAngle(
                 "",
@@ -428,7 +510,7 @@ void CameraWindow::Draw()
 
         bool clip_planes;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/near_far");
 
             clip_planes = ImGui::DragFloatRange2(
                 "",
@@ -464,7 +546,7 @@ void CameraWindow::Draw()
 
         bool forward_changed;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/forward");
 
             forward_changed = ImGui::Combo("", &forward_index, labels.data(), labels_count);
 
@@ -475,7 +557,7 @@ void CameraWindow::Draw()
 
         bool up_changed;
         {
-            ImGui::PushID(id++);
+            ImGui::PushID("camera/up");
 
             up_changed = ImGui::Combo("", &up_index, labels.data(), labels_count);
 
@@ -654,7 +736,7 @@ void DrawNode(NodePtr node)
 
     auto id = node->GetID().value;
 
-    assert(id <= 0x007ffff0); // TODO
+    assert(id <= 0x00fffff0); // TODO
 
     id = id << 8;
 

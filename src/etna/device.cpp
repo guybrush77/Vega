@@ -414,7 +414,7 @@ Queue Device::GetQueue(uint32_t queue_family_index) const noexcept
 
     vkGetDeviceQueue(m_device, queue_family_index, 0, &vk_queue);
 
-    return Queue(vk_queue);
+    return Queue(vk_queue, queue_family_index);
 }
 
 auto Device::GetSwapchainImagesKHR(SwapchainKHR swapchain) const -> std::vector<Image2D>

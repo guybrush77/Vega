@@ -1,5 +1,7 @@
 #include "descriptor_manager.hpp"
 
+#include "utils/misc.hpp"
+
 #include <cstring>
 
 DescriptorManager::DescriptorManager(
@@ -78,8 +80,10 @@ DescriptorManager::~DescriptorManager() noexcept
     }
 }
 
-uint32_t DescriptorManager::Set(size_t frame_index, size_t transform_index, const ModelUniform& model) noexcept
+uint32_t DescriptorManager::Set(size_t frame_index, size_t transform_index, const ModelUniform& model)
 {
+    utils::throw_runtime_error_if(transform_index >= kMaxTransforms, "Transform index is greater than MaxTransforms");
+
     auto& frame_state = m_frame_states[frame_index];
 
     auto offset = transform_index * m_offset_multiplier;

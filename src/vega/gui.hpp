@@ -7,6 +7,7 @@
 #include "etna/queue.hpp"
 #include "etna/renderpass.hpp"
 
+#include <functional>
 #include <memory>
 
 struct GLFWwindow;
@@ -16,66 +17,42 @@ class Camera;
 class Lights;
 class Scene;
 
-struct Fonts {
-    ImFont* regular   = nullptr;
-    ImFont* monospace = nullptr;
-};
+class CameraWindow;
+class FileBrowserWindow;
+class LightsWindow;
+class SceneWindow;
 
-class Window {
-  public:
-    virtual void Draw() = 0;
-    virtual ~Window()   = default;
-
-  protected:
-    friend class Gui;
-    Fonts m_fonts;
-};
-
-class CameraWindow : public Window {
-  public:
-    CameraWindow(Camera* camera) : m_camera(camera) {}
-
-    void Draw() override;
-
-  private:
-    int     m_base_id = 0x7ffff100;
-    Camera* m_camera  = nullptr;
-};
-
-class SceneWindow : public Window {
-  public:
-    SceneWindow(Scene* scene) : m_scene(scene) {}
-
-    void Draw() override;
-
-  private:
-    Scene* m_scene = nullptr;
-};
-
-class LightsWindow : public Window {
-  public:
-    LightsWindow(Lights* lights) : m_lights(lights) {}
-
-    void Draw() override;
-
-  private:
-    Lights* m_lights = nullptr;
-};
+using UniqueCameraWindow      = std::unique_ptr<CameraWindow>;
+using UniqueFileBrowserWindow = std::unique_ptr<FileBrowserWindow>;
+using UniqueLightsWindow      = std::unique_ptr<LightsWindow>;
+using UniqueSceneWindow       = std::unique_ptr<SceneWindow>;
 
 class Gui {
   public:
-    using UniqueWindow = std::unique_ptr<Window>;
+    struct Parameters final {
+        etna::Instance       instance;
+        etna::PhysicalDevice gpu;
+        etna::Device         device;
+        etna::Queue          graphics_queue;
+        etna::RenderPass     renderpass;
+        etna::Extent2D       extent;
+    };
 
-    Gui(etna::Instance       instance,
-        etna::PhysicalDevice gpu,
-        etna::Device         device,
-        uint32_t             queue_family_index,
-        etna::Queue          graphics_queue,
-        etna::RenderPass     renderpass,
-        GLFWwindow*          window,
-        etna::Extent2D       extent,
-        uint32_t             min_image_count,
-        uint32_t             image_count);
+    struct Callbacks final {
+        std::function<void()>                     OnWindowClose;
+        std::function<void(std::string filepath)> OnFileOpen;
+    };
+
+    Gui() noexcept = default;
+
+    Gui(Parameters  parameters,
+        Callbacks   callbacks,
+        GLFWwindow* window,
+        uint32_t    min_image_count,
+        uint32_t    image_count,
+        Camera*     camera,
+        Scene*      scene,
+        Lights*     lights);
 
     Gui(const Gui&) = delete;
     Gui& operator=(const Gui&) = delete;
@@ -90,13 +67,6 @@ class Gui {
     void OnScroll(double xoffset, double yoffset);
     void OnFramebufferSize(int width, int height);
     void OnContentScale(float xscale, float yscale);
-
-    template <typename T, typename... Args>
-    void AddWindow(Args... args)
-    {
-        m_windows.push_back(UniqueWindow(new T(std::forward<Args...>(args...))));
-        m_windows.back()->m_fonts = m_fonts;
-    }
 
     void UpdateViewport(etna::Extent2D extent, uint32_t min_image_count);
 
@@ -144,10 +114,25 @@ class Gui {
     };
 
   private:
+    void ShowMenuBar();
+
+    struct Fonts final {
+        ImFont* regular   = nullptr;
+        ImFont* monospace = nullptr;
+    };
+
+    struct Windows final {
+        UniqueSceneWindow       scene;
+        UniqueCameraWindow      camera;
+        UniqueLightsWindow      lights;
+        UniqueFileBrowserWindow filebrowser;
+    };
+
+    Callbacks                  m_callbacks;
     Fonts                      m_fonts;
     MouseState                 m_mouse_state;
     etna::UniqueDescriptorPool m_descriptor_pool;
     etna::Queue                m_graphics_queue;
     etna::Extent2D             m_extent;
-    std::vector<UniqueWindow>  m_windows;
+    Windows                    m_windows;
 };

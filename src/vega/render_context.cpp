@@ -3,7 +3,7 @@
 #include "camera.hpp"
 #include "gui.hpp"
 #include "lights.hpp"
-#include "mesh_store.h"
+#include "mesh_store.hpp"
 #include "scene.hpp"
 
 #define GLFW_INCLUDE_NONE
@@ -77,9 +77,18 @@ RenderContext::Status RenderContext::StartRenderLoop()
 {
     using namespace etna;
 
+    auto status  = Status::GuiEvent;
+    m_is_running = true;
+
     auto image_ready_fences = std::vector<Fence>(m_swapchain_manager->ImageCount());
 
-    while (!glfwWindowShouldClose(m_window)) {
+    while (m_is_running) {
+        if (glfwWindowShouldClose(m_window)) {
+            m_is_running = false;
+            status       = Status::WindowClosed;
+            break;
+        }
+
         glfwPollEvents();
 
         auto frame       = m_frame_manager->NextFrame();
@@ -93,7 +102,9 @@ RenderContext::Status RenderContext::StartRenderLoop()
             }
             image_ready_fences[image_index] = frame.fence.image_ready;
         } else if (next_image.result() == Result::ErrorOutOfDateKHR) {
-            return SwapchainOutOfDate;
+            m_is_running = false;
+            status       = Status::SwapchainOutOfDate;
+            continue;
         } else {
             throw std::runtime_error("AcquireNextImage failed!");
         }
@@ -180,5 +191,10 @@ RenderContext::Status RenderContext::StartRenderLoop()
         m_swapchain_manager->QueuePresent(image_index, { frame.semaphores.gui_completed });
     }
 
-    return WindowClosed;
+    return status;
+}
+
+void RenderContext::StopRenderLoop()
+{
+    m_is_running = false;
 }

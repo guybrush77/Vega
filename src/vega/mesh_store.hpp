@@ -23,7 +23,7 @@ struct MeshRecord final {
 
 class MeshStore {
   public:
-    MeshStore(etna::Device device) : m_device(device) {}
+    MeshStore(etna::Device device, etna::Queue transfer_queue) : m_device(device), m_transfer_queue(transfer_queue) {}
 
     MeshStore(const MeshStore&) = delete;
     MeshStore& operator=(const MeshStore&) = delete;
@@ -33,7 +33,7 @@ class MeshStore {
 
     bool Add(MeshPtr mesh);
 
-    void Upload(etna::Queue transfer_queue, uint32_t transfer_queue_family_index);
+    void Upload();
 
     auto GetMeshRecord(MeshPtr mesh) -> MeshRecord;
 
@@ -52,6 +52,7 @@ class MeshStore {
     };
 
     etna::Device m_device;
+    etna::Queue  m_transfer_queue;
 
     std::unordered_map<MeshPtr, MeshRecordPrivate> m_cpu_buffers;
     std::unordered_map<MeshPtr, MeshRecordPrivate> m_gpu_buffers;

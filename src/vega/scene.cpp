@@ -340,6 +340,10 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
 {
     using namespace std::ranges;
 
+    if (m_root_node->GetChildren().empty()) {
+        return AABB{ { -1, -1, -1 }, { 1, 1, 1 } };
+    }
+
     ObjectAccess::ApplyTransform(m_root_node.get(), glm::identity<glm::mat4>());
 
     auto out = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };

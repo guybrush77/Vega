@@ -4,7 +4,7 @@
 #include "descriptor_manager.hpp"
 #include "frame_manager.hpp"
 #include "gui.hpp"
-#include "mesh_store.h"
+#include "mesh_store.hpp"
 #include "render_context.hpp"
 #include "scene.hpp"
 #include "swapchain_manager.hpp"
@@ -530,6 +530,87 @@ etna::Extent2D ComputeEtnaExtent(etna::PhysicalDevice gpu, GLFWwindow* glfw_wind
     return extent;
 }
 
+class EventHandler {
+  public:
+    EventHandler(
+        RenderContext* render_context,
+        GLFWwindow*    glfw_window,
+        Scene*         scene,
+        Camera*        camera,
+        MeshStore*     mesh_store)
+        : m_render_context(render_context), m_glfw_window(glfw_window), m_scene(scene), m_camera(camera),
+          m_mesh_store(mesh_store)
+    {}
+
+    void ScheduleCloseWindow() noexcept
+    {
+        m_event = Event::CloseWindow;
+        m_render_context->StopRenderLoop();
+    }
+
+    void ScheduleLoadFile(std::string filepath) noexcept
+    {
+        m_event                         = Event::LoadFile;
+        m_load_file_parameters.filepath = std::move(filepath);
+        m_render_context->StopRenderLoop();
+    }
+
+    void HandleEvent()
+    {
+        switch (m_event) {
+        case Event::None: break;
+        case Event::CloseWindow: CloseWindow(); break;
+        case Event::LoadFile: LoadFile(); break;
+        default: break;
+        }
+
+        m_event = Event::None;
+    }
+
+  private:
+    enum class Event { None, CloseWindow, LoadFile };
+
+    struct LoadFileParameters final {
+        std::string filepath;
+    } m_load_file_parameters;
+
+    void CloseWindow() { glfwSetWindowShouldClose(m_glfw_window, GLFW_TRUE); }
+
+    void LoadFile()
+    {
+        LoadObj(m_scene, m_load_file_parameters.filepath);
+
+        auto draw_list = m_scene->ComputeDrawList();
+        for (DrawRecord draw_record : draw_list) {
+            m_mesh_store->Add(draw_record.mesh);
+        }
+        m_mesh_store->Upload();
+
+        auto aabb = m_scene->ComputeAxisAlignedBoundingBox();
+
+        int width{}, height{};
+        glfwGetWindowSize(m_glfw_window, &width, &height);
+
+        auto aspect = static_cast<float>(width) / height;
+
+        *m_camera = Camera::Create(
+            Orientation::RightHanded,
+            Forward{ Axis::PositiveY },
+            Up{ Axis::PositiveZ },
+            ObjectView::Front,
+            aabb,
+            45_deg,
+            aspect);
+    }
+
+    RenderContext* m_render_context;
+    GLFWwindow*    m_glfw_window;
+    Scene*         m_scene;
+    Camera*        m_camera;
+    MeshStore*     m_mesh_store;
+    Event          m_event = Event::None;
+};
+
 int main()
 {
 #ifdef NDEBUG
@@ -572,10 +653,6 @@ int main()
         queues.transfer     = device->GetQueue(queue_families.transfer.family_index);
         queues.presentation = device->GetQueue(queue_families.presentation.family_index);
     }
-
-    auto scene = Scene();
-
-    LoadObj(&scene, "../../../data/models/suzanne.obj");
 
     // Create pipeline renderpass
     UniqueRenderPass renderpass;
@@ -705,22 +782,18 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
-    auto draw_list = scene.ComputeDrawList();
-
-    auto mesh_store = MeshStore(*device);
-
-    for (DrawRecord draw_record : draw_list) {
-        mesh_store.Add(draw_record.mesh);
-    }
-
-    mesh_store.Upload(queues.transfer, queue_families.transfer.family_index);
+    auto mesh_store = MeshStore(*device, queues.transfer);
 
     uint32_t image_count = 3;
     uint32_t frame_count = 2;
 
     auto descriptor_manager = DescriptorManager(*device, frame_count, *descriptor_set_layout, gpu_properties.limits);
 
-    auto aabb = scene.ComputeAxisAlignedBoundingBox();
+    auto render_context = RenderContext();
+
+    auto scene = Scene();
+
+    auto aabb = AABB();
 
     auto camera = Camera::Create(
         Orientation::RightHanded,
@@ -742,21 +815,25 @@ int main()
         lights.FillRef().AzimuthRef()    = ToRadians(25_deg).value;
     }
 
-    auto gui =
-        Gui(*instance,
-            gpu,
-            *device,
-            queue_families.graphics.family_index,
-            queues.graphics,
-            *gui_renderpass,
-            glfw_window.get(),
-            extent,
-            image_count,
-            image_count);
+    auto event_handler = EventHandler(&render_context, glfw_window.get(), &scene, &camera, &mesh_store);
 
-    gui.AddWindow<CameraWindow>(&camera);
-    gui.AddWindow<SceneWindow>(&scene);
-    gui.AddWindow<LightsWindow>(&lights);
+    auto parameters = Gui::Parameters{
+
+        .instance       = *instance,
+        .gpu            = gpu,
+        .device         = *device,
+        .graphics_queue = queues.graphics,
+        .renderpass     = *gui_renderpass,
+        .extent         = extent
+    };
+
+    auto callbacks = Gui::Callbacks{
+
+        .OnWindowClose = [&event_handler]() { event_handler.ScheduleCloseWindow(); },
+        .OnFileOpen = [&event_handler](std::string filepath) { event_handler.ScheduleLoadFile(std::move(filepath)); }
+    };
+
+    auto gui = Gui(parameters, callbacks, glfw_window.get(), image_count, image_count, &camera, &scene, &lights);
 
     bool running = true;
 
@@ -773,9 +850,9 @@ int main()
             queues.presentation,
             PresentModeKHR::Fifo);
 
-        FrameManager frame_manager(*device, queue_families.graphics.family_index, frame_count);
+        auto frame_manager = FrameManager(*device, queue_families.graphics.family_index, frame_count);
 
-        auto render_context = RenderContext(
+        render_context = RenderContext(
             *device,
             queues.graphics,
             *pipeline,
@@ -790,16 +867,16 @@ int main()
             &mesh_store,
             &scene);
 
-        auto result = render_context.StartRenderLoop();
+        auto status = render_context.StartRenderLoop();
 
         device->WaitIdle();
 
-        switch (result) {
-        case RenderContext::WindowClosed: {
+        switch (status) {
+        case RenderContext::Status::WindowClosed: {
             running = false;
             break;
         }
-        case RenderContext::SwapchainOutOfDate: {
+        case RenderContext::Status::SwapchainOutOfDate: {
             int width  = 0;
             int height = 0;
             while (width == 0 && height == 0) {
@@ -812,6 +889,11 @@ int main()
             extent.height = narrow_cast<uint32_t>(height);
             gui.UpdateViewport(extent, swapchain_manager.MinImageCount());
             camera.UpdateAspect(ComputeAspect(extent));
+            break;
+        }
+        case RenderContext::Status::GuiEvent: {
+            event_handler.HandleEvent();
+            break;
         }
         default: break;
         }

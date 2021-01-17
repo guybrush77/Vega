@@ -28,6 +28,11 @@ class SwapchainManager {
         etna::Queue            presentation_queue,
         etna::PresentModeKHR   present_mode);
 
+    SwapchainManager(const SwapchainManager&) = delete;
+    SwapchainManager& operator=(const SwapchainManager&) = delete;
+    SwapchainManager(SwapchainManager&&) noexcept        = delete;
+    SwapchainManager& operator=(SwapchainManager&&) noexcept = delete;
+
     auto AcquireNextImage(etna::Semaphore semaphore, etna::Fence fence = {}) -> etna::Return<uint32_t>;
 
     auto QueuePresent(uint32_t image_index, std::initializer_list<etna::Semaphore> wait_semaphores) -> etna::Result;
@@ -39,14 +44,14 @@ class SwapchainManager {
     auto GetFramebufferInfo(uint32_t image_index) const noexcept -> FramebufferInfo;
 
   private:
-    etna::UniqueSwapchainKHR             m_swapchain;
-    std::vector<etna::UniqueImageView2D> m_surface_views;
-    std::vector<etna::UniqueImage2D>     m_depth_images;
-    std::vector<etna::UniqueImageView2D> m_depth_views;
-    std::vector<etna::UniqueFramebuffer> m_framebuffers;
-    std::vector<etna::UniqueFramebuffer> m_gui_framebuffers;
-    etna::Device                         m_device;
-    etna::Queue                          m_presentation_queue;
-    etna::Extent2D                       m_extent;
-    uint32_t                             m_min_image_count;
+    etna::UniqueSwapchainKHR             m_swapchain{};
+    std::vector<etna::UniqueImageView2D> m_surface_views{};
+    std::vector<etna::UniqueImage2D>     m_depth_images{};
+    std::vector<etna::UniqueImageView2D> m_depth_views{};
+    std::vector<etna::UniqueFramebuffer> m_framebuffers{};
+    std::vector<etna::UniqueFramebuffer> m_gui_framebuffers{};
+    etna::Device                         m_device{};
+    etna::Queue                          m_presentation_queue{};
+    etna::Extent2D                       m_extent{};
+    uint32_t                             m_min_image_count{};
 };
