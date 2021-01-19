@@ -15,6 +15,7 @@ BEGIN_DISABLE_WARNINGS
 #include "examples/imgui_impl_vulkan.h"
 #include "imgui-filebrowser/imfilebrowser.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -26,40 +27,41 @@ END_DISABLE_WARNINGS
 #include <charconv>
 #include <string>
 
-namespace {
-
-static Gui& Self(GLFWwindow* window)
-{
-    return *static_cast<Gui*>(glfwGetWindowUserPointer(window));
-}
-
-} // namespace
-
-class CameraWindow {
-  public:
-    CameraWindow(Camera* camera) noexcept : m_camera(camera) {}
-
-    void Draw();
-
-  private:
-    Camera* m_camera  = nullptr;
+struct Window {
+    bool visible = true;
 };
 
-class SceneWindow {
+class CameraWindow : public Window {
   public:
-    SceneWindow(Scene* scene) noexcept : m_scene(scene) {}
+    CameraWindow(Camera* camera) noexcept : Window{ VisibilityDefault }, m_camera(camera) {}
 
     void Draw();
+
+    static constexpr bool VisibilityDefault = true;
+
+  private:
+    Camera* m_camera = nullptr;
+};
+
+class SceneWindow : public Window {
+  public:
+    SceneWindow(Scene* scene) noexcept : Window{ VisibilityDefault }, m_scene(scene) {}
+
+    void Draw();
+
+    static constexpr bool VisibilityDefault = true;
 
   private:
     Scene* m_scene = nullptr;
 };
 
-class LightsWindow {
+class LightsWindow : public Window {
   public:
-    LightsWindow(Lights* lights) noexcept : m_lights(lights) {}
+    LightsWindow(Lights* lights) noexcept : Window{ VisibilityDefault }, m_lights(lights) {}
 
     void Draw();
+
+    static constexpr bool VisibilityDefault = false;
 
   private:
     Lights* m_lights = nullptr;
@@ -89,6 +91,54 @@ class FileBrowserWindow {
 
   private:
     ImGui::FileBrowser m_file_browser = ImGui::FileBrowser(ImGuiFileBrowserFlags_CloseOnEsc);
+};
+
+static Gui& Self(GLFWwindow* window)
+{
+    return *static_cast<Gui*>(glfwGetWindowUserPointer(window));
+}
+
+struct GuiAccessor final {
+    static void* OnOpen(ImGuiContext* /*context*/, ImGuiSettingsHandler* /*handler*/, const char* name)
+    {
+        return const_cast<char*>(name);
+    }
+
+    static void OnReadLine(ImGuiContext* /*context*/, ImGuiSettingsHandler* handler, void* entry, const char* line)
+    {
+        using namespace std::literals;
+
+        static constexpr auto set_visibility = [](const char visible, bool visibility_default, bool* out) noexcept {
+            if (visible == '0') {
+                *out = false;
+            } else if (visible == '1') {
+                *out = true;
+            } else {
+                *out = visibility_default;
+            }
+        };
+
+        if (static_cast<char*>(entry) == "Visibility"sv) {
+            auto* gui    = static_cast<Gui*>(handler->UserData);
+            auto  window = std::string_view(line);
+            if (window.starts_with("Camera=")) {
+                set_visibility(window.back(), CameraWindow::VisibilityDefault, &gui->m_windows.camera->visible);
+            } else if (window.starts_with("Scene=")) {
+                set_visibility(window.back(), SceneWindow::VisibilityDefault, &gui->m_windows.scene->visible);
+            } else if (window.starts_with("Lights=")) {
+                set_visibility(window.back(), LightsWindow::VisibilityDefault, &gui->m_windows.lights->visible);
+            }
+        }
+    }
+
+    static void OnWrite(ImGuiContext* /*context*/, ImGuiSettingsHandler* handler, ImGuiTextBuffer* out)
+    {
+        auto* gui = static_cast<Gui*>(handler->UserData);
+        out->append("[Windows][Visibility]\n");
+        out->appendf("Camera=%d\n", gui->m_windows.camera->visible);
+        out->appendf("Scene=%d\n", gui->m_windows.scene->visible);
+        out->appendf("Lights=%d\n", gui->m_windows.lights->visible);
+    }
 };
 
 Gui::Gui(
@@ -227,6 +277,17 @@ Gui::Gui(
     m_windows.scene       = std::make_unique<SceneWindow>(scene);
     m_windows.lights      = std::make_unique<LightsWindow>(lights);
     m_windows.filebrowser = std::make_unique<FileBrowserWindow>();
+
+    auto settings_handler = ImGuiSettingsHandler{};
+    {
+        settings_handler.TypeName   = "Windows";
+        settings_handler.TypeHash   = ImHashStr("Windows");
+        settings_handler.ReadOpenFn = GuiAccessor::OnOpen;
+        settings_handler.ReadLineFn = GuiAccessor::OnReadLine;
+        settings_handler.WriteAllFn = GuiAccessor::OnWrite;
+        settings_handler.UserData   = this;
+    }
+    ImGui::GetCurrentContext()->SettingsHandlers.push_back(settings_handler);
 }
 
 Gui::~Gui() noexcept
@@ -293,6 +354,12 @@ void Gui::ShowMenuBar()
             if (ImGui::MenuItem("Exit")) {
                 m_callbacks.OnWindowClose();
             }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Windows")) {
+            ImGui::MenuItem("Camera", nullptr, &m_windows.camera->visible);
+            ImGui::MenuItem("Lights", nullptr, &m_windows.lights->visible);
+            ImGui::MenuItem("Scene", nullptr, &m_windows.scene->visible);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -368,13 +435,15 @@ void AddLabel(const char* label, const char* tooltip)
 
 void CameraWindow::Draw()
 {
-    static const auto width = ImGui::CalcTextSize("Elevation ").x;
+    if (not visible) {
+        return;
+    }
 
     const auto& limits = m_camera->GetLimits();
 
-    ImGui::Begin("Camera");
+    ImGui::Begin("Camera", &visible, ImGuiWindowFlags_NoCollapse);
 
-    ImGui::PushItemWidth(-width);
+    ImGui::PushItemWidth(-ImGui::CalcTextSize("Elevation ").x);
 
     {
         ImGui::Text("View");
@@ -753,14 +822,25 @@ void DrawNode(NodePtr node)
 
 void SceneWindow::Draw()
 {
-    ImGui::Begin("Scene");
+    if (not visible) {
+        return;
+    }
+
+    ImGui::Begin("Scene", &visible, ImGuiWindowFlags_NoCollapse);
+
     DrawNode(m_scene->GetRootNodePtr());
+
     ImGui::End();
 }
 
 void LightsWindow::Draw()
 {
-    ImGui::Begin("Lights");
+    if (not visible) {
+        return;
+    }
+
+    ImGui::Begin("Lights", &visible, ImGuiWindowFlags_NoCollapse);
+    ImGui::PushItemWidth(-ImGui::CalcTextSize("Multiplier ").x);
 
     ImGui::TextUnformatted("Key Light");
     {
@@ -783,6 +863,8 @@ void LightsWindow::Draw()
         ImGui::SliderAngle("Elevation##fill", &m_lights->FillRef().ElevationRef(), -90, 90);
         ImGui::SliderAngle("Azimuth##fill", &m_lights->FillRef().AzimuthRef(), -90, 90);
     }
+
+    ImGui::PopItemWidth();
 
     ImGui::End();
 }

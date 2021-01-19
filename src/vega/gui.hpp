@@ -114,6 +114,8 @@ class Gui {
     };
 
   private:
+    friend struct GuiAccessor;
+
     void ShowMenuBar();
 
     struct Fonts final {
