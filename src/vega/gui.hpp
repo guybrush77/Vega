@@ -116,11 +116,19 @@ class Gui {
   private:
     friend struct GuiAccessor;
 
+    void UpdateContentScale();
     void ShowMenuBar();
 
     struct Fonts final {
+        static constexpr float FontSize = 15.0f;
+
         ImFont* regular   = nullptr;
         ImFont* monospace = nullptr;
+    };
+
+    struct ContentScale final {
+        float x;
+        float y;
     };
 
     struct Windows final {
@@ -132,7 +140,10 @@ class Gui {
 
     Callbacks                  m_callbacks;
     Fonts                      m_fonts;
+    ContentScale               m_content_scale;
+    bool                       m_content_scale_changed;
     MouseState                 m_mouse_state;
+    etna::Device               m_device;
     etna::UniqueDescriptorPool m_descriptor_pool;
     etna::Queue                m_graphics_queue;
     etna::Extent2D             m_extent;

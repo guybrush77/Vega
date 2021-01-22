@@ -98,6 +98,36 @@ static Gui& Self(GLFWwindow* window)
     return *static_cast<Gui*>(glfwGetWindowUserPointer(window));
 }
 
+static ImFont* LoadFont(const char* font_name, float font_size)
+{
+    auto font        = GetResource(font_name);
+    auto data        = const_cast<unsigned char*>(font.data);
+    auto size        = utils::narrow_cast<int>(font.size);
+    auto font_config = ImFontConfig();
+
+    font_config.FontDataOwnedByAtlas = false;
+
+    return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, font_size, &font_config);
+}
+
+static void UploadFonts(etna::Device device, etna::Queue graphics_queue)
+{
+    auto queue_index    = graphics_queue.FamilyIndex();
+    auto command_pool   = device.CreateCommandPool(queue_index, etna::CommandPoolCreate::Transient);
+    auto command_buffer = command_pool->AllocateCommandBuffer();
+
+    //ImGui_ImplVulkan_DestroyFontsTexture(); TODO
+
+    command_buffer->Begin(etna::CommandBufferUsage::OneTimeSubmit);
+    ImGui_ImplVulkan_CreateFontsTexture(*command_buffer);
+    command_buffer->End();
+
+    graphics_queue.Submit(*command_buffer);
+
+    device.WaitIdle();
+    ImGui_ImplVulkan_DestroyFontUploadObjects();
+}
+
 struct GuiAccessor final {
     static void* OnOpen(ImGuiContext* /*context*/, ImGuiSettingsHandler* /*handler*/, const char* name)
     {
@@ -150,7 +180,8 @@ Gui::Gui(
     Camera*     camera,
     Scene*      scene,
     Lights*     lights)
-    : m_callbacks(std::move(callbacks)), m_graphics_queue(parameters.graphics_queue), m_extent(parameters.extent)
+    : m_callbacks(std::move(callbacks)), m_device(parameters.device), m_graphics_queue(parameters.graphics_queue),
+      m_extent(parameters.extent)
 {
     using namespace etna;
 
@@ -238,39 +269,16 @@ Gui::Gui(
 
     // Add fonts
     {
-        auto font_config = ImFontConfig();
+        glfwGetWindowContentScale(window, &m_content_scale.x, &m_content_scale.y);
 
-        font_config.FontDataOwnedByAtlas = false;
+        m_content_scale_changed = false;
 
-        auto regular = GetResource("fonts/Roboto-Regular.ttf");
-        auto data    = const_cast<unsigned char*>(regular.data);
-        auto size    = narrow_cast<int>(regular.size);
+        auto font_size = Fonts::FontSize * m_content_scale.y;
 
-        m_fonts.regular = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, 30.0f, &font_config);
+        m_fonts.regular   = LoadFont("fonts/Roboto-Regular.ttf", font_size);
+        m_fonts.monospace = LoadFont("fonts/RobotoMono-Regular.ttf", font_size);
 
-        auto monospace = GetResource("fonts/RobotoMono-Regular.ttf");
-        data           = const_cast<unsigned char*>(monospace.data);
-        size           = narrow_cast<int>(monospace.size);
-
-        font_config.FontDataOwnedByAtlas = false;
-
-        m_fonts.monospace = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, size, 30.0f, &font_config);
-    }
-
-    // Upload Fonts
-    {
-        auto queue_index    = parameters.graphics_queue.FamilyIndex();
-        auto command_pool   = parameters.device.CreateCommandPool(queue_index, CommandPoolCreate::Transient);
-        auto command_buffer = command_pool->AllocateCommandBuffer();
-
-        command_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
-        ImGui_ImplVulkan_CreateFontsTexture(*command_buffer);
-        command_buffer->End();
-
-        parameters.graphics_queue.Submit(*command_buffer);
-
-        parameters.device.WaitIdle();
-        ImGui_ImplVulkan_DestroyFontUploadObjects();
+        UploadFonts(parameters.device, parameters.graphics_queue);
     }
 
     m_windows.camera      = std::make_unique<CameraWindow>(camera);
@@ -288,6 +296,8 @@ Gui::Gui(
         settings_handler.UserData   = this;
     }
     ImGui::GetCurrentContext()->SettingsHandlers.push_back(settings_handler);
+
+    ImGui::GetStyle().ScaleAllSizes(m_content_scale.y);
 }
 
 Gui::~Gui() noexcept
@@ -335,13 +345,32 @@ void Gui::OnScroll(double xoffset, double yoffset)
 void Gui::OnFramebufferSize(int /*width*/, int /*height*/)
 {}
 
-void Gui::OnContentScale(float /*xscale*/, float /*yscale*/)
-{}
+void Gui::OnContentScale(float xscale, float yscale)
+{
+    m_content_scale         = { xscale, yscale };
+    m_content_scale_changed = true;
+}
 
 void Gui::UpdateViewport(etna::Extent2D extent, uint32_t min_image_count)
 {
     ImGui_ImplVulkan_SetMinImageCount(min_image_count);
     m_extent = extent;
+}
+
+void Gui::UpdateContentScale()
+{
+    ImGui::GetStyle() = ImGuiStyle::ImGuiStyle();
+    ImGui::GetStyle().ScaleAllSizes(m_content_scale.y);
+    ImGui::GetIO().Fonts->Clear();
+
+    auto font_size = Fonts::FontSize * m_content_scale.y;
+
+    m_fonts.regular   = LoadFont("fonts/Roboto-Regular.ttf", font_size);
+    m_fonts.monospace = LoadFont("fonts/RobotoMono-Regular.ttf", font_size);
+
+    UploadFonts(m_device, m_graphics_queue);
+
+    m_content_scale_changed = false;
 }
 
 void Gui::ShowMenuBar()
@@ -374,6 +403,10 @@ void Gui::Draw(
     etna::Fence         finished_fence)
 {
     using namespace etna;
+
+    if (m_content_scale_changed) {
+        UpdateContentScale();
+    }
 
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -421,9 +454,9 @@ bool Gui::IsAnyWindowHovered() const noexcept
     return ImGui::IsAnyWindowHovered();
 }
 
-void AddLabel(const char* label, const char* tooltip)
+void AddLabel(const char* label, const char* tooltip, float position)
 {
-    ImGui::SameLine();
+    ImGui::SameLine(position);
     ImGui::TextUnformatted(label);
 
     if (ImGui::IsItemHovered()) {
@@ -443,7 +476,10 @@ void CameraWindow::Draw()
 
     ImGui::Begin("Camera", &visible, ImGuiWindowFlags_NoCollapse);
 
-    ImGui::PushItemWidth(-ImGui::CalcTextSize("Elevation ").x);
+    float label_width    = ImGui::CalcTextSize("Elevation").x + ImGui::GetStyle().ItemSpacing.x;
+    float label_position = 0.0f;
+
+    ImGui::PushItemWidth(-label_width);
 
     {
         ImGui::Text("View");
@@ -467,7 +503,9 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Elevation", "Camera Elevation");
+            label_position = ImGui::GetCursorPosX() + ImGui::GetItemRectSize().x + ImGui::GetStyle().ItemSpacing.x;
+
+            AddLabel("Elevation", "Camera Elevation", label_position);
         }
 
         bool camera_azimuth;
@@ -484,7 +522,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Azimuth", "Camera Azimuth");
+            AddLabel("Azimuth", "Camera Azimuth", label_position);
         }
 
         bool camera_up;
@@ -501,7 +539,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Camera", "Is Camera Inverted");
+            AddLabel("Camera", "Is Camera Inverted", label_position);
         }
 
         bool camera_distance;
@@ -518,7 +556,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Distance", "Camera Distance");
+            AddLabel("Distance", "Camera Distance", label_position);
         }
 
         bool offset_horizontal;
@@ -529,7 +567,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Track H", "Camera Track Horizontal");
+            AddLabel("Track H", "Camera Track Horizontal", label_position);
         }
 
         bool offset_vertical;
@@ -540,7 +578,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Track V", "Camera Track Vertical");
+            AddLabel("Track V", "Camera Track Vertical", label_position);
         }
 
         if (camera_elevation || camera_azimuth || camera_up || camera_distance) {
@@ -574,7 +612,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Fov V", "Field of View Vertical");
+            AddLabel("Fov V", "Field of View Vertical", label_position);
         }
 
         bool clip_planes;
@@ -594,7 +632,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Near/Far", "Near/Far Clipping Planes");
+            AddLabel("Near/Far", "Near/Far Clipping Planes", label_position);
         }
 
         if (fovy || clip_planes) {
@@ -621,7 +659,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Forward", "Camera Forward Direction");
+            AddLabel("Forward", "Camera Forward Direction", label_position);
         }
 
         bool up_changed;
@@ -632,7 +670,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Up", "Camera Up Direction");
+            AddLabel("Up", "Camera Up Direction", label_position);
         }
 
         auto forward = Forward::FromInt(forward_index);
