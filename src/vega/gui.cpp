@@ -28,12 +28,19 @@ END_DISABLE_WARNINGS
 #include <string>
 
 struct Window {
-    bool visible = true;
+    bool PreBegin();
+    void SetDefaultSize(float width_multiplier = 1.0f, float height_multiplier = 1.0f);
+    void PostEnd();
+
+    bool   visible{};
+    ImVec2 default_size{};
 };
 
 class CameraWindow : public Window {
   public:
-    CameraWindow(Camera* camera) noexcept : Window{ VisibilityDefault }, m_camera(camera) {}
+    CameraWindow(Camera* camera, Lights* lights) noexcept
+        : Window{ VisibilityDefault }, m_camera(camera), m_lights(lights)
+    {}
 
     void Draw();
 
@@ -41,6 +48,7 @@ class CameraWindow : public Window {
 
   private:
     Camera* m_camera = nullptr;
+    Lights* m_lights = nullptr;
 };
 
 class SceneWindow : public Window {
@@ -53,18 +61,6 @@ class SceneWindow : public Window {
 
   private:
     Scene* m_scene = nullptr;
-};
-
-class LightsWindow : public Window {
-  public:
-    LightsWindow(Lights* lights) noexcept : Window{ VisibilityDefault }, m_lights(lights) {}
-
-    void Draw();
-
-    static constexpr bool VisibilityDefault = false;
-
-  private:
-    Lights* m_lights = nullptr;
 };
 
 class FileBrowserWindow {
@@ -112,11 +108,10 @@ static ImFont* LoadFont(const char* font_name, float font_size)
 
 static void UploadFonts(etna::Device device, etna::Queue graphics_queue)
 {
-    auto queue_index    = graphics_queue.FamilyIndex();
-    auto command_pool   = device.CreateCommandPool(queue_index, etna::CommandPoolCreate::Transient);
+    auto command_pool   = device.CreateCommandPool(graphics_queue.FamilyIndex(), etna::CommandPoolCreate::Transient);
     auto command_buffer = command_pool->AllocateCommandBuffer();
 
-    //ImGui_ImplVulkan_DestroyFontsTexture(); TODO
+    // ImGui_ImplVulkan_DestroyFontsTexture(); TODO
 
     command_buffer->Begin(etna::CommandBufferUsage::OneTimeSubmit);
     ImGui_ImplVulkan_CreateFontsTexture(*command_buffer);
@@ -155,8 +150,6 @@ struct GuiAccessor final {
                 set_visibility(window.back(), CameraWindow::VisibilityDefault, &gui->m_windows.camera->visible);
             } else if (window.starts_with("Scene=")) {
                 set_visibility(window.back(), SceneWindow::VisibilityDefault, &gui->m_windows.scene->visible);
-            } else if (window.starts_with("Lights=")) {
-                set_visibility(window.back(), LightsWindow::VisibilityDefault, &gui->m_windows.lights->visible);
             }
         }
     }
@@ -167,7 +160,6 @@ struct GuiAccessor final {
         out->append("[Windows][Visibility]\n");
         out->appendf("Camera=%d\n", gui->m_windows.camera->visible);
         out->appendf("Scene=%d\n", gui->m_windows.scene->visible);
-        out->appendf("Lights=%d\n", gui->m_windows.lights->visible);
     }
 };
 
@@ -281,9 +273,8 @@ Gui::Gui(
         UploadFonts(parameters.device, parameters.graphics_queue);
     }
 
-    m_windows.camera      = std::make_unique<CameraWindow>(camera);
+    m_windows.camera      = std::make_unique<CameraWindow>(camera, lights);
     m_windows.scene       = std::make_unique<SceneWindow>(scene);
-    m_windows.lights      = std::make_unique<LightsWindow>(lights);
     m_windows.filebrowser = std::make_unique<FileBrowserWindow>();
 
     auto settings_handler = ImGuiSettingsHandler{};
@@ -387,7 +378,6 @@ void Gui::ShowMenuBar()
         }
         if (ImGui::BeginMenu("Windows")) {
             ImGui::MenuItem("Camera", nullptr, &m_windows.camera->visible);
-            ImGui::MenuItem("Lights", nullptr, &m_windows.lights->visible);
             ImGui::MenuItem("Scene", nullptr, &m_windows.scene->visible);
             ImGui::EndMenu();
         }
@@ -416,7 +406,6 @@ void Gui::Draw(
 
     m_windows.camera->Draw();
     m_windows.scene->Draw();
-    m_windows.lights->Draw();
     m_windows.filebrowser->Draw();
 
     if (m_windows.filebrowser->HasSelectedPath()) {
@@ -466,9 +455,38 @@ void AddLabel(const char* label, const char* tooltip, float position)
     }
 }
 
+bool Window::PreBegin()
+{
+    auto frame = ImGui::GetFrameCount();
+
+    if (frame <= 3) {
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.0f);
+        if (frame == 3) {
+            ImGui::SetNextWindowSize(default_size, ImGuiCond_FirstUseEver);
+        }
+        return true;
+    }
+    return visible;
+}
+
+void Window::SetDefaultSize(float width_multiplier, float height_multiplier)
+{
+    if (ImGui::GetFrameCount() == 2) {
+        auto [width, height] = ImGui::GetWindowSize();
+        default_size         = { width_multiplier * width, height_multiplier * height };
+    }
+}
+
+void Window::PostEnd()
+{
+    if (ImGui::GetFrameCount() <= 3) {
+        ImGui::PopStyleVar();
+    }
+}
+
 void CameraWindow::Draw()
 {
-    if (not visible) {
+    if (PreBegin() == false) {
         return;
     }
 
@@ -476,14 +494,18 @@ void CameraWindow::Draw()
 
     ImGui::Begin("Camera", &visible, ImGuiWindowFlags_NoCollapse);
 
+    SetDefaultSize(2.0f, 1.5f);
+
     float label_width    = ImGui::CalcTextSize("Elevation").x + ImGui::GetStyle().ItemSpacing.x;
     float label_position = 0.0f;
 
     ImGui::PushItemWidth(-label_width);
 
-    {
-        ImGui::Text("View");
+    auto& style = ImGui::GetStyle();
 
+    ImGui::PushStyleColor(ImGuiCol_Header, style.Colors[ImGuiCol_MenuBarBg]);
+
+    if (ImGui::CollapsingHeader("View", ImGuiTreeNodeFlags_DefaultOpen)) {
         auto coordinates     = m_camera->ComputeSphericalCoordinates();
         auto offset          = m_camera->GetOffset();
         auto camera_up_label = ToString(coordinates.camera_up);
@@ -505,7 +527,7 @@ void CameraWindow::Draw()
 
             label_position = ImGui::GetCursorPosX() + ImGui::GetItemRectSize().x + ImGui::GetStyle().ItemSpacing.x;
 
-            AddLabel("Elevation", "Camera Elevation", label_position);
+            AddLabel("Elevation", "Camera Elevation Angle", label_position);
         }
 
         bool camera_azimuth;
@@ -522,7 +544,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Azimuth", "Camera Azimuth", label_position);
+            AddLabel("Azimuth", "Camera Azimuth Angle", label_position);
         }
 
         bool camera_up;
@@ -567,7 +589,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Track H", "Camera Track Horizontal", label_position);
+            AddLabel("Track H", "Camera Track Horizontal Distance", label_position);
         }
 
         bool offset_vertical;
@@ -578,7 +600,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Track V", "Camera Track Vertical", label_position);
+            AddLabel("Track V", "Camera Track Vertical Distance", label_position);
         }
 
         if (camera_elevation || camera_azimuth || camera_up || camera_distance) {
@@ -591,11 +613,7 @@ void CameraWindow::Draw()
         }
     }
 
-    ImGui::Dummy({ 0, 20 });
-
-    {
-        ImGui::Text("Perspective");
-
+    if (ImGui::CollapsingHeader("Perspective")) {
         auto perspective = m_camera->GetPerspective();
 
         bool fovy;
@@ -612,7 +630,7 @@ void CameraWindow::Draw()
 
             ImGui::PopID();
 
-            AddLabel("Fov V", "Field of View Vertical", label_position);
+            AddLabel("Fov V", "Field of View Vertical Angle", label_position);
         }
 
         bool clip_planes;
@@ -640,11 +658,7 @@ void CameraWindow::Draw()
         }
     }
 
-    ImGui::Dummy({ 0, 20 });
-
-    {
-        ImGui::Text("Coordinate System");
-
+    if (ImGui::CollapsingHeader("Coordinate System")) {
         auto basis         = m_camera->GetBasis();
         auto labels        = ToStringArray<Axis>();
         auto labels_count  = static_cast<int>(labels.size());
@@ -718,9 +732,67 @@ void CameraWindow::Draw()
         }
     }
 
+    if (ImGui::CollapsingHeader("Lights")) {
+        ImGui::TextUnformatted("Key Light");
+        {
+            auto* multiplier = &m_lights->KeyRef().MultiplierRef();
+
+            ImGui::PushID("camera/key_color");
+            ImGui::ColorEdit3("", &m_lights->KeyRef().ColorRef());
+            ImGui::PopID();
+            AddLabel("Color", "Key Light Color", label_position);
+
+            ImGui::PushID("camera/key_mul");
+            ImGui::SliderFloat("", multiplier, 0, 2, "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::PopID();
+            AddLabel("Multiplier", "Key Light Multiplier", label_position);
+
+            ImGui::PushID("camera/key_elevation");
+            ImGui::SliderAngle("", &m_lights->KeyRef().ElevationRef(), -90, 90);
+            ImGui::PopID();
+            AddLabel("Elevation", "Key Light Elevation Angle", label_position);
+
+            ImGui::PushID("camera/key_azimuth");
+            ImGui::SliderAngle("", &m_lights->KeyRef().AzimuthRef(), -90, 90);
+            ImGui::PopID();
+            AddLabel("Azimuth", "Key Light Azimuth Angle", label_position);
+        }
+
+        ImGui::Dummy({ 0, 10 });
+
+        ImGui::TextUnformatted("Fill Light");
+        {
+            auto* multiplier = &m_lights->FillRef().MultiplierRef();
+
+            ImGui::PushID("camera/fill_color");
+            ImGui::ColorEdit3("", &m_lights->FillRef().ColorRef());
+            ImGui::PopID();
+            AddLabel("Color", "Fill Light Color", label_position);
+
+            ImGui::PushID("camera/fill_mul");
+            ImGui::SliderFloat("", multiplier, 0, 2, "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::PopID();
+            AddLabel("Multiplier", "Fill Light Multiplier", label_position);
+
+            ImGui::PushID("camera/fill_elevation");
+            ImGui::SliderAngle("", &m_lights->FillRef().ElevationRef(), -90, 90);
+            ImGui::PopID();
+            AddLabel("Elevation", "Fill Light Elevation Angle", label_position);
+
+            ImGui::PushID("camera/fill_azimuth");
+            ImGui::SliderAngle("", &m_lights->FillRef().AzimuthRef(), -90, 90);
+            ImGui::PopID();
+            AddLabel("Azimuth", "Fill Light Azimuth Angle", label_position);
+        }
+    }
+
     ImGui::PopItemWidth();
 
+    ImGui::PopStyleColor();
+
     ImGui::End();
+
+    PostEnd();
 }
 
 struct DrawProperty final {
@@ -860,49 +932,22 @@ void DrawNode(NodePtr node)
 
 void SceneWindow::Draw()
 {
-    if (not visible) {
+    if (PreBegin() == false) {
         return;
+    }
+
+    if (ImGui::GetFrameCount() == 3) {
+        auto position = ImVec2{ 0.98f * ImGui::GetIO().DisplaySize.x - default_size.x, ImGui::GetCursorPosY() };
+        ImGui::SetNextWindowPos(position, ImGuiCond_FirstUseEver);
     }
 
     ImGui::Begin("Scene", &visible, ImGuiWindowFlags_NoCollapse);
 
+    SetDefaultSize(4.0f, 5.0f);
+
     DrawNode(m_scene->GetRootNodePtr());
 
     ImGui::End();
-}
 
-void LightsWindow::Draw()
-{
-    if (not visible) {
-        return;
-    }
-
-    ImGui::Begin("Lights", &visible, ImGuiWindowFlags_NoCollapse);
-    ImGui::PushItemWidth(-ImGui::CalcTextSize("Multiplier ").x);
-
-    ImGui::TextUnformatted("Key Light");
-    {
-        auto* multiplier = &m_lights->KeyRef().MultiplierRef();
-
-        ImGui::ColorEdit3("Color##key", &m_lights->KeyRef().ColorRef());
-        ImGui::SliderFloat("Multiplier##key", multiplier, 0, 2, "%.2f", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderAngle("Elevation##key", &m_lights->KeyRef().ElevationRef(), -90, 90);
-        ImGui::SliderAngle("Azimuth##key", &m_lights->KeyRef().AzimuthRef(), -90, 90);
-    }
-
-    ImGui::Dummy({ 0, 20 });
-
-    ImGui::TextUnformatted("Fill Light");
-    {
-        auto* multiplier = &m_lights->FillRef().MultiplierRef();
-
-        ImGui::ColorEdit3("Color##fill", &m_lights->FillRef().ColorRef());
-        ImGui::SliderFloat("Multiplier##fill", multiplier, 0, 2, "%.2f", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderAngle("Elevation##fill", &m_lights->FillRef().ElevationRef(), -90, 90);
-        ImGui::SliderAngle("Azimuth##fill", &m_lights->FillRef().AzimuthRef(), -90, 90);
-    }
-
-    ImGui::PopItemWidth();
-
-    ImGui::End();
+    PostEnd();
 }

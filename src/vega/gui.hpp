@@ -19,12 +19,10 @@ class Scene;
 
 class CameraWindow;
 class FileBrowserWindow;
-class LightsWindow;
 class SceneWindow;
 
 using UniqueCameraWindow      = std::unique_ptr<CameraWindow>;
 using UniqueFileBrowserWindow = std::unique_ptr<FileBrowserWindow>;
-using UniqueLightsWindow      = std::unique_ptr<LightsWindow>;
 using UniqueSceneWindow       = std::unique_ptr<SceneWindow>;
 
 class Gui {
@@ -134,7 +132,6 @@ class Gui {
     struct Windows final {
         UniqueSceneWindow       scene;
         UniqueCameraWindow      camera;
-        UniqueLightsWindow      lights;
         UniqueFileBrowserWindow filebrowser;
     };
 
