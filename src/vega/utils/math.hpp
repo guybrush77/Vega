@@ -31,6 +31,24 @@ struct AABB final {
     Float3 min;
     Float3 max;
 
+    void Expand(const Float3& point) noexcept
+    {
+        if (point.x < min.x)
+            min.x = point.x;
+        if (point.x > max.x)
+            max.x = point.x;
+
+        if (point.y < min.y)
+            min.y = point.y;
+        if (point.y > max.y)
+            max.y = point.y;
+
+        if (point.z < min.z)
+            min.z = point.z;
+        if (point.z > max.z)
+            max.z = point.z;
+    }
+
     auto Center() const noexcept { return 0.5f * (min + max); }
     auto ExtentX() const noexcept { return max.x - min.x; }
     auto ExtentY() const noexcept { return max.y - min.y; }

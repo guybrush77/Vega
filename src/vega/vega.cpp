@@ -42,9 +42,64 @@ struct VertexPN final {
     glm::vec3 normal;
 };
 
+bool operator==(const VertexPN& lhs, const VertexPN& rhs) noexcept
+{
+    return (lhs.position == rhs.position) && (glm::dot(lhs.normal, rhs.normal) > 0.999847695f);
+}
+
 DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
 
 DECLARE_VERTEX_TYPE(VertexPN, Position3f | Normal3f)
+
+struct Index final {
+    Index() noexcept = default;
+
+    constexpr Index(tinyobj::index_t idx) noexcept
+        : vertex(static_cast<uint32_t>(idx.vertex_index)), normal(static_cast<uint32_t>(idx.normal_index)),
+          texcoord(static_cast<uint32_t>(idx.texcoord_index))
+    {}
+
+    uint32_t vertex;
+    uint32_t normal;
+    uint32_t texcoord;
+};
+
+constexpr bool operator==(const Index& lhs, const Index& rhs) noexcept
+{
+    return lhs.vertex == rhs.vertex && lhs.normal == rhs.normal && lhs.texcoord == rhs.texcoord;
+}
+
+namespace std {
+
+template <>
+struct hash<VertexPN> {
+    size_t operator()(const VertexPN& vertex) const noexcept
+    {
+        size_t hash = 23;
+
+        hash = hash * 31 + std::hash<float>{}(vertex.position.x);
+        hash = hash * 31 + std::hash<float>{}(vertex.position.y);
+        hash = hash * 31 + std::hash<float>{}(vertex.position.z);
+
+        return hash;
+    }
+};
+
+template <>
+struct hash<Index> {
+    size_t operator()(const Index& index) const noexcept
+    {
+        size_t hash = 23;
+
+        hash = hash * 31 + index.vertex;
+        hash = hash * 31 + index.normal;
+        hash = hash * 31 + index.texcoord;
+
+        return hash;
+    }
+};
+
+} // namespace std
 
 struct GLFW {
     GLFW()
@@ -55,35 +110,119 @@ struct GLFW {
     ~GLFW() { glfwTerminate(); }
 } glfw;
 
-struct Index final {
-    Index() noexcept = default;
-
-    constexpr Index(tinyobj::index_t idx) noexcept
-        : vertex(static_cast<uint32_t>(idx.vertex_index)), normal(static_cast<uint32_t>(idx.normal_index)),
-          texcoord(static_cast<uint32_t>(idx.texcoord_index))
-    {}
-
-    struct Hash final {
-        constexpr size_t operator()(const Index& index) const noexcept
-        {
-            size_t hash = 23;
-
-            hash = hash * 31 + index.vertex;
-            hash = hash * 31 + index.normal;
-            hash = hash * 31 + index.texcoord;
-
-            return hash;
-        }
-    };
-
-    uint32_t vertex;
-    uint32_t normal;
-    uint32_t texcoord;
-};
-
-constexpr bool operator==(const Index& lhs, const Index& rhs) noexcept
+static MeshPtr GenerateMeshPN(ScenePtr scene, const tinyobj::attrib_t& attributes, const tinyobj::mesh_t& mesh)
 {
-    return lhs.vertex == rhs.vertex && lhs.normal == rhs.normal && lhs.texcoord == rhs.texcoord;
+    auto num_indices = mesh.indices.size();
+
+    assert(num_indices % 3 == 0);
+
+    auto index_map = std::unordered_map<Index, uint32_t>{};
+    auto vertices  = std::vector<VertexPN>{};
+    auto indices   = std::vector<uint32_t>{};
+
+    auto aabb = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
+
+    for (size_t i = 0; i < num_indices; i += 3) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            auto index = Index(mesh.indices[i + j]);
+            if (auto it = index_map.find(index); it != index_map.end()) {
+                indices.push_back(it->second);
+            } else {
+                auto position_idx = static_cast<size_t>(3) * index.vertex;
+                auto normal_idx   = static_cast<size_t>(3) * index.normal;
+
+                auto position = glm::vec3(
+                    attributes.vertices[position_idx + 0],
+                    attributes.vertices[position_idx + 1],
+                    attributes.vertices[position_idx + 2]);
+
+                auto normal = glm::vec3(
+                    attributes.normals[normal_idx + 0],
+                    attributes.normals[normal_idx + 1],
+                    attributes.normals[normal_idx + 2]);
+
+                auto vertex = VertexPN(position, normal);
+
+                vertices.push_back(vertex);
+
+                aabb.min = { std::min(aabb.min.x, vertex.position.x),
+                             std::min(aabb.min.y, vertex.position.y),
+                             std::min(aabb.min.z, vertex.position.z) };
+
+                aabb.max = { std::max(aabb.max.x, vertex.position.x),
+                             std::max(aabb.max.y, vertex.position.y),
+                             std::max(aabb.max.z, vertex.position.z) };
+
+                auto idx         = static_cast<uint32_t>(vertices.size() - 1);
+                index_map[index] = idx;
+
+                indices.push_back(idx);
+            }
+        }
+    }
+
+    return scene->CreateMesh(aabb, std::move(vertices), std::move(indices));
+}
+
+static MeshPtr GenerateMeshP(ScenePtr scene, const tinyobj::attrib_t& attributes, const tinyobj::mesh_t& mesh)
+{
+    auto num_indices = mesh.indices.size();
+
+    assert(num_indices % 3 == 0);
+
+    auto vertices = std::vector<VertexPN>{};
+    auto indices  = std::vector<uint32_t>{};
+
+    auto index_map = std::unordered_map<VertexPN, size_t>();
+
+    auto aabb = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
+
+    for (size_t i = 0; i < num_indices; i += 3) {
+        auto i0     = size_t(3) * mesh.indices[i + 0].vertex_index;
+        auto i1     = size_t(3) * mesh.indices[i + 1].vertex_index;
+        auto i2     = size_t(3) * mesh.indices[i + 2].vertex_index;
+        auto pos0   = glm::vec3(attributes.vertices[i0 + 0], attributes.vertices[i0 + 1], attributes.vertices[i0 + 2]);
+        auto pos1   = glm::vec3(attributes.vertices[i1 + 0], attributes.vertices[i1 + 1], attributes.vertices[i1 + 2]);
+        auto pos2   = glm::vec3(attributes.vertices[i2 + 0], attributes.vertices[i2 + 1], attributes.vertices[i2 + 2]);
+        auto e1     = pos1 - pos0;
+        auto e2     = pos2 - pos0;
+        auto normal = glm::normalize(glm::cross(e1, e2));
+
+        auto vertex0 = VertexPN(pos0, normal);
+        auto vertex1 = VertexPN(pos1, normal);
+        auto vertex2 = VertexPN(pos2, normal);
+
+        size_t index0 = vertices.size();
+        if (auto [kv, is_inserted] = index_map.insert({ vertex0, index0 }); is_inserted) {
+            vertices.push_back(vertex0);
+        } else {
+            index0 = kv->second;
+        }
+
+        size_t index1 = vertices.size();
+        if (auto [kv, is_inserted] = index_map.insert({ vertex1, index1 }); is_inserted) {
+            vertices.push_back(vertex1);
+        } else {
+            index1 = kv->second;
+        }
+
+        size_t index2 = vertices.size();
+        if (auto [kv, is_inserted] = index_map.insert({ vertex2, index2 }); is_inserted) {
+            vertices.push_back(vertex2);
+        } else {
+            index2 = kv->second;
+        }
+
+        indices.push_back(etna::narrow_cast<uint32_t>(index0));
+        indices.push_back(etna::narrow_cast<uint32_t>(index1));
+        indices.push_back(etna::narrow_cast<uint32_t>(index2));
+
+        aabb.Expand({ pos0.x, pos0.y, pos0.z });
+        aabb.Expand({ pos1.x, pos1.y, pos1.z });
+        aabb.Expand({ pos2.x, pos2.y, pos2.z });
+    }
+
+    return scene->CreateMesh(aabb, std::move(vertices), std::move(indices));
 }
 
 void LoadObj(ScenePtr scene, std::filesystem::path filepath)
@@ -122,57 +261,14 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
 
     auto root_node = scene->GetRootNodePtr();
 
-    auto index_map = std::unordered_map<Index, uint32_t, Index::Hash>{};
-    auto vertices  = std::vector<VertexPN>{};
-    auto indices   = std::vector<uint32_t>{};
-    auto meshes    = std::vector<Mesh>{};
-
     for (const auto& shape : shapes) {
-        auto num_indices = shape.mesh.indices.size();
-        auto aabb        = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
+        auto mesh = MeshPtr{};
 
-        assert(num_indices % 3 == 0);
-
-        for (size_t i = 0; i < num_indices; i += 3) {
-            for (std::size_t j = 0; j < 3; ++j) {
-                auto index = Index(shape.mesh.indices[i + j]);
-                if (auto it = index_map.find(index); it != index_map.end()) {
-                    indices.push_back(it->second);
-                } else {
-                    auto position_idx = static_cast<size_t>(3) * index.vertex;
-                    auto normal_idx   = static_cast<size_t>(3) * index.normal;
-
-                    auto position = glm::vec3(
-                        attributes.vertices[position_idx + 0],
-                        attributes.vertices[position_idx + 1],
-                        attributes.vertices[position_idx + 2]);
-
-                    auto normal = glm::vec3(
-                        attributes.normals[normal_idx + 0],
-                        attributes.normals[normal_idx + 1],
-                        attributes.normals[normal_idx + 2]);
-
-                    auto vertex = VertexPN(position, normal);
-
-                    vertices.push_back(vertex);
-
-                    aabb.min = { std::min(aabb.min.x, vertex.position.x),
-                                 std::min(aabb.min.y, vertex.position.y),
-                                 std::min(aabb.min.z, vertex.position.z) };
-
-                    aabb.max = { std::max(aabb.max.x, vertex.position.x),
-                                 std::max(aabb.max.y, vertex.position.y),
-                                 std::max(aabb.max.z, vertex.position.z) };
-
-                    auto idx         = static_cast<uint32_t>(vertices.size() - 1);
-                    index_map[index] = idx;
-
-                    indices.push_back(idx);
-                }
-            }
+        if (attributes.normals.empty()) {
+            mesh = GenerateMeshP(scene, attributes, shape.mesh);
+        } else {
+            mesh = GenerateMeshPN(scene, attributes, shape.mesh);
         }
-
-        auto mesh = scene->CreateMesh(aabb, std::move(vertices), std::move(indices));
 
         mesh->SetProperty("Name", shape.name);
 
