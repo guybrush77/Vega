@@ -367,6 +367,7 @@ class Node : public Object {
   public:
     Node(ID id) noexcept : Object(id) {}
 
+    virtual bool HasChildren() const                 = 0;
     virtual auto GetChildren() const -> NodePtrArray = 0;
 
   protected:
@@ -382,6 +383,7 @@ class InternalNode : public Node {
     auto AddScaleNode(float factor) -> ScaleNodePtr;
     auto AddMeshNode(MeshPtr mesh, MaterialInstancePtr material) -> MeshNodePtr;
 
+    bool HasChildren() const override;
     auto GetChildren() const -> NodePtrArray override;
 
   protected:
@@ -491,6 +493,7 @@ class MeshNode final : public Node {
 
     auto GetMetadata() const -> MetadataRef override { return metadata; }
     auto GetField(std::string_view field_name) -> ValueRef override;
+    bool HasChildren() const override { return false; }
     auto GetChildren() const -> NodePtrArray override { return NodePtrArray{}; }
     json ToJson() const override;
 

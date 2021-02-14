@@ -43,6 +43,10 @@ void RenderContext::ProcessUserInput()
         return;
     }
 
+    if (!m_scene->GetRootNodePtr()->HasChildren()) {
+        return;
+    }
+
     if (m_mouse_look == MouseLook::None) {
         if (m_is_any_window_hovered || m_gui->IsAnyWindowHovered()) {
             m_is_any_window_hovered = true;

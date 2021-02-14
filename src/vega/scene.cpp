@@ -154,6 +154,12 @@ struct ObjectAccess {
     }
 
     template <typename T>
+    static auto HasChildren(const T* parent)
+    {
+        return !parent->m_children.empty();
+    }
+
+    template <typename T>
     static auto GetChildren(const T* parent)
     {
         NodePtrArray ret;
@@ -303,6 +309,11 @@ MeshNodePtr InternalNode::AddMeshNode(MeshPtr mesh, MaterialInstancePtr material
     assert(mesh && material);
     m_children.push_back(ObjectAccess::MakeUnique<MeshNode>(GetUniqueID(), mesh, material));
     return static_cast<MeshNodePtr>(m_children.back().get());
+}
+
+bool InternalNode::HasChildren() const
+{
+    return ObjectAccess::HasChildren(this);
 }
 
 NodePtrArray InternalNode::GetChildren() const
