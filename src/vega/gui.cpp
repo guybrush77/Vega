@@ -826,9 +826,11 @@ void DrawObjectProperties(ObjectPtr object, int* ptr_id)
     auto& id = *ptr_id;
 
     for (const auto& [key, value] : object->Properties()) {
-        ImGui::PushID(id++);
-        std::visit(DrawProperty{ key.c_str() }, value);
-        ImGui::PopID();
+        if (!IsReservedProperty(key)) {
+            ImGui::PushID(id++);
+            std::visit(DrawProperty{ key.c_str() }, value);
+            ImGui::PopID();
+        }
     }
 }
 
@@ -839,6 +841,15 @@ void DrawObjectFields(ObjectPtr object, int* ptr_id)
 
     auto& metadata = object->GetMetadata();
     auto& id       = *ptr_id;
+
+    if (metadata.object_description) {
+        auto text = const_cast<char*>(metadata.object_description);
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+        ImGui::PushID(id++);
+        ImGui::InputText("Type", text, strlen(text), readonly);
+        ImGui::PopID();
+        ImGui::PopStyleVar();
+    }
 
     if (object->HasProperties()) {
         DrawObjectProperties(object, ptr_id);
@@ -911,8 +922,6 @@ void DrawObjectFields(ObjectPtr object, int* ptr_id)
 
 void DrawNode(NodePtr node)
 {
-    const auto& metadata = node->GetMetadata();
-
     auto id = node->GetID().value;
 
     assert(id <= 0x00fffff0); // TODO
@@ -921,7 +930,7 @@ void DrawNode(NodePtr node)
 
     ImGui::PushID(id++);
 
-    if (ImGui::TreeNode(metadata.object_label)) {
+    if (ImGui::TreeNode(node->Name())) {
         DrawObjectFields(node, &id);
         std::ranges::for_each(node->GetChildren(), [](NodePtr node) { DrawNode(node); });
         ImGui::TreePop();

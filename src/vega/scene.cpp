@@ -28,9 +28,9 @@ static void to_json(json& json, const UniqueNode& node)
     json = node->ToJson();
 }
 
-static void to_json(json& json, const UniqueMaterialInstance& material_instance)
+static void to_json(json& json, const UniqueMaterial& material)
 {
-    json = material_instance->ToJson();
+    json = material->ToJson();
 }
 
 static void to_json(json& json, const AABB& aabb)
@@ -44,14 +44,14 @@ static void to_json(json& json, ID id)
     json = id.value;
 }
 
-static void to_json(json& json, const Material& material)
+static void to_json(json& json, const Shader& material)
 {
     json = material.ToJson();
 }
 
-static void to_json(json& json, MeshNodePtr mesh_node)
+static void to_json(json& json, InstanceNodePtr instance_node)
 {
-    json = mesh_node->GetID();
+    json = instance_node->GetID();
 }
 
 static void to_json(json& json, const Mesh& mesh)
@@ -116,14 +116,14 @@ static void to_json(json& json, const ScaleValues& values)
 }
 
 struct MeshNodeRefs final {
-    const ID material_instance;
+    const ID material;
     const ID mesh;
 };
 
 static void to_json(json& json, const MeshNodeRefs& values)
 {
-    json["material.instance"] = values.material_instance;
-    json["mesh"]              = values.mesh;
+    json["material"] = values.material;
+    json["mesh"]     = values.mesh;
 }
 
 struct MeshValues final {
@@ -170,10 +170,10 @@ struct ObjectAccess {
         return ret;
     }
 
-    static void AddMeshInstancePtr(MeshNodePtr mesh_node, MaterialInstancePtr material_instance)
+    static void AddInstancePtr(InstanceNodePtr instance_node, MaterialPtr material)
     {
-        assert(mesh_node && material_instance);
-        material_instance->AddMeshNodePtr(mesh_node);
+        assert(instance_node && material);
+        material->AddInstanceNodePtr(instance_node);
     }
 
     static void ApplyTransform(NodePtr node, const glm::mat4& matrix) { node->ApplyTransform(matrix); }
@@ -196,29 +196,29 @@ struct ObjectAccess {
     }
 };
 
-class MaterialManager {
+class ShaderManager {
   public:
-    MaterialPtr CreateMaterial()
+    ShaderPtr CreateShader()
     {
         auto  id       = GetUniqueID();
-        auto& material = m_materials[id] = ObjectAccess::MakeUnique<Material>(id);
+        auto& material = m_shaders[id] = ObjectAccess::MakeUnique<Shader>(id);
         return material.get();
     }
 
-    MaterialPtrArray GetMaterials() const
+    ShaderPtrArray GetShaders() const
     {
-        auto view = std::views::transform(m_materials, [](auto& material) { return material.second.get(); });
-        return MaterialPtrArray(view.begin(), view.end());
+        auto view = std::views::transform(m_shaders, [](auto& shader) { return shader.second.get(); });
+        return ShaderPtrArray(view.begin(), view.end());
     }
 
     json ToJson() const
     {
-        auto view = std::views::transform(m_materials, [](auto& material) { return std::ref(*material.second); });
-        return nlohmann::json(MaterialRefArray(view.begin(), view.end()));
+        auto view = std::views::transform(m_shaders, [](auto& shader) { return std::ref(*shader.second); });
+        return nlohmann::json(ShaderRefArray(view.begin(), view.end()));
     }
 
   private:
-    std::unordered_map<ID, UniqueMaterial, ID::Hash> m_materials;
+    std::unordered_map<ID, UniqueShader, ID::Hash> m_shaders;
 };
 
 class MeshManager {
@@ -273,9 +273,9 @@ ValueRef Mesh::GetField(std::string_view field_name)
 }
 
 Metadata Mesh::metadata = {
-    "object.mesh",
+    "mesh",
     "Mesh",
-    nullptr,
+    "Mesh",
     { Field{ "aabb.min", "Min", nullptr, ValueType::Float3, Field::IsEditable{ false } },
       Field{ "aabb.max", "Max", nullptr, ValueType::Float3, Field::IsEditable{ false } },
       Field{ "vertex.attributes", "Vertex Attributes", nullptr, ValueType::String, Field::IsEditable{ false } },
@@ -285,6 +285,12 @@ Metadata Mesh::metadata = {
       Field{ "index.size", "Index Size", nullptr, ValueType::Int, Field::IsEditable{ false } },
       Field{ "index.count", "Index Count", nullptr, ValueType::Int, Field::IsEditable{ false } } }
 };
+
+GroupNodePtr InternalNode::AddGroupNode()
+{
+    m_children.push_back(ObjectAccess::MakeUnique<GroupNode>(GetUniqueID()));
+    return static_cast<GroupNodePtr>(m_children.back().get());
+}
 
 TranslateNodePtr InternalNode::AddTranslateNode(float x, float y, float z)
 {
@@ -304,11 +310,11 @@ ScaleNodePtr InternalNode::AddScaleNode(float factor)
     return static_cast<ScaleNodePtr>(m_children.back().get());
 }
 
-MeshNodePtr InternalNode::AddMeshNode(MeshPtr mesh, MaterialInstancePtr material)
+InstanceNodePtr InternalNode::AddInstanceNode(MeshPtr mesh, MaterialPtr material)
 {
     assert(mesh && material);
-    m_children.push_back(ObjectAccess::MakeUnique<MeshNode>(GetUniqueID(), mesh, material));
-    return static_cast<MeshNodePtr>(m_children.back().get());
+    m_children.push_back(ObjectAccess::MakeUnique<InstanceNode>(GetUniqueID(), mesh, material));
+    return static_cast<InstanceNodePtr>(m_children.back().get());
 }
 
 bool InternalNode::HasChildren() const
@@ -323,9 +329,9 @@ NodePtrArray InternalNode::GetChildren() const
 
 Scene::Scene()
 {
-    m_root_node        = ObjectAccess::MakeUnique<RootNode>(GetUniqueID());
-    m_material_manager = std::make_unique<MaterialManager>();
-    m_mesh_manager     = std::make_unique<MeshManager>();
+    m_root_node      = ObjectAccess::MakeUnique<RootNode>(GetUniqueID());
+    m_shader_manager = std::make_unique<ShaderManager>();
+    m_mesh_manager   = std::make_unique<MeshManager>();
 }
 
 DrawList Scene::ComputeDrawList() const
@@ -336,10 +342,10 @@ DrawList Scene::ComputeDrawList() const
 
     auto draw_list = DrawList{};
 
-    for (auto material : m_material_manager->GetMaterials()) {
-        for (auto material_instance : material->GetMaterialInstances()) {
-            for (auto mesh_node : material_instance->GetMeshNodes()) {
-                draw_list.push_back({ mesh_node->GetMeshPtr(), mesh_node->GetTransformPtr() });
+    for (auto shader : m_shader_manager->GetShaders()) {
+        for (auto material : shader->GetMaterials()) {
+            for (auto instance : material->GetInstanceNodes()) {
+                draw_list.push_back({ instance->GetMeshPtr(), instance->GetTransformPtr() });
             }
         }
     }
@@ -359,11 +365,11 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
 
     auto out = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
 
-    for (auto material : m_material_manager->GetMaterials()) {
-        for (auto material_instance : material->GetMaterialInstances()) {
-            for (auto mesh_node : material_instance->GetMeshNodes()) {
-                if (auto* mesh = mesh_node->GetMeshPtr()) {
-                    auto& model = *mesh_node->GetTransformPtr();
+    for (auto shader : m_shader_manager->GetShaders()) {
+        for (auto material : shader->GetMaterials()) {
+            for (auto instance : material->GetInstanceNodes()) {
+                if (auto* mesh = instance->GetMeshPtr()) {
+                    auto& model = *instance->GetTransformPtr();
                     auto& aabb  = mesh->GetBoundingBox();
                     auto  vec_a = model * glm::vec4(aabb.min.x, aabb.min.y, aabb.min.z, 1);
                     auto  vec_b = model * glm::vec4(aabb.max.x, aabb.max.y, aabb.max.z, 1);
@@ -379,11 +385,6 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
     }
 
     return out;
-}
-
-ValueRef RootNode::GetField(std::string_view)
-{
-    return {};
 }
 
 Metadata RootNode::metadata = { "root.node", "Root", nullptr, {} };
@@ -405,44 +406,63 @@ void RootNode::ApplyTransform(const glm::mat4& matrix) noexcept
     }
 }
 
-json MeshNode::ToJson() const
+json GroupNode::ToJson() const
+{
+    json json;
+
+    ObjectAccess::ThisToJson(this, json);
+    ObjectAccess::ChildrenToJson(m_children, json);
+
+    return json;
+}
+
+void GroupNode::ApplyTransform(const glm::mat4& matrix) noexcept
+{
+    for (auto& node : m_children) {
+        ObjectAccess::ApplyTransform(static_cast<NodePtr>(node.get()), matrix);
+    }
+}
+
+Metadata GroupNode::metadata = { "group.node", "Group", nullptr };
+
+json InstanceNode::ToJson() const
 {
     json json;
 
     ObjectAccess::ThisToJson(this, json);
 
-    json["object.refs"] = MeshNodeRefs{ m_material_instance->GetID(), m_mesh->GetID() };
+    json["object.refs"] = MeshNodeRefs{ m_material->GetID(), m_mesh->GetID() };
 
     return json;
 }
 
-ValueRef MeshNode::GetField(std::string_view field_name)
+ValueRef InstanceNode::GetField(std::string_view field_name)
 {
     if (field_name == "mesh") {
         return ValueRef(m_mesh);
-    } else if (field_name == "material.instance") {
-        return ValueRef(m_material_instance);
+    } else if (field_name == "material") {
+        return ValueRef(m_material);
     }
     return {};
 }
 
-Metadata MeshNode::metadata = {
-    "mesh.node",
-    "Mesh",
+Metadata InstanceNode::metadata = {
+    "instance.node",
+    "Mesh Instance",
     nullptr,
     { Field{ "mesh", "Mesh", nullptr, ValueType::Reference, Field::IsEditable{ false } },
-      Field{ "material.instance", "Material Instance", nullptr, ValueType::Reference, Field::IsEditable{ false } } }
+      Field{ "material", "Material", nullptr, ValueType::Reference, Field::IsEditable{ false } } }
 };
 
-void MeshNode::ApplyTransform(const glm::mat4& matrix) noexcept
+void InstanceNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     m_transform = matrix;
 }
 
-MeshNode::MeshNode(ID id, MeshPtr mesh, MaterialInstancePtr material_instance) noexcept
-    : Node(id), m_mesh(mesh), m_material_instance(material_instance)
+InstanceNode::InstanceNode(ID id, MeshPtr mesh, MaterialPtr material) noexcept
+    : Node(id), m_mesh(mesh), m_material(material)
 {
-    ObjectAccess::AddMeshInstancePtr(this, material_instance);
+    ObjectAccess::AddInstancePtr(this, material);
 }
 
 ValueRef TranslateNode::GetField(std::string_view field_name)
@@ -453,7 +473,7 @@ ValueRef TranslateNode::GetField(std::string_view field_name)
 Metadata TranslateNode::metadata = {
     "translate.node",
     "Translate",
-    nullptr,
+    "Translate Node",
     { Field{ "translate.amount", "Amount", nullptr, ValueType::Float3, Field::IsEditable{ true } } }
 };
 
@@ -503,7 +523,7 @@ ValueRef RotateNode::GetField(std::string_view field_name)
 Metadata RotateNode::metadata = {
     "rotate.node",
     "Rotate",
-    nullptr,
+    "Rotate Node",
     { Field{ "rotate.axis", "Axis", nullptr, ValueType::Float3, Field::IsEditable{ true } },
       Field{ "rotate.angle", "Angle", nullptr, ValueType::Float, Field::IsEditable{ true } } }
 };
@@ -545,13 +565,28 @@ void ScaleNode::ApplyTransform(const glm::mat4& matrix) noexcept
 Metadata ScaleNode::metadata = {
     "scale.node",
     "Scale",
-    nullptr,
+    "Scale Node",
     { Field{ "scale.factor", "Factor", nullptr, ValueType::Float, Field::IsEditable{ true } } }
 };
+
+auto Object::Name() const noexcept -> const char*
+{
+    if (m_dictionary) {
+        if (auto it = m_dictionary->find("object.name"); it != m_dictionary->end()) {
+            return std::get<std::string>(it->second).c_str();
+        }
+    }
+    return GetMetadata().object_default_name;
+}
 
 bool Object::HasProperties() const noexcept
 {
     return m_dictionary && !m_dictionary->empty();
+}
+
+void Object::SetName(std::string name)
+{
+    SetProperty("object.name", std::move(name));
 }
 
 void Object::SetProperty(Key key, Value value)
@@ -574,18 +609,18 @@ RootNodePtr Scene::GetRootNodePtr() noexcept
     return static_cast<RootNodePtr>(m_root_node.get());
 }
 
-MaterialPtr Scene::CreateMaterial()
+ShaderPtr Scene::CreateShader()
 {
-    return m_material_manager->CreateMaterial();
+    return m_shader_manager->CreateShader();
 }
 
 json Scene::ToJson() const
 {
     json json;
 
-    json["scene"]     = m_root_node->ToJson();
-    json["materials"] = m_material_manager->ToJson();
-    json["meshes"]    = m_mesh_manager->ToJson();
+    json["scene"]   = m_root_node->ToJson();
+    json["shaders"] = m_shader_manager->ToJson();
+    json["meshes"]  = m_mesh_manager->ToJson();
 
     return json;
 }
@@ -598,16 +633,26 @@ MeshPtr Scene::CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mes
 Scene::~Scene()
 {}
 
-MaterialInstancePtr Material::CreateMaterialInstance()
+MaterialPtr Shader::CreateMaterial()
 {
-    m_instances.push_back(ObjectAccess::MakeUnique<MaterialInstance>(GetUniqueID()));
-    return static_cast<MaterialInstancePtr>(m_instances.back().get());
+    m_materials.push_back(ObjectAccess::MakeUnique<Material>(GetUniqueID()));
+    return static_cast<MaterialPtr>(m_materials.back().get());
 }
 
-MaterialInstancePtrArray Material::GetMaterialInstances() const
+MaterialPtrArray Shader::GetMaterials() const
 {
-    auto view = std::views::transform(m_instances, [](auto& instance) { return instance.get(); });
-    return MaterialInstancePtrArray(view.begin(), view.end());
+    auto view = std::views::transform(m_materials, [](auto& material) { return material.get(); });
+    return MaterialPtrArray(view.begin(), view.end());
+}
+
+json Shader::ToJson() const
+{
+    json json;
+
+    ObjectAccess::ThisToJson(this, json);
+    ObjectAccess::ChildrenToJson(m_materials, json);
+
+    return json;
 }
 
 json Material::ToJson() const
@@ -615,25 +660,15 @@ json Material::ToJson() const
     json json;
 
     ObjectAccess::ThisToJson(this, json);
-    ObjectAccess::ChildrenToJson(m_instances, json);
+
+    json["object.refs"] = m_instance_nodes;
 
     return json;
 }
 
-json MaterialInstance::ToJson() const
+void Material::AddInstanceNodePtr(InstanceNodePtr instance_node)
 {
-    json json;
-
-    ObjectAccess::ThisToJson(this, json);
-
-    json["object.refs"] = m_mesh_nodes;
-
-    return json;
-}
-
-void MaterialInstance::AddMeshNodePtr(MeshNodePtr mesh_node)
-{
-    m_mesh_nodes.push_back(mesh_node);
+    m_instance_nodes.push_back(instance_node);
 }
 
 std::string to_string(ValueType value_type)

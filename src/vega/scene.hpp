@@ -22,51 +22,53 @@ END_DISABLE_WARNINGS
 #include <variant>
 #include <vector>
 
+class GroupNode;
+class InstanceNode;
 class Material;
-class MaterialInstance;
 class Mesh;
-class MaterialManager;
 class MeshManager;
-class MeshNode;
 class Node;
 class Object;
 class RootNode;
 class RotateNode;
 class ScaleNode;
 class Scene;
+class Shader;
+class ShaderManager;
 class TranslateNode;
 
-using MaterialPtr         = Material*;
-using MaterialInstancePtr = MaterialInstance*;
-using MeshPtr             = Mesh*;
-using MeshNodePtr         = MeshNode*;
-using NodePtr             = Node*;
-using ObjectPtr           = Object*;
-using RootNodePtr         = RootNode*;
-using RotateNodePtr       = RotateNode*;
-using ScaleNodePtr        = ScaleNode*;
-using ScenePtr            = Scene*;
-using TranslateNodePtr    = TranslateNode*;
+using GroupNodePtr     = GroupNode*;
+using InstanceNodePtr  = InstanceNode*;
+using MaterialPtr      = Material*;
+using MeshPtr          = Mesh*;
+using NodePtr          = Node*;
+using ObjectPtr        = Object*;
+using RootNodePtr      = RootNode*;
+using RotateNodePtr    = RotateNode*;
+using ScaleNodePtr     = ScaleNode*;
+using ScenePtr         = Scene*;
+using ShaderPtr        = Shader*;
+using TranslateNodePtr = TranslateNode*;
 
-using UniqueMaterial         = std::unique_ptr<Material>;
-using UniqueMaterialInstance = std::unique_ptr<MaterialInstance>;
-using UniqueMesh             = std::unique_ptr<Mesh>;
-using UniqueMaterialManager  = std::unique_ptr<MaterialManager>;
-using UniqueMeshManager      = std::unique_ptr<MeshManager>;
-using UniqueNode             = std::unique_ptr<Node>;
+using UniqueMaterial      = std::unique_ptr<Material>;
+using UniqueMesh          = std::unique_ptr<Mesh>;
+using UniqueMeshManager   = std::unique_ptr<MeshManager>;
+using UniqueNode          = std::unique_ptr<Node>;
+using UniqueShader        = std::unique_ptr<Shader>;
+using UniqueShaderManager = std::unique_ptr<ShaderManager>;
 
-using MaterialPtrArray         = std::vector<MaterialPtr>;
-using MaterialInstancePtrArray = std::vector<MaterialInstancePtr>;
-using MeshNodePtrArray         = std::vector<MeshNodePtr>;
-using MeshPtrArray             = std::vector<MeshPtr>;
-using NodePtrArray             = std::vector<NodePtr>;
-using ObjectPtrArray           = std::vector<ObjectPtr>;
+using InstanceNodePtrArray = std::vector<InstanceNodePtr>;
+using MaterialPtrArray     = std::vector<MaterialPtr>;
+using MeshPtrArray         = std::vector<MeshPtr>;
+using NodePtrArray         = std::vector<NodePtr>;
+using ObjectPtrArray       = std::vector<ObjectPtr>;
+using ShaderPtrArray       = std::vector<ShaderPtr>;
 
-using MaterialRefArray         = std::vector<std::reference_wrapper<Material>>;
-using MaterialInstanceRefArray = std::vector<std::reference_wrapper<MaterialInstance>>;
-using MeshRefArray             = std::vector<std::reference_wrapper<Mesh>>;
-using NodeRefArray             = std::vector<std::reference_wrapper<Node>>;
-using ObjectRefArray           = std::vector<std::reference_wrapper<Object>>;
+using MaterialRefArray = std::vector<std::reference_wrapper<Material>>;
+using MeshRefArray     = std::vector<std::reference_wrapper<Mesh>>;
+using NodeRefArray     = std::vector<std::reference_wrapper<Node>>;
+using ObjectRefArray   = std::vector<std::reference_wrapper<Object>>;
+using ShaderRefArray   = std::vector<std::reference_wrapper<Shader>>;
 
 struct Metadata;
 
@@ -157,11 +159,16 @@ struct Field final {
 
 struct Metadata final {
     const char* object_class{};
-    const char* object_label{};
+    const char* object_default_name{};
     const char* object_description{};
 
     std::vector<Field> fields;
 };
+
+inline bool IsReservedProperty(const std::string& property) noexcept
+{
+    return property == "object.name";
+}
 
 class Object {
   public:
@@ -169,8 +176,11 @@ class Object {
 
     auto GetID() const noexcept { return m_id; }
 
+    auto Name() const noexcept -> const char*;
     auto Properties() const -> DictionaryRef { return *m_dictionary; }
     bool HasProperties() const noexcept;
+
+    void SetName(std::string name);
     void SetProperty(Key key, Value value);
     void RemoveProperty(Key key);
 
@@ -313,54 +323,54 @@ class Mesh : public Object {
     MeshIndices  m_indices;
 };
 
-class Material : public Object {
+class Shader : public Object {
   public:
-    Material(const Material&) = delete;
-    Material& operator=(const Material&) = delete;
+    Shader(const Shader&) = delete;
+    Shader& operator=(const Shader&) = delete;
 
-    Material(Material&&) = default;
-    Material& operator=(Material&&) = default;
+    Shader(Shader&&) = default;
+    Shader& operator=(Shader&&) = default;
 
     auto GetMetadata() const -> MetadataRef override { return metadata; }
 
     auto GetField(std::string_view) -> ValueRef override { return {}; }
 
-    auto CreateMaterialInstance() -> MaterialInstancePtr;
+    auto CreateMaterial() -> MaterialPtr;
 
-    auto GetMaterialInstances() const -> MaterialInstancePtrArray;
+    auto GetMaterials() const -> MaterialPtrArray;
 
     json ToJson() const override;
 
   protected:
     friend struct ObjectAccess;
 
-    Material(ID id) noexcept : Object(id){};
+    Shader(ID id) noexcept : Object(id){};
 
-    inline static Metadata metadata = { "material", "Material", nullptr, {} };
+    inline static Metadata metadata = { "shader", "Shader", "Shader", {} };
 
-    std::vector<UniqueMaterialInstance> m_instances;
+    std::vector<UniqueMaterial> m_materials;
 };
 
-class MaterialInstance final : public Material {
+class Material final : public Shader {
   public:
-    MaterialInstance(const MaterialInstance&) = delete;
-    MaterialInstance& operator=(const MaterialInstance&) = delete;
+    Material(const Material&) = delete;
+    Material& operator=(const Material&) = delete;
 
     auto GetMetadata() const -> MetadataRef override { return metadata; }
     json ToJson() const override;
 
-    auto GetMeshNodes() const { return m_mesh_nodes; }
+    auto GetInstanceNodes() const { return m_instance_nodes; }
 
   private:
     friend struct ObjectAccess;
 
-    MaterialInstance(ID id) noexcept : Material(id) {}
+    Material(ID id) noexcept : Shader(id) {}
 
-    void AddMeshNodePtr(MeshNodePtr mesh_node);
+    void AddInstanceNodePtr(InstanceNodePtr mesh_instance_node);
 
-    inline static Metadata metadata = { "material.instance", "Material Instance", nullptr, {} };
+    inline static Metadata metadata = { "material", "Material", "Material", {} };
 
-    MeshNodePtrArray m_mesh_nodes;
+    InstanceNodePtrArray m_instance_nodes;
 };
 
 class Node : public Object {
@@ -378,10 +388,11 @@ class Node : public Object {
 
 class InternalNode : public Node {
   public:
+    auto AddGroupNode() -> GroupNodePtr;
     auto AddTranslateNode(float x, float y, float z) -> TranslateNodePtr;
     auto AddRotateNode(float x, float y, float z, Radians angle) -> RotateNodePtr;
     auto AddScaleNode(float factor) -> ScaleNodePtr;
-    auto AddMeshNode(MeshPtr mesh, MaterialInstancePtr material) -> MeshNodePtr;
+    auto AddInstanceNode(MeshPtr mesh, MaterialPtr material) -> InstanceNodePtr;
 
     bool HasChildren() const override;
     auto GetChildren() const -> NodePtrArray override;
@@ -401,7 +412,7 @@ class RootNode final : public InternalNode {
 
     auto GetMetadata() const -> MetadataRef override { return metadata; }
 
-    auto GetField(std::string_view) -> ValueRef override;
+    auto GetField(std::string_view) -> ValueRef override { return {}; }
 
     json ToJson() const override;
 
@@ -411,6 +422,26 @@ class RootNode final : public InternalNode {
     static Metadata metadata;
 
     RootNode(ID id) noexcept : InternalNode(id) {}
+
+    virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
+};
+
+class GroupNode final : public InternalNode {
+    GroupNode(const GroupNode&) = delete;
+    GroupNode& operator=(const GroupNode&) = delete;
+
+    auto GetMetadata() const -> MetadataRef override { return metadata; }
+
+    auto GetField(std::string_view) -> ValueRef override { return {}; }
+
+    json ToJson() const override;
+
+  private:
+    friend struct ObjectAccess;
+
+    static Metadata metadata;
+
+    GroupNode(ID id) noexcept : InternalNode(id) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 };
@@ -486,10 +517,10 @@ class ScaleNode final : public InternalNode {
     float m_factor;
 };
 
-class MeshNode final : public Node {
+class InstanceNode final : public Node {
   public:
-    MeshNode(const MeshNode&) = delete;
-    MeshNode& operator=(const MeshNode&) = delete;
+    InstanceNode(const InstanceNode&) = delete;
+    InstanceNode& operator=(const InstanceNode&) = delete;
 
     auto GetMetadata() const -> MetadataRef override { return metadata; }
     auto GetField(std::string_view field_name) -> ValueRef override;
@@ -498,7 +529,7 @@ class MeshNode final : public Node {
     json ToJson() const override;
 
     auto GetMeshPtr() const noexcept { return m_mesh; }
-    auto GetMaterialInstancePtr() const noexcept { return m_material_instance; }
+    auto GetMaterialPtr() const noexcept { return m_material; }
     auto GetTransformPtr() const noexcept -> const glm::mat4* { return &m_transform; }
 
   private:
@@ -506,13 +537,13 @@ class MeshNode final : public Node {
 
     static Metadata metadata;
 
-    MeshNode(ID id, MeshPtr mesh, MaterialInstancePtr material) noexcept;
+    InstanceNode(ID id, MeshPtr mesh, MaterialPtr material) noexcept;
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
-    MeshPtr             m_mesh              = nullptr;
-    MaterialInstancePtr m_material_instance = nullptr;
-    glm::mat4           m_transform         = glm::mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    MeshPtr     m_mesh      = nullptr;
+    MaterialPtr m_material  = nullptr;
+    glm::mat4   m_transform = glm::mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
 };
 
 struct DrawRecord final {
@@ -536,7 +567,7 @@ class Scene {
 
     auto GetRootNodePtr() noexcept -> RootNodePtr;
 
-    auto CreateMaterial() -> MaterialPtr;
+    auto CreateShader() -> ShaderPtr;
 
     auto CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) -> MeshPtr;
 
@@ -547,7 +578,7 @@ class Scene {
     json ToJson() const;
 
   private:
-    UniqueNode            m_root_node;
-    UniqueMaterialManager m_material_manager;
-    UniqueMeshManager     m_mesh_manager;
+    UniqueNode          m_root_node;
+    UniqueShaderManager m_shader_manager;
+    UniqueMeshManager   m_mesh_manager;
 };

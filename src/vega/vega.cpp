@@ -256,10 +256,13 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
         throw std::runtime_error("Failed to load file");
     }
 
-    auto material          = scene->CreateMaterial();
-    auto material_instance = material->CreateMaterialInstance();
+    auto shader   = scene->CreateShader();
+    auto material = shader->CreateMaterial();
 
     auto root_node = scene->GetRootNodePtr();
+    auto file_node = root_node->AddGroupNode();
+
+    file_node->SetName(filepath.filename().string());
 
     for (const auto& shape : shapes) {
         auto mesh = MeshPtr{};
@@ -270,13 +273,9 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
             mesh = GenerateMeshPN(scene, attributes, shape.mesh);
         }
 
-        mesh->SetProperty("Name", shape.name);
+        auto instance_node = file_node->AddInstanceNode(mesh, material);
 
-        auto t_node = root_node->AddTranslateNode(0, 0, 0);
-        auto r_node = t_node->AddRotateNode(0, 0, 1, 0_rad);
-        auto s_node = r_node->AddScaleNode(1);
-
-        s_node->AddMeshNode(mesh, material_instance);
+        instance_node->SetName(shape.name);
     }
 }
 
