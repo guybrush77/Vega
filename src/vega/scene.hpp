@@ -176,8 +176,8 @@ class Object {
 
     auto GetID() const noexcept { return m_id; }
 
-    auto Name() const noexcept -> const char*;
-    auto Properties() const -> DictionaryRef { return *m_dictionary; }
+    auto GetName() const noexcept -> std::string;
+    auto GetProperties() const -> DictionaryRef { return *m_dictionary; }
     bool HasProperties() const noexcept;
 
     void SetName(std::string name);
@@ -377,6 +377,7 @@ class Node : public Object {
   public:
     Node(ID id) noexcept : Object(id) {}
 
+    virtual bool IsInternal() const                  = 0;
     virtual bool HasChildren() const                 = 0;
     virtual auto GetChildren() const -> NodePtrArray = 0;
 
@@ -394,6 +395,7 @@ class InternalNode : public Node {
     auto AddScaleNode(float factor) -> ScaleNodePtr;
     auto AddInstanceNode(MeshPtr mesh, MaterialPtr material) -> InstanceNodePtr;
 
+    bool IsInternal() const override { return true; }
     bool HasChildren() const override;
     auto GetChildren() const -> NodePtrArray override;
 
@@ -524,6 +526,7 @@ class InstanceNode final : public Node {
 
     auto GetMetadata() const -> MetadataRef override { return metadata; }
     auto GetField(std::string_view field_name) -> ValueRef override;
+    bool IsInternal() const override { return false; }
     bool HasChildren() const override { return false; }
     auto GetChildren() const -> NodePtrArray override { return NodePtrArray{}; }
     json ToJson() const override;

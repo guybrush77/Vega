@@ -60,7 +60,14 @@ class SceneWindow : public Window {
     static constexpr bool VisibilityDefault = true;
 
   private:
-    Scene* m_scene = nullptr;
+    bool DrawTreeNode(NodePtr node);
+    void DrawContextMenu(NodePtr node);
+    void DrawNode(NodePtr node);
+
+    char        m_buffer[64]    = {};
+    const void* m_selected_node = nullptr;
+    const void* m_rename_node   = 0;
+    Scene*      m_scene         = nullptr;
 };
 
 class FileBrowserWindow {
@@ -92,6 +99,15 @@ class FileBrowserWindow {
 static Gui& Self(GLFWwindow* window)
 {
     return *static_cast<Gui*>(glfwGetWindowUserPointer(window));
+}
+
+template <size_t N>
+static void CopyToBuffer(char (&buffer)[N], const std::string& s)
+{
+    size_t size  = std::min(s.size(), sizeof(buffer) - 1);
+    buffer[size] = 0;
+
+    std::memcpy(buffer, s.c_str(), size);
 }
 
 static ImFont* LoadFont(const char* font_name, float font_size)
@@ -809,12 +825,7 @@ struct DrawProperty final {
     void operator()(const std::string& s)
     {
         char buffer[64];
-
-        size_t size  = std::min(s.size(), sizeof(buffer) - 1);
-        buffer[size] = 0;
-
-        std::memcpy(buffer, s.c_str(), size);
-
+        CopyToBuffer(buffer, s);
         ImGui::InputText(label, buffer, sizeof(buffer), ImGuiInputTextFlags_ReadOnly);
     }
 
@@ -825,7 +836,7 @@ void DrawObjectProperties(ObjectPtr object, int* ptr_id)
 {
     auto& id = *ptr_id;
 
-    for (const auto& [key, value] : object->Properties()) {
+    for (const auto& [key, value] : object->GetProperties()) {
         if (!IsReservedProperty(key)) {
             ImGui::PushID(id++);
             std::visit(DrawProperty{ key.c_str() }, value);
@@ -891,14 +902,10 @@ void DrawObjectFields(ObjectPtr object, int* ptr_id)
             break;
         }
         case ValueType::String: {
+            char         buffer[64];
             std::string& value = object->GetField(field.name);
 
-            char buffer[64];
-
-            size_t size  = std::min(value.size(), sizeof(buffer) - 1);
-            buffer[size] = 0;
-
-            std::memcpy(buffer, value.c_str(), size);
+            CopyToBuffer(buffer, value);
 
             if (ImGui::InputText(field.label, buffer, sizeof(value), flags)) {
                 value = buffer;
@@ -920,23 +927,109 @@ void DrawObjectFields(ObjectPtr object, int* ptr_id)
     }
 }
 
-void DrawNode(NodePtr node)
+bool SceneWindow::DrawTreeNode(NodePtr node)
 {
-    auto id = node->GetID().value;
+    ImGui::AlignTextToFramePadding();
 
-    assert(id <= 0x00fffff0); // TODO
-
-    id = id << 8;
-
-    ImGui::PushID(id++);
-
-    if (ImGui::TreeNode(node->Name())) {
-        DrawObjectFields(node, &id);
-        std::ranges::for_each(node->GetChildren(), [](NodePtr node) { DrawNode(node); });
-        ImGui::TreePop();
+    int flags = ImGuiTreeNodeFlags_OpenOnArrow;
+    if (m_selected_node == node) {
+        flags |= ImGuiTreeNodeFlags_Selected;
     }
 
-    ImGui::PopID();
+    bool opened = false;
+
+    if (node == m_rename_node) {
+        CopyToBuffer(m_buffer, node->GetName());
+
+        opened = ImGui::TreeNodeEx(node, flags, "");
+
+        auto spacing       = ImGui::GetStyle().ItemSpacing;
+        auto inner_spacing = ImGui::GetStyle().ItemInnerSpacing;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { spacing.x - inner_spacing.x, spacing.y });
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, { 0, inner_spacing.y });
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, { 0, 0, 0, 0 });
+
+        ImGui::SameLine();
+        ImGui::SetKeyboardFocusHere();
+
+        if (ImGui::InputText(
+                "##rename",
+                m_buffer,
+                sizeof(m_buffer),
+                ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue)) {
+            node->SetName(m_buffer);
+            m_rename_node = 0;
+        }
+
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+
+    } else {
+        opened = ImGui::TreeNodeEx(node, flags, node->GetName().c_str());
+    }
+
+    return opened;
+}
+
+void SceneWindow::DrawContextMenu(NodePtr node)
+{
+    if (ImGui::BeginPopupContextItem()) {
+        if (ImGui::MenuItem("Rename Node")) {
+            m_rename_node = node;
+        }
+        if (node->IsInternal()) {
+            auto internal = static_cast<InternalNode*>(node);
+            if (ImGui::BeginMenu("Add Node")) {
+                if (ImGui::MenuItem("Translate")) {
+                    internal->AddTranslateNode(0, 0, 0);
+                }
+                if (ImGui::MenuItem("Rotate")) {
+                    internal->AddRotateNode(0, 0, 0, 0_rad);
+                }
+                if (ImGui::MenuItem("Scale")) {
+                    internal->AddScaleNode(1.0f);
+                }
+                if (ImGui::MenuItem("Group")) {
+                    internal->AddGroupNode();
+                }
+                ImGui::EndMenu();
+            }
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void SceneWindow::DrawNode(NodePtr node)
+{
+    bool is_dangling_node = node->IsInternal() && !node->HasChildren();
+    if (is_dangling_node) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+    }
+
+    bool opened = DrawTreeNode(node);
+
+    if (is_dangling_node) {
+        ImGui::PopStyleColor();
+    }
+
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)) {
+            m_selected_node = node;
+        } else {
+            m_rename_node = nullptr;
+        }
+    }
+
+    DrawContextMenu(node);
+
+    if (opened) {
+        auto id = node->GetID().value << 8;
+        DrawObjectFields(node, &id);
+        std::ranges::for_each(node->GetChildren(), [this](NodePtr node) { DrawNode(node); });
+        ImGui::TreePop();
+    }
 }
 
 void SceneWindow::Draw()
@@ -955,6 +1048,11 @@ void SceneWindow::Draw()
     SetDefaultSize(4.0f, 5.0f);
 
     DrawNode(m_scene->GetRootNodePtr());
+
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
+        m_selected_node = 0;
+        m_rename_node   = 0;
+    }
 
     ImGui::End();
 

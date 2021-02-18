@@ -569,7 +569,7 @@ Metadata ScaleNode::metadata = {
     { Field{ "scale.factor", "Factor", nullptr, ValueType::Float, Field::IsEditable{ true } } }
 };
 
-auto Object::Name() const noexcept -> const char*
+std::string Object::GetName() const noexcept
 {
     if (m_dictionary) {
         if (auto it = m_dictionary->find("object.name"); it != m_dictionary->end()) {
