@@ -361,6 +361,8 @@ class Material final : public Shader {
 
     auto GetInstanceNodes() const { return m_instance_nodes; }
 
+    bool RemoveInstance(InstanceNodePtr node);
+
   private:
     friend struct ObjectAccess;
 
@@ -375,16 +377,20 @@ class Material final : public Shader {
 
 class Node : public Object {
   public:
-    Node(ID id) noexcept : Object(id) {}
+    Node(NodePtr parent, ID id) noexcept : Object(id), m_parent(parent) {}
 
     virtual bool IsInternal() const                  = 0;
     virtual bool HasChildren() const                 = 0;
     virtual auto GetChildren() const -> NodePtrArray = 0;
 
+    virtual void Delete() = 0;
+
   protected:
     friend struct ObjectAccess;
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept = 0;
+
+    NodePtr m_parent = nullptr;
 };
 
 class InternalNode : public Node {
@@ -395,14 +401,18 @@ class InternalNode : public Node {
     auto AddScaleNode(float factor) -> ScaleNodePtr;
     auto AddInstanceNode(MeshPtr mesh, MaterialPtr material) -> InstanceNodePtr;
 
+    bool RemoveNode(NodePtr node);
+
     bool IsInternal() const override { return true; }
     bool HasChildren() const override;
     auto GetChildren() const -> NodePtrArray override;
 
+    void Delete() override;
+
   protected:
     friend struct ObjectAccess;
 
-    InternalNode(ID id) noexcept : Node(id) {}
+    InternalNode(NodePtr parent, ID id) noexcept : Node(parent, id) {}
 
     std::vector<UniqueNode> m_children;
 };
@@ -418,12 +428,14 @@ class RootNode final : public InternalNode {
 
     json ToJson() const override;
 
+    void Delete() override;
+
   private:
     friend struct ObjectAccess;
 
     static Metadata metadata;
 
-    RootNode(ID id) noexcept : InternalNode(id) {}
+    RootNode(NodePtr parent, ID id) noexcept : InternalNode(parent, id) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 };
@@ -443,7 +455,7 @@ class GroupNode final : public InternalNode {
 
     static Metadata metadata;
 
-    GroupNode(ID id) noexcept : InternalNode(id) {}
+    GroupNode(NodePtr parent, ID id) noexcept : InternalNode(parent, id) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 };
@@ -463,7 +475,9 @@ class TranslateNode final : public InternalNode {
 
     static Metadata metadata;
 
-    TranslateNode(ID id, float x, float y, float z) noexcept : InternalNode(id), m_amount(x, y, z) {}
+    TranslateNode(NodePtr parent, ID id, float x, float y, float z) noexcept
+        : InternalNode(parent, id), m_amount(x, y, z)
+    {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
@@ -486,8 +500,8 @@ class RotateNode final : public InternalNode {
 
     static Metadata metadata;
 
-    RotateNode(ID id, float x, float y, float z, Radians angle) noexcept
-        : InternalNode(id), m_axis(x, y, z), m_angle(angle)
+    RotateNode(NodePtr parent, ID id, float x, float y, float z, Radians angle) noexcept
+        : InternalNode(parent, id), m_axis(x, y, z), m_angle(angle)
     {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
@@ -512,7 +526,7 @@ class ScaleNode final : public InternalNode {
 
     static Metadata metadata;
 
-    ScaleNode(ID id, float factor) noexcept : InternalNode(id), m_factor(factor) {}
+    ScaleNode(NodePtr parent, ID id, float factor) noexcept : InternalNode(parent, id), m_factor(factor) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
@@ -524,12 +538,16 @@ class InstanceNode final : public Node {
     InstanceNode(const InstanceNode&) = delete;
     InstanceNode& operator=(const InstanceNode&) = delete;
 
+    ~InstanceNode() noexcept;
+
     auto GetMetadata() const -> MetadataRef override { return metadata; }
     auto GetField(std::string_view field_name) -> ValueRef override;
     bool IsInternal() const override { return false; }
     bool HasChildren() const override { return false; }
     auto GetChildren() const -> NodePtrArray override { return NodePtrArray{}; }
     json ToJson() const override;
+
+    void Delete() override;
 
     auto GetMeshPtr() const noexcept { return m_mesh; }
     auto GetMaterialPtr() const noexcept { return m_material; }
@@ -540,7 +558,7 @@ class InstanceNode final : public Node {
 
     static Metadata metadata;
 
-    InstanceNode(ID id, MeshPtr mesh, MaterialPtr material) noexcept;
+    InstanceNode(NodePtr parent, ID id, MeshPtr mesh, MaterialPtr material) noexcept;
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 

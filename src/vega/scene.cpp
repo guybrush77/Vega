@@ -288,33 +288,43 @@ Metadata Mesh::metadata = {
 
 GroupNodePtr InternalNode::AddGroupNode()
 {
-    m_children.push_back(ObjectAccess::MakeUnique<GroupNode>(GetUniqueID()));
+    m_children.push_back(ObjectAccess::MakeUnique<GroupNode>(this, GetUniqueID()));
     return static_cast<GroupNodePtr>(m_children.back().get());
 }
 
 TranslateNodePtr InternalNode::AddTranslateNode(float x, float y, float z)
 {
-    m_children.push_back(ObjectAccess::MakeUnique<TranslateNode>(GetUniqueID(), x, y, z));
+    m_children.push_back(ObjectAccess::MakeUnique<TranslateNode>(this, GetUniqueID(), x, y, z));
     return static_cast<TranslateNodePtr>(m_children.back().get());
 }
 
 RotateNodePtr InternalNode::AddRotateNode(float x, float y, float z, Radians angle)
 {
-    m_children.push_back(ObjectAccess::MakeUnique<RotateNode>(GetUniqueID(), x, y, z, angle));
+    m_children.push_back(ObjectAccess::MakeUnique<RotateNode>(this, GetUniqueID(), x, y, z, angle));
     return static_cast<RotateNodePtr>(m_children.back().get());
 }
 
 ScaleNodePtr InternalNode::AddScaleNode(float factor)
 {
-    m_children.push_back(ObjectAccess::MakeUnique<ScaleNode>(GetUniqueID(), factor));
+    m_children.push_back(ObjectAccess::MakeUnique<ScaleNode>(this, GetUniqueID(), factor));
     return static_cast<ScaleNodePtr>(m_children.back().get());
 }
 
 InstanceNodePtr InternalNode::AddInstanceNode(MeshPtr mesh, MaterialPtr material)
 {
     assert(mesh && material);
-    m_children.push_back(ObjectAccess::MakeUnique<InstanceNode>(GetUniqueID(), mesh, material));
+    m_children.push_back(ObjectAccess::MakeUnique<InstanceNode>(this, GetUniqueID(), mesh, material));
     return static_cast<InstanceNodePtr>(m_children.back().get());
+}
+
+bool InternalNode::RemoveNode(NodePtr node)
+{
+    auto predicate = [node](auto& child) { return child.get() == node; };
+    if (auto it = std::ranges::find_if(m_children, predicate); it != m_children.end()) {
+        m_children.erase(it);
+        return true;
+    }
+    return false;
 }
 
 bool InternalNode::HasChildren() const
@@ -327,9 +337,15 @@ NodePtrArray InternalNode::GetChildren() const
     return ObjectAccess::GetChildren(this);
 }
 
+void InternalNode::Delete()
+{
+    auto parent = static_cast<InternalNode*>(m_parent);
+    parent->RemoveNode(this);
+}
+
 Scene::Scene()
 {
-    m_root_node      = ObjectAccess::MakeUnique<RootNode>(GetUniqueID());
+    m_root_node      = ObjectAccess::MakeUnique<RootNode>(nullptr, GetUniqueID());
     m_shader_manager = std::make_unique<ShaderManager>();
     m_mesh_manager   = std::make_unique<MeshManager>();
 }
@@ -399,6 +415,11 @@ json RootNode::ToJson() const
     return json;
 }
 
+void RootNode::Delete()
+{
+    m_children.clear();
+}
+
 void RootNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     for (auto& node : m_children) {
@@ -436,6 +457,19 @@ json InstanceNode::ToJson() const
     return json;
 }
 
+void InstanceNode::Delete()
+{
+    auto parent = static_cast<InternalNode*>(m_parent);
+    parent->RemoveNode(this);
+}
+
+InstanceNode::~InstanceNode() noexcept
+{
+    if (m_material) {
+        m_material->RemoveInstance(this);
+    }
+}
+
 ValueRef InstanceNode::GetField(std::string_view field_name)
 {
     if (field_name == "mesh") {
@@ -459,8 +493,8 @@ void InstanceNode::ApplyTransform(const glm::mat4& matrix) noexcept
     m_transform = matrix;
 }
 
-InstanceNode::InstanceNode(ID id, MeshPtr mesh, MaterialPtr material) noexcept
-    : Node(id), m_mesh(mesh), m_material(material)
+InstanceNode::InstanceNode(NodePtr parent, ID id, MeshPtr mesh, MaterialPtr material) noexcept
+    : Node(parent, id), m_mesh(mesh), m_material(material)
 {
     ObjectAccess::AddInstancePtr(this, material);
 }
@@ -664,6 +698,15 @@ json Material::ToJson() const
     json["object.refs"] = m_instance_nodes;
 
     return json;
+}
+
+bool Material::RemoveInstance(InstanceNodePtr node)
+{
+    if (auto it = std::ranges::find(m_instance_nodes, node); it != m_instance_nodes.end()) {
+        m_instance_nodes.erase(it);
+        return true;
+    }
+    return false;
 }
 
 void Material::AddInstanceNodePtr(InstanceNodePtr instance_node)

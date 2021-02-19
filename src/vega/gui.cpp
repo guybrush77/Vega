@@ -61,8 +61,9 @@ class SceneWindow : public Window {
 
   private:
     bool DrawTreeNode(NodePtr node);
-    void DrawContextMenu(NodePtr node);
+    auto DrawContextMenu(NodePtr node) -> NodePtr;
     void DrawNode(NodePtr node);
+    void DrawObjectFields(ObjectPtr object, int* ptr_id);
 
     char        m_buffer[64]    = {};
     const void* m_selected_node = nullptr;
@@ -845,7 +846,7 @@ void DrawObjectProperties(ObjectPtr object, int* ptr_id)
     }
 }
 
-void DrawObjectFields(ObjectPtr object, int* ptr_id)
+void SceneWindow::DrawObjectFields(ObjectPtr object, int* ptr_id)
 {
     static constexpr auto editable = ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue;
     static constexpr auto readonly = ImGuiInputTextFlags_ReadOnly;
@@ -972,7 +973,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
     return opened;
 }
 
-void SceneWindow::DrawContextMenu(NodePtr node)
+NodePtr SceneWindow::DrawContextMenu(NodePtr node)
 {
     if (ImGui::BeginPopupContextItem()) {
         if (ImGui::MenuItem("Rename Node")) {
@@ -996,9 +997,14 @@ void SceneWindow::DrawContextMenu(NodePtr node)
                 ImGui::EndMenu();
             }
         }
+        if (ImGui::MenuItem("Delete Node")) {
+            node->Delete();
+            node = nullptr;
+        }
 
         ImGui::EndPopup();
     }
+    return node;
 }
 
 void SceneWindow::DrawNode(NodePtr node)
@@ -1022,12 +1028,14 @@ void SceneWindow::DrawNode(NodePtr node)
         }
     }
 
-    DrawContextMenu(node);
+    node = DrawContextMenu(node);
 
     if (opened) {
-        auto id = node->GetID().value << 8;
-        DrawObjectFields(node, &id);
-        std::ranges::for_each(node->GetChildren(), [this](NodePtr node) { DrawNode(node); });
+        if (node) {
+            auto id = node->GetID().value << 8;
+            DrawObjectFields(node, &id);
+            std::ranges::for_each(node->GetChildren(), [this](NodePtr node) { DrawNode(node); });
+        }
         ImGui::TreePop();
     }
 }
