@@ -970,6 +970,29 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
         opened = ImGui::TreeNodeEx(node, flags, node->GetName().c_str());
     }
 
+    if (false == node->IsRoot()) {
+        if (ImGui::BeginDragDropSource()) {
+            ImGui::SetDragDropPayload("MOVE", &node, sizeof(node));
+            ImGui::TextUnformatted(node->GetName().c_str());
+            ImGui::EndDragDropSource();
+        }
+    }
+
+    if (false == node->IsLeaf()) {
+        if (auto payload = ImGui::GetDragDropPayload(); payload && payload->IsDataType("MOVE")) {
+            Node* src_node = nullptr;
+            memcpy(&src_node, payload->Data, payload->DataSize);
+            if (src_node && !src_node->IsAncestor(node)) {
+                if (ImGui::BeginDragDropTarget()) {
+                    if (ImGui::AcceptDragDropPayload("MOVE")) {
+                        static_cast<InternalNode*>(node)->AttachNode(std::move(src_node->DetachNode()));
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+            }
+        }
+    }
+
     return opened;
 }
 
@@ -986,7 +1009,7 @@ NodePtr SceneWindow::DrawContextMenu(NodePtr node)
                     internal->AddTranslateNode(0, 0, 0);
                 }
                 if (ImGui::MenuItem("Rotate")) {
-                    internal->AddRotateNode(0, 0, 0, 0_rad);
+                    internal->AddRotateNode(1, 0, 0, 0_rad);
                 }
                 if (ImGui::MenuItem("Scale")) {
                     internal->AddScaleNode(1.0f);
@@ -997,9 +1020,11 @@ NodePtr SceneWindow::DrawContextMenu(NodePtr node)
                 ImGui::EndMenu();
             }
         }
-        if (ImGui::MenuItem("Delete Node")) {
-            node->Delete();
-            node = nullptr;
+        if (!node->IsRoot()) {
+            if (ImGui::MenuItem("Delete Node")) {
+                node->DetachNode();
+                node = nullptr;
+            }
         }
 
         ImGui::EndPopup();

@@ -379,11 +379,14 @@ class Node : public Object {
   public:
     Node(NodePtr parent, ID id) noexcept : Object(id), m_parent(parent) {}
 
+    virtual bool IsRoot() const                      = 0;
     virtual bool IsInternal() const                  = 0;
+    virtual bool IsLeaf() const                      = 0;
+    virtual bool IsAncestor(NodePtr node) const      = 0;
     virtual bool HasChildren() const                 = 0;
     virtual auto GetChildren() const -> NodePtrArray = 0;
 
-    virtual void Delete() = 0;
+    virtual auto DetachNode() -> UniqueNode = 0;
 
   protected:
     friend struct ObjectAccess;
@@ -401,13 +404,16 @@ class InternalNode : public Node {
     auto AddScaleNode(float factor) -> ScaleNodePtr;
     auto AddInstanceNode(MeshPtr mesh, MaterialPtr material) -> InstanceNodePtr;
 
-    bool RemoveNode(NodePtr node);
+    void AttachNode(UniqueNode node);
 
+    auto DetachNode() -> UniqueNode override;
+
+    bool IsRoot() const override { return false; }
     bool IsInternal() const override { return true; }
+    bool IsLeaf() const override { return false; }
+    bool IsAncestor(NodePtr node) const override;
     bool HasChildren() const override;
     auto GetChildren() const -> NodePtrArray override;
-
-    void Delete() override;
 
   protected:
     friend struct ObjectAccess;
@@ -426,9 +432,9 @@ class RootNode final : public InternalNode {
 
     auto GetField(std::string_view) -> ValueRef override { return {}; }
 
-    json ToJson() const override;
+    bool IsRoot() const override { return true; }
 
-    void Delete() override;
+    json ToJson() const override;
 
   private:
     friend struct ObjectAccess;
@@ -542,12 +548,15 @@ class InstanceNode final : public Node {
 
     auto GetMetadata() const -> MetadataRef override { return metadata; }
     auto GetField(std::string_view field_name) -> ValueRef override;
+    bool IsRoot() const override { return false; }
     bool IsInternal() const override { return false; }
+    bool IsLeaf() const override { return true; }
+    bool IsAncestor(NodePtr node) const override;
     bool HasChildren() const override { return false; }
     auto GetChildren() const -> NodePtrArray override { return NodePtrArray{}; }
     json ToJson() const override;
 
-    void Delete() override;
+    auto DetachNode() -> UniqueNode override;
 
     auto GetMeshPtr() const noexcept { return m_mesh; }
     auto GetMaterialPtr() const noexcept { return m_material; }
@@ -599,7 +608,7 @@ class Scene {
     json ToJson() const;
 
   private:
-    UniqueNode          m_root_node;
     UniqueShaderManager m_shader_manager;
     UniqueMeshManager   m_mesh_manager;
+    UniqueNode          m_root_node;
 };

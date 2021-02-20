@@ -176,6 +176,50 @@ struct ObjectAccess {
         material->AddInstanceNodePtr(instance_node);
     }
 
+    static void AttachNode(InternalNode* parent, UniqueNode child)
+    {
+        assert(parent && child);
+        child->m_parent = parent;
+        parent->m_children.push_back(std::move(child));
+    }
+
+    static UniqueNode DetachNode(NodePtr node)
+    {
+        assert(node);
+
+        auto parent = static_cast<InternalNode*>(node->m_parent);
+
+        if (parent == nullptr) {
+            return nullptr;
+        }
+
+        auto it = std::ranges::find_if(parent->m_children, [node](auto& child) { return child.get() == node; });
+
+        if (it == parent->m_children.end()) {
+            return nullptr;
+        }
+
+        auto unique_node = std::move(*it);
+
+        unique_node->m_parent = nullptr;
+
+        parent->m_children.erase(it);
+
+        return unique_node;
+    }
+
+    static bool IsAncestor(const Node* ancestor, const Node* node)
+    {
+        assert(node && ancestor);
+        do {
+            node = node->m_parent;
+            if (node == ancestor) {
+                return true;
+            }
+        } while (node);
+        return false;
+    }
+
     static void ApplyTransform(NodePtr node, const glm::mat4& matrix) { node->ApplyTransform(matrix); }
 
     template <typename T>
@@ -317,14 +361,19 @@ InstanceNodePtr InternalNode::AddInstanceNode(MeshPtr mesh, MaterialPtr material
     return static_cast<InstanceNodePtr>(m_children.back().get());
 }
 
-bool InternalNode::RemoveNode(NodePtr node)
+void InternalNode::AttachNode(UniqueNode node)
 {
-    auto predicate = [node](auto& child) { return child.get() == node; };
-    if (auto it = std::ranges::find_if(m_children, predicate); it != m_children.end()) {
-        m_children.erase(it);
-        return true;
-    }
-    return false;
+    ObjectAccess::AttachNode(this, std::move(node));
+}
+
+UniqueNode InternalNode::DetachNode()
+{
+    return ObjectAccess::DetachNode(this);
+}
+
+bool InternalNode::IsAncestor(NodePtr node) const
+{
+    return ObjectAccess::IsAncestor(this, node);
 }
 
 bool InternalNode::HasChildren() const
@@ -337,17 +386,11 @@ NodePtrArray InternalNode::GetChildren() const
     return ObjectAccess::GetChildren(this);
 }
 
-void InternalNode::Delete()
-{
-    auto parent = static_cast<InternalNode*>(m_parent);
-    parent->RemoveNode(this);
-}
-
 Scene::Scene()
 {
-    m_root_node      = ObjectAccess::MakeUnique<RootNode>(nullptr, GetUniqueID());
     m_shader_manager = std::make_unique<ShaderManager>();
     m_mesh_manager   = std::make_unique<MeshManager>();
+    m_root_node      = ObjectAccess::MakeUnique<RootNode>(nullptr, GetUniqueID());
 }
 
 DrawList Scene::ComputeDrawList() const
@@ -415,11 +458,6 @@ json RootNode::ToJson() const
     return json;
 }
 
-void RootNode::Delete()
-{
-    m_children.clear();
-}
-
 void RootNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     for (auto& node : m_children) {
@@ -446,6 +484,11 @@ void GroupNode::ApplyTransform(const glm::mat4& matrix) noexcept
 
 Metadata GroupNode::metadata = { "group.node", "Group", nullptr };
 
+bool InstanceNode::IsAncestor(NodePtr node) const
+{
+    return ObjectAccess::IsAncestor(this, node);
+}
+
 json InstanceNode::ToJson() const
 {
     json json;
@@ -457,10 +500,9 @@ json InstanceNode::ToJson() const
     return json;
 }
 
-void InstanceNode::Delete()
+UniqueNode InstanceNode::DetachNode()
 {
-    auto parent = static_cast<InternalNode*>(m_parent);
-    parent->RemoveNode(this);
+    return ObjectAccess::DetachNode(this);
 }
 
 InstanceNode::~InstanceNode() noexcept
