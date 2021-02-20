@@ -178,9 +178,9 @@ static MeshPtr GenerateMeshP(ScenePtr scene, const tinyobj::attrib_t& attributes
     auto aabb = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
 
     for (size_t i = 0; i < num_indices; i += 3) {
-        auto i0     = size_t(3) * mesh.indices[i + 0].vertex_index;
-        auto i1     = size_t(3) * mesh.indices[i + 1].vertex_index;
-        auto i2     = size_t(3) * mesh.indices[i + 2].vertex_index;
+        auto i0     = 3 * utils::narrow_cast<size_t>(mesh.indices[i + 0].vertex_index);
+        auto i1     = 3 * utils::narrow_cast<size_t>(mesh.indices[i + 1].vertex_index);
+        auto i2     = 3 * utils::narrow_cast<size_t>(mesh.indices[i + 2].vertex_index);
         auto pos0   = glm::vec3(attributes.vertices[i0 + 0], attributes.vertices[i0 + 1], attributes.vertices[i0 + 2]);
         auto pos1   = glm::vec3(attributes.vertices[i1 + 0], attributes.vertices[i1 + 1], attributes.vertices[i1 + 2]);
         auto pos2   = glm::vec3(attributes.vertices[i2 + 0], attributes.vertices[i2 + 1], attributes.vertices[i2 + 2]);
@@ -686,7 +686,7 @@ class EventHandler {
         int width{}, height{};
         glfwGetWindowSize(m_glfw_window, &width, &height);
 
-        auto aspect = static_cast<float>(width) / height;
+        auto aspect = static_cast<float>(width) / static_cast<float>(height);
 
         *m_camera = Camera::Create(
             Orientation::RightHanded,

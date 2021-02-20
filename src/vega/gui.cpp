@@ -367,7 +367,7 @@ void Gui::UpdateViewport(etna::Extent2D extent, uint32_t min_image_count)
 
 void Gui::UpdateContentScale()
 {
-    ImGui::GetStyle() = ImGuiStyle::ImGuiStyle();
+    ImGui::GetStyle() = ImGuiStyle();
     ImGui::GetStyle().ScaleAllSizes(m_content_scale.y);
     ImGui::GetIO().Fonts->Clear();
 
@@ -942,7 +942,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
     if (node == m_rename_node) {
         CopyToBuffer(m_buffer, node->GetName());
 
-        opened = ImGui::TreeNodeEx(node, flags, "");
+        opened = ImGui::TreeNodeEx(node, flags, "%s", "");
 
         auto spacing       = ImGui::GetStyle().ItemSpacing;
         auto inner_spacing = ImGui::GetStyle().ItemInnerSpacing;
@@ -967,7 +967,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
         ImGui::PopStyleVar(2);
 
     } else {
-        opened = ImGui::TreeNodeEx(node, flags, node->GetName().c_str());
+        opened = ImGui::TreeNodeEx(node, flags, "%s", node->GetName().c_str());
     }
 
     if (false == node->IsRoot()) {
@@ -981,7 +981,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
     if (false == node->IsLeaf()) {
         if (auto payload = ImGui::GetDragDropPayload(); payload && payload->IsDataType("MOVE")) {
             Node* src_node = nullptr;
-            memcpy(&src_node, payload->Data, payload->DataSize);
+            memcpy(&src_node, payload->Data, utils::narrow_cast<size_t>(payload->DataSize));
             if (src_node && !src_node->IsAncestor(node)) {
                 if (ImGui::BeginDragDropTarget()) {
                     if (ImGui::AcceptDragDropPayload("MOVE")) {

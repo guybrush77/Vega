@@ -9,9 +9,9 @@ Float3 Light::ComputePremultipliedColor() const noexcept
 
 Float3 Light::ComputeDir() const noexcept
 {
-    float x = std::cosf(m_elevation.value) * std::sinf(m_azimuth.value);
-    float y = std::sinf(m_elevation.value);
-    float z = std::cosf(m_elevation.value) * std::cosf(m_azimuth.value);
+    float x = std::cos(m_elevation.value) * std::sin(m_azimuth.value);
+    float y = std::sin(m_elevation.value);
+    float z = std::cos(m_elevation.value) * std::cos(m_azimuth.value);
 
     return { x, y, z };
 }

@@ -8,7 +8,7 @@ class Queue {
   public:
     Queue() noexcept {}
     Queue(std::nullptr_t) noexcept {}
-    Queue(VkQueue queue, int family_index) noexcept : m_queue(queue), m_family_index(family_index) {}
+    Queue(VkQueue queue, uint32_t family_index) noexcept : m_queue(queue), m_family_index(family_index) {}
 
     operator VkQueue() const noexcept { return m_queue; }
 

@@ -482,7 +482,7 @@ void GroupNode::ApplyTransform(const glm::mat4& matrix) noexcept
     }
 }
 
-Metadata GroupNode::metadata = { "group.node", "Group", nullptr };
+Metadata GroupNode::metadata = { "group.node", "Group", nullptr, {} };
 
 bool InstanceNode::IsAncestor(NodePtr node) const
 {
