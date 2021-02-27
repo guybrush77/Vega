@@ -29,12 +29,24 @@ $ cmake --version
 cmake version 3.16.3
 ```
 
-#### Install X11 Dependencies
+#### Install GLFW Dependencies
 
-Vega links against GLFW library. To compile GLFW for X11, you need to have the X11 packages installed. For example, on Ubuntu and other distributions based on Debian GNU/Linux, you need to install the xorg-dev package:
+Vega links against GLFW library, an API for creating windows, contexts and surfaces, reading input, handling events, etc.
+
+##### Linux and X11
+
+ To compile GLFW for X11, you need to have the X11 packages installed. For example, on Ubuntu and other distributions based on Debian GNU/Linux, you need to install the xorg-dev package:
 
 ```console
 $ sudo apt install xorg-dev
+```
+
+##### Linux and Wayland
+
+ To compile GLFW for Wayland, you need to have the wayland packages installed. For example, on Ubuntu and other distributions based on Debian GNU/Linux, you need to install the libwayland-dev package:
+
+```console
+$ sudo apt install libwayland-dev
 ```
 
 #### Install GCC

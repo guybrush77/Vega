@@ -509,7 +509,7 @@ void CameraWindow::Draw()
 
     const auto& limits = m_camera->GetLimits();
 
-    ImGui::Begin("Camera", &visible, ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin("Camera", &visible);
 
     SetDefaultSize(2.0f, 1.5f);
 
@@ -950,6 +950,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { spacing.x - inner_spacing.x, spacing.y });
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, { 0, inner_spacing.y });
         ImGui::PushStyleColor(ImGuiCol_FrameBg, { 0, 0, 0, 0 });
+        ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, { 1.0f, 1.0f, 1.0f, 0.3f });
 
         ImGui::SameLine();
         ImGui::SetKeyboardFocusHere();
@@ -963,7 +964,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
             m_rename_node = 0;
         }
 
-        ImGui::PopStyleColor();
+        ImGui::PopStyleColor(2);
         ImGui::PopStyleVar(2);
 
     } else {
@@ -1076,7 +1077,7 @@ void SceneWindow::Draw()
         ImGui::SetNextWindowPos(position, ImGuiCond_FirstUseEver);
     }
 
-    ImGui::Begin("Scene", &visible, ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin("Scene", &visible);
 
     SetDefaultSize(4.0f, 5.0f);
 

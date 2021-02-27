@@ -750,7 +750,7 @@ int main()
     }
 
     // Create pipeline renderpass
-    UniqueRenderPass renderpass;
+    auto renderpass = UniqueRenderPass();
     {
         auto builder = RenderPass::Builder();
 
@@ -790,7 +790,7 @@ int main()
     }
 
     // Create gui pipeline renderpass
-    UniqueRenderPass gui_renderpass;
+    auto gui_renderpass = UniqueRenderPass();
     {
         auto builder = RenderPass::Builder();
 
@@ -821,7 +821,7 @@ int main()
     }
 
     // Create descriptor set layouts
-    UniqueDescriptorSetLayout descriptor_set_layout;
+    auto descriptor_set_layout = UniqueDescriptorSetLayout();
     {
         auto builder = DescriptorSetLayout::Builder();
 
@@ -835,7 +835,7 @@ int main()
     }
 
     // Create pipeline pipeline_layout
-    UniquePipelineLayout pipeline_layout;
+    auto pipeline_layout = UniquePipelineLayout();
     {
         auto builder = PipelineLayout::Builder();
         builder.AddDescriptorSetLayout(*descriptor_set_layout);
@@ -843,7 +843,7 @@ int main()
     }
 
     // Create pipeline
-    UniquePipeline pipeline;
+    auto pipeline = UniquePipeline();
     {
         auto builder            = Pipeline::Builder(*pipeline_layout, *renderpass);
         auto [vs_data, vs_size] = GetResource("shaders/shader.vert");
