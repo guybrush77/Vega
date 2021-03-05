@@ -176,7 +176,7 @@ struct ObjectAccess {
         material->AddInstanceNodePtr(instance_node);
     }
 
-    static void AttachNode(InternalNode* parent, UniqueNode child)
+    static void AttachNode(InnerNode* parent, UniqueNode child)
     {
         assert(parent && child);
         child->m_parent = parent;
@@ -187,7 +187,7 @@ struct ObjectAccess {
     {
         assert(node);
 
-        auto parent = static_cast<InternalNode*>(node->m_parent);
+        auto parent = static_cast<InnerNode*>(node->m_parent);
 
         if (parent == nullptr) {
             return nullptr;
@@ -330,58 +330,58 @@ Metadata Mesh::metadata = {
       Field{ "index.count", "Index Count", nullptr, ValueType::Int, Field::IsEditable{ false } } }
 };
 
-GroupNodePtr InternalNode::AddGroupNode()
+GroupNodePtr InnerNode::AddGroupNode()
 {
     m_children.push_back(ObjectAccess::MakeUnique<GroupNode>(this, GetUniqueID()));
     return static_cast<GroupNodePtr>(m_children.back().get());
 }
 
-TranslateNodePtr InternalNode::AddTranslateNode(float x, float y, float z)
+TranslateNodePtr InnerNode::AddTranslateNode(float x, float y, float z)
 {
     m_children.push_back(ObjectAccess::MakeUnique<TranslateNode>(this, GetUniqueID(), x, y, z));
     return static_cast<TranslateNodePtr>(m_children.back().get());
 }
 
-RotateNodePtr InternalNode::AddRotateNode(float x, float y, float z, Radians angle)
+RotateNodePtr InnerNode::AddRotateNode(float x, float y, float z, Radians angle)
 {
     m_children.push_back(ObjectAccess::MakeUnique<RotateNode>(this, GetUniqueID(), x, y, z, angle));
     return static_cast<RotateNodePtr>(m_children.back().get());
 }
 
-ScaleNodePtr InternalNode::AddScaleNode(float factor)
+ScaleNodePtr InnerNode::AddScaleNode(float factor)
 {
     m_children.push_back(ObjectAccess::MakeUnique<ScaleNode>(this, GetUniqueID(), factor));
     return static_cast<ScaleNodePtr>(m_children.back().get());
 }
 
-InstanceNodePtr InternalNode::AddInstanceNode(MeshPtr mesh, MaterialPtr material)
+InstanceNodePtr InnerNode::AddInstanceNode(MeshPtr mesh, MaterialPtr material)
 {
     assert(mesh && material);
     m_children.push_back(ObjectAccess::MakeUnique<InstanceNode>(this, GetUniqueID(), mesh, material));
     return static_cast<InstanceNodePtr>(m_children.back().get());
 }
 
-void InternalNode::AttachNode(UniqueNode node)
+void InnerNode::AttachNode(UniqueNode node)
 {
     ObjectAccess::AttachNode(this, std::move(node));
 }
 
-UniqueNode InternalNode::DetachNode()
+UniqueNode InnerNode::DetachNode()
 {
     return ObjectAccess::DetachNode(this);
 }
 
-bool InternalNode::IsAncestor(NodePtr node) const
+bool InnerNode::IsAncestor(NodePtr node) const
 {
     return ObjectAccess::IsAncestor(this, node);
 }
 
-bool InternalNode::HasChildren() const
+bool InnerNode::HasChildren() const
 {
     return ObjectAccess::HasChildren(this);
 }
 
-NodePtrArray InternalNode::GetChildren() const
+NodePtrArray InnerNode::GetChildren() const
 {
     return ObjectAccess::GetChildren(this);
 }

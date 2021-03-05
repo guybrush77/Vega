@@ -986,7 +986,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
             if (src_node && !src_node->IsAncestor(node)) {
                 if (ImGui::BeginDragDropTarget()) {
                     if (ImGui::AcceptDragDropPayload("MOVE")) {
-                        static_cast<InternalNode*>(node)->AttachNode(std::move(src_node->DetachNode()));
+                        static_cast<InnerNode*>(node)->AttachNode(std::move(src_node->DetachNode()));
                     }
                     ImGui::EndDragDropTarget();
                 }
@@ -1003,8 +1003,8 @@ NodePtr SceneWindow::DrawContextMenu(NodePtr node)
         if (ImGui::MenuItem("Rename Node")) {
             m_rename_node = node;
         }
-        if (node->IsInternal()) {
-            auto internal = static_cast<InternalNode*>(node);
+        if (node->IsInner()) {
+            auto internal = static_cast<InnerNode*>(node);
             if (ImGui::BeginMenu("Add Node")) {
                 if (ImGui::MenuItem("Translate")) {
                     internal->AddTranslateNode(0, 0, 0);
@@ -1035,7 +1035,7 @@ NodePtr SceneWindow::DrawContextMenu(NodePtr node)
 
 void SceneWindow::DrawNode(NodePtr node)
 {
-    bool is_dangling_node = node->IsInternal() && !node->HasChildren();
+    bool is_dangling_node = node->IsInner() && !node->HasChildren();
     if (is_dangling_node) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
     }

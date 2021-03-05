@@ -380,7 +380,7 @@ class Node : public Object {
     Node(NodePtr parent, ID id) noexcept : Object(id), m_parent(parent) {}
 
     virtual bool IsRoot() const                      = 0;
-    virtual bool IsInternal() const                  = 0;
+    virtual bool IsInner() const                  = 0;
     virtual bool IsLeaf() const                      = 0;
     virtual bool IsAncestor(NodePtr node) const      = 0;
     virtual bool HasChildren() const                 = 0;
@@ -396,7 +396,7 @@ class Node : public Object {
     NodePtr m_parent = nullptr;
 };
 
-class InternalNode : public Node {
+class InnerNode : public Node {
   public:
     auto AddGroupNode() -> GroupNodePtr;
     auto AddTranslateNode(float x, float y, float z) -> TranslateNodePtr;
@@ -409,7 +409,7 @@ class InternalNode : public Node {
     auto DetachNode() -> UniqueNode override;
 
     bool IsRoot() const override { return false; }
-    bool IsInternal() const override { return true; }
+    bool IsInner() const override { return true; }
     bool IsLeaf() const override { return false; }
     bool IsAncestor(NodePtr node) const override;
     bool HasChildren() const override;
@@ -418,12 +418,12 @@ class InternalNode : public Node {
   protected:
     friend struct ObjectAccess;
 
-    InternalNode(NodePtr parent, ID id) noexcept : Node(parent, id) {}
+    InnerNode(NodePtr parent, ID id) noexcept : Node(parent, id) {}
 
     std::vector<UniqueNode> m_children;
 };
 
-class RootNode final : public InternalNode {
+class RootNode final : public InnerNode {
   public:
     RootNode(const RootNode&) = delete;
     RootNode& operator=(const RootNode&) = delete;
@@ -441,12 +441,12 @@ class RootNode final : public InternalNode {
 
     static Metadata metadata;
 
-    RootNode(NodePtr parent, ID id) noexcept : InternalNode(parent, id) {}
+    RootNode(NodePtr parent, ID id) noexcept : InnerNode(parent, id) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 };
 
-class GroupNode final : public InternalNode {
+class GroupNode final : public InnerNode {
     GroupNode(const GroupNode&) = delete;
     GroupNode& operator=(const GroupNode&) = delete;
 
@@ -461,12 +461,12 @@ class GroupNode final : public InternalNode {
 
     static Metadata metadata;
 
-    GroupNode(NodePtr parent, ID id) noexcept : InternalNode(parent, id) {}
+    GroupNode(NodePtr parent, ID id) noexcept : InnerNode(parent, id) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 };
 
-class TranslateNode final : public InternalNode {
+class TranslateNode final : public InnerNode {
     TranslateNode(const TranslateNode&) = delete;
     TranslateNode& operator=(const TranslateNode&) = delete;
 
@@ -482,7 +482,7 @@ class TranslateNode final : public InternalNode {
     static Metadata metadata;
 
     TranslateNode(NodePtr parent, ID id, float x, float y, float z) noexcept
-        : InternalNode(parent, id), m_amount(x, y, z)
+        : InnerNode(parent, id), m_amount(x, y, z)
     {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
@@ -490,7 +490,7 @@ class TranslateNode final : public InternalNode {
     Float3 m_amount;
 };
 
-class RotateNode final : public InternalNode {
+class RotateNode final : public InnerNode {
   public:
     RotateNode(const RotateNode&) = delete;
     RotateNode& operator=(const RotateNode&) = delete;
@@ -507,7 +507,7 @@ class RotateNode final : public InternalNode {
     static Metadata metadata;
 
     RotateNode(NodePtr parent, ID id, float x, float y, float z, Radians angle) noexcept
-        : InternalNode(parent, id), m_axis(x, y, z), m_angle(angle)
+        : InnerNode(parent, id), m_axis(x, y, z), m_angle(angle)
     {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
@@ -516,7 +516,7 @@ class RotateNode final : public InternalNode {
     Radians m_angle;
 };
 
-class ScaleNode final : public InternalNode {
+class ScaleNode final : public InnerNode {
   public:
     ScaleNode(const ScaleNode&) = delete;
     ScaleNode& operator=(const ScaleNode&) = delete;
@@ -532,7 +532,7 @@ class ScaleNode final : public InternalNode {
 
     static Metadata metadata;
 
-    ScaleNode(NodePtr parent, ID id, float factor) noexcept : InternalNode(parent, id), m_factor(factor) {}
+    ScaleNode(NodePtr parent, ID id, float factor) noexcept : InnerNode(parent, id), m_factor(factor) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
@@ -549,7 +549,7 @@ class InstanceNode final : public Node {
     auto GetMetadata() const -> MetadataRef override { return metadata; }
     auto GetField(std::string_view field_name) -> ValueRef override;
     bool IsRoot() const override { return false; }
-    bool IsInternal() const override { return false; }
+    bool IsInner() const override { return false; }
     bool IsLeaf() const override { return true; }
     bool IsAncestor(NodePtr node) const override;
     bool HasChildren() const override { return false; }
