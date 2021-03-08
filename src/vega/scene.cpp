@@ -151,7 +151,7 @@ struct ObjectAccess final {
     }
 
     template <typename T>
-    static std::string GenerateFieldMetadata(const T& object, int index)
+    static std::string GenerateFieldMetadata(const T& object, size_t index)
     {
         return std::string(object.kFieldWritable[index] ? "w:" : "r:") + std::string(object.kFieldNames[index]);
     }
@@ -422,7 +422,7 @@ std::vector<Property> Mesh::GetProperties() const
         std::make_tuple(m_aabb.min, m_aabb.max, m_vertices.GetCount(), m_indices.GetCount() / 3));
 }
 
-bool Mesh::SetProperty(std::string_view name, const PropertyValue& value)
+bool Mesh::SetProperty(std::string_view /*name*/, const PropertyValue& /*value*/)
 {
     // TODO
     return false;
@@ -656,7 +656,7 @@ bool InstanceNode::RemoveProperty(std::string_view name)
     return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
 }
 
-NodePtr InstanceNode::AttachNode(UniqueNode node)
+NodePtr InstanceNode::AttachNode(UniqueNode /*node*/)
 {
     utils::throw_runtime_error("Cannot attach node: cannot attach to leaf node");
     return nullptr;
@@ -877,12 +877,12 @@ json Scene::ToJson() const
 Scene::~Scene()
 {}
 
-PropertyValue Shader::GetProperty(std::string_view name) const
+PropertyValue Shader::GetProperty(std::string_view /*name*/) const
 {
     return {}; // TODO
 }
 
-PropertyValue Shader::GetProperty(std::string_view primary, std::string_view alternative) const
+PropertyValue Shader::GetProperty(std::string_view /*primary*/, std::string_view /*alternative*/) const
 {
     return {}; // TODO
 }
@@ -892,7 +892,7 @@ std::vector<Property> Shader::GetProperties() const
     return {}; // TODO
 }
 
-bool Shader::SetProperty(std::string_view name, const PropertyValue& value)
+bool Shader::SetProperty(std::string_view /*name*/, const PropertyValue& /*value*/)
 {
     return false; // TODO
 }
