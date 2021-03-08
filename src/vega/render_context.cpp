@@ -43,7 +43,7 @@ void RenderContext::ProcessUserInput()
         return;
     }
 
-    if (!m_scene->GetRootNodePtr()->HasChildren()) {
+    if (!m_scene->GetRootNode()->HasChildren()) {
         return;
     }
 

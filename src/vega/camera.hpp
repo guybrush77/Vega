@@ -57,7 +57,7 @@ template <typename T>
 struct AxisBase {
     static constexpr T FromInt(int value) { return T(static_cast<Axis>(value)); }
 
-    bool operator==(const T& rhs) const noexcept { return axis == rhs.axis; }
+    bool operator==(AxisBase rhs) const noexcept { return axis == rhs.axis; }
     bool operator==(Axis rhs) const noexcept { return axis == rhs; }
 
     constexpr int ToInt() const noexcept { return static_cast<int>(axis); }

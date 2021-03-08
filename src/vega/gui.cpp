@@ -27,6 +27,8 @@ END_DISABLE_WARNINGS
 #include <charconv>
 #include <string>
 
+static constexpr int kMaxStringSize = 128;
+
 struct Window {
     bool PreBegin();
     void SetDefaultSize(float width_multiplier = 1.0f, float height_multiplier = 1.0f);
@@ -63,12 +65,13 @@ class SceneWindow : public Window {
     bool DrawTreeNode(NodePtr node);
     auto DrawContextMenu(NodePtr node) -> NodePtr;
     void DrawNode(NodePtr node);
-    void DrawObjectFields(ObjectPtr object, int* ptr_id);
+    void DrawProperties(ObjectPtr object, int* ptr_id);
+    void DrawField(ObjectPtr object, std::string_view field, int* ptr_id);
 
-    char        m_buffer[64]    = {};
-    const void* m_selected_node = nullptr;
-    const void* m_rename_node   = 0;
-    Scene*      m_scene         = nullptr;
+    char        m_buffer[kMaxStringSize] = {};
+    const void* m_selected_node          = nullptr;
+    const void* m_rename_node            = 0;
+    Scene*      m_scene                  = nullptr;
 };
 
 class FileBrowserWindow {
@@ -812,117 +815,99 @@ void CameraWindow::Draw()
     PostEnd();
 }
 
-struct DrawProperty final {
-    void operator()(int i)
-    {
-        int value = i;
-        ImGui::InputInt(label, &value, 0, 0, ImGuiInputTextFlags_ReadOnly);
-    }
-    void operator()(float f)
-    {
-        float value = f;
-        ImGui::InputFloat(label, &value, 0, 0, "%.3f", ImGuiInputTextFlags_ReadOnly);
-    }
-    void operator()(const std::string& s)
-    {
-        char buffer[64];
-        CopyToBuffer(buffer, s);
-        ImGui::InputText(label, buffer, sizeof(buffer), ImGuiInputTextFlags_ReadOnly);
-    }
-
-    const char* label = nullptr;
-};
-
-void DrawObjectProperties(ObjectPtr object, int* ptr_id)
+void SceneWindow::DrawField(ObjectPtr object, std::string_view field, int* ptr_id)
 {
-    auto& id = *ptr_id;
-
-    for (const auto& [key, value] : object->GetProperties()) {
-        if (!IsReservedProperty(key)) {
-            ImGui::PushID(id++);
-            std::visit(DrawProperty{ key.c_str() }, value);
-            ImGui::PopID();
-        }
-    }
-}
-
-void SceneWindow::DrawObjectFields(ObjectPtr object, int* ptr_id)
-{
-    static constexpr auto editable = ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue;
+    static constexpr auto writable = ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue;
     static constexpr auto readonly = ImGuiInputTextFlags_ReadOnly;
 
-    auto& metadata = object->GetMetadata();
-    auto& id       = *ptr_id;
+    auto temp  = std::get<std::string>(object->GetProperty('_' + std::string(field) + ".meta"));
+    auto name  = std::string_view(temp);
+    auto value = object->GetProperty(field);
+    auto flags = name.starts_with("w:") ? writable : readonly;
 
-    if (metadata.object_description) {
-        auto text = const_cast<char*>(metadata.object_description);
+    name.remove_prefix(2);
+
+    auto float_step      = 0.01f;
+    auto float_step_fast = 1.0f;
+    auto int_step        = 1;
+    auto int_step_fast   = 100;
+
+    if (flags == readonly) {
+        float_step      = 0.0f;
+        float_step_fast = 0.0f;
+        int_step        = 0;
+        int_step_fast   = 0;
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
-        ImGui::PushID(id++);
-        ImGui::InputText("Type", text, strlen(text), readonly);
-        ImGui::PopID();
+    }
+
+    auto& id = *ptr_id;
+
+    ImGui::PushID(id++);
+
+    if (auto ivalue = std::get_if<int>(&value)) {
+        if (ImGui::InputInt(name.data(), ivalue, int_step, int_step_fast, flags)) {
+            object->SetProperty(field, *ivalue);
+        }
+    } else if (auto fvalue = std::get_if<float>(&value)) {
+        if (ImGui::InputFloat(name.data(), fvalue, float_step, float_step_fast, "%.3f", flags)) {
+            object->SetProperty(field, *fvalue);
+        }
+    } else if (auto f3value = std::get_if<Float3>(&value)) {
+        if (ImGui::InputFloat3(name.data(), &f3value->x, "%.3f", flags)) {
+            object->SetProperty(field, *f3value);
+        }
+    } else if (auto pvalue = std::get_if<ObjectPtr>(&value)) {
+        DrawProperties(*pvalue, ptr_id);
+    }
+
+    if (flags == readonly) {
         ImGui::PopStyleVar();
     }
 
-    if (object->HasProperties()) {
-        DrawObjectProperties(object, ptr_id);
-    }
+    ImGui::PopID();
+}
 
-    for (const auto& field : metadata.fields) {
-        auto flags           = editable;
-        auto float_step      = 0.01f;
-        auto float_step_fast = 1.0f;
-        auto int_step        = 1;
-        auto int_step_fast   = 100;
+void SceneWindow::DrawProperties(ObjectPtr object, int* ptr_id)
+{
+    static constexpr auto readonly = ImGuiInputTextFlags_ReadOnly;
 
-        if (false == field.is_editable) {
-            flags           = readonly;
-            float_step      = 0;
-            float_step_fast = 0;
-            int_step        = 0;
-            int_step_fast   = 0;
+    auto& id = *ptr_id;
+
+    auto properties = object->GetProperties();
+
+    for (auto& [name, value] : properties) {
+        if (name.starts_with('_') || name == "name") {
+            continue;
+        }
+
+        auto is_field = name.starts_with("field.");
+
+        if (!is_field) {
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
         }
 
         ImGui::PushID(id++);
 
-        switch (field.value_type) {
-        case ValueType::Null: break;
-        case ValueType::Float: {
-            float& value = object->GetField(field.name);
-            ImGui::InputFloat(field.label, &value, float_step, float_step_fast, "%.3f", flags);
-            break;
-        }
-        case ValueType::Int: {
-            int& value = object->GetField(field.name);
-            ImGui::InputInt(field.label, &value, int_step, int_step_fast, flags);
-            break;
-        }
-        case ValueType::Reference: {
-            Object& value = object->GetField(field.name);
-            DrawObjectFields(&value, ptr_id);
-            break;
-        }
-        case ValueType::String: {
-            char         buffer[64];
-            std::string& value = object->GetField(field.name);
-
-            CopyToBuffer(buffer, value);
-
-            if (ImGui::InputText(field.label, buffer, sizeof(value), flags)) {
-                value = buffer;
-            }
-            break;
-        }
-        case ValueType::Float3: {
-            Float3& value = object->GetField(field.name);
-            ImGui::InputFloat3(field.label, &value.x, "%.3f", flags);
-            break;
-        }
+        if (is_field) {
+            DrawField(object, name, ptr_id);
+        } else if (auto ivalue = std::get_if<int>(&value)) {
+            ImGui::InputInt(name.c_str(), ivalue, 0, 0, readonly);
+        } else if (auto fvalue = std::get_if<float>(&value)) {
+            ImGui::InputFloat(name.c_str(), fvalue, 0, 0, "%.3f", readonly);
+        } else if (auto f3value = std::get_if<Float3>(&value)) {
+            ImGui::InputFloat3(name.c_str(), &f3value->x, "%.3f", readonly);
+        } else if (auto svalue = std::get_if<std::string>(&value)) {
+            char buffer[kMaxStringSize];
+            CopyToBuffer(buffer, *svalue);
+            ImGui::InputText(name.c_str(), buffer, sizeof(buffer), readonly);
+        } else if (auto pvalue = std::get_if<ObjectPtr>(&value)) {
+            auto idvalue = GetID(*pvalue).value;
+            ImGui::InputInt(name.c_str(), &idvalue, 0, 0, readonly);
         }
 
         ImGui::PopID();
 
-        if (false == field.is_editable) {
+        if (!is_field) {
             ImGui::PopStyleVar();
         }
     }
@@ -940,7 +925,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
     bool opened = false;
 
     if (node == m_rename_node) {
-        CopyToBuffer(m_buffer, node->GetName());
+        CopyToBuffer(m_buffer, std::get<std::string>(node->GetProperty("name", "_name")));
 
         opened = ImGui::TreeNodeEx(node, flags, "%s", "");
 
@@ -960,7 +945,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
                 m_buffer,
                 sizeof(m_buffer),
                 ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue)) {
-            node->SetName(m_buffer);
+            node->SetProperty("name", std::string(m_buffer));
             m_rename_node = 0;
         }
 
@@ -968,13 +953,14 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
         ImGui::PopStyleVar(2);
 
     } else {
-        opened = ImGui::TreeNodeEx(node, flags, "%s", node->GetName().c_str());
+        auto name = std::get<std::string>(node->GetProperty("name", "_name"));
+        opened    = ImGui::TreeNodeEx(node, flags, "%s", name.c_str());
     }
 
     if (false == node->IsRoot()) {
         if (ImGui::BeginDragDropSource()) {
             ImGui::SetDragDropPayload("MOVE", &node, sizeof(node));
-            ImGui::TextUnformatted(node->GetName().c_str());
+            ImGui::TextUnformatted(std::get<std::string>(node->GetProperty("name", "_name")).c_str());
             ImGui::EndDragDropSource();
         }
     }
@@ -986,7 +972,7 @@ bool SceneWindow::DrawTreeNode(NodePtr node)
             if (src_node && !src_node->IsAncestor(node)) {
                 if (ImGui::BeginDragDropTarget()) {
                     if (ImGui::AcceptDragDropPayload("MOVE")) {
-                        static_cast<InnerNode*>(node)->AttachNode(std::move(src_node->DetachNode()));
+                        node->AttachNode(std::move(src_node->DetachNode()));
                     }
                     ImGui::EndDragDropTarget();
                 }
@@ -1004,19 +990,18 @@ NodePtr SceneWindow::DrawContextMenu(NodePtr node)
             m_rename_node = node;
         }
         if (node->IsInner()) {
-            auto internal = static_cast<InnerNode*>(node);
             if (ImGui::BeginMenu("Add Node")) {
                 if (ImGui::MenuItem("Translate")) {
-                    internal->AddTranslateNode(0, 0, 0);
+                    node->AttachNode(m_scene->CreateTranslateNode(Float3{ 0, 0, 0 }));
                 }
                 if (ImGui::MenuItem("Rotate")) {
-                    internal->AddRotateNode(1, 0, 0, 0_rad);
+                    node->AttachNode(m_scene->CreateRotateNode(Float3{ 1, 0, 0 }, 0_rad));
                 }
                 if (ImGui::MenuItem("Scale")) {
-                    internal->AddScaleNode(1.0f);
+                    node->AttachNode(m_scene->CreateScaleNode(1.0f));
                 }
                 if (ImGui::MenuItem("Group")) {
-                    internal->AddGroupNode();
+                    node->AttachNode(m_scene->CreateGroupNode());
                 }
                 ImGui::EndMenu();
             }
@@ -1058,8 +1043,8 @@ void SceneWindow::DrawNode(NodePtr node)
 
     if (opened) {
         if (node) {
-            auto id = node->GetID().value << 8;
-            DrawObjectFields(node, &id);
+            auto id = GetID(node).value << 8;
+            DrawProperties(node, &id);
             std::ranges::for_each(node->GetChildren(), [this](NodePtr node) { DrawNode(node); });
         }
         ImGui::TreePop();
@@ -1081,7 +1066,7 @@ void SceneWindow::Draw()
 
     SetDefaultSize(4.0f, 5.0f);
 
-    DrawNode(m_scene->GetRootNodePtr());
+    DrawNode(m_scene->GetRootNode());
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
         m_selected_node = 0;

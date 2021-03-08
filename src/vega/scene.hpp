@@ -16,17 +16,17 @@ END_DISABLE_WARNINGS
 #include <nlohmann/json.hpp>
 
 #include <any>
+#include <map>
 #include <memory>
 #include <string_view>
-#include <unordered_map>
 #include <variant>
 #include <vector>
 
 class GroupNode;
+class InnerNode;
 class InstanceNode;
 class Material;
 class Mesh;
-class MeshManager;
 class Node;
 class Object;
 class RootNode;
@@ -34,10 +34,10 @@ class RotateNode;
 class ScaleNode;
 class Scene;
 class Shader;
-class ShaderManager;
 class TranslateNode;
 
 using GroupNodePtr     = GroupNode*;
+using InnerNodePtr     = InnerNode*;
 using InstanceNodePtr  = InstanceNode*;
 using MaterialPtr      = Material*;
 using MeshPtr          = Mesh*;
@@ -50,36 +50,21 @@ using ScenePtr         = Scene*;
 using ShaderPtr        = Shader*;
 using TranslateNodePtr = TranslateNode*;
 
+using UniqueGroupNode     = std::unique_ptr<GroupNode>;
+using UniqueInstanceNode  = std::unique_ptr<InstanceNode>;
 using UniqueMaterial      = std::unique_ptr<Material>;
 using UniqueMesh          = std::unique_ptr<Mesh>;
-using UniqueMeshManager   = std::unique_ptr<MeshManager>;
 using UniqueNode          = std::unique_ptr<Node>;
+using UniqueRotateNode    = std::unique_ptr<RotateNode>;
+using UniqueScaleNode     = std::unique_ptr<ScaleNode>;
 using UniqueShader        = std::unique_ptr<Shader>;
-using UniqueShaderManager = std::unique_ptr<ShaderManager>;
+using UniqueTranslateNode = std::unique_ptr<TranslateNode>;
 
-using InstanceNodePtrArray = std::vector<InstanceNodePtr>;
-using MaterialPtrArray     = std::vector<MaterialPtr>;
-using MeshPtrArray         = std::vector<MeshPtr>;
-using NodePtrArray         = std::vector<NodePtr>;
-using ObjectPtrArray       = std::vector<ObjectPtr>;
-using ShaderPtrArray       = std::vector<ShaderPtr>;
-
-using MaterialRefArray = std::vector<std::reference_wrapper<Material>>;
-using MeshRefArray     = std::vector<std::reference_wrapper<Mesh>>;
-using NodeRefArray     = std::vector<std::reference_wrapper<Node>>;
-using ObjectRefArray   = std::vector<std::reference_wrapper<Object>>;
-using ShaderRefArray   = std::vector<std::reference_wrapper<Shader>>;
-
-struct Metadata;
-
-using MetadataRef = const Metadata&;
-
-using Key           = std::string;
-using Value         = std::variant<int, float, std::string>;
-using Dictionary    = std::unordered_map<Key, Value>;
-using DictionaryRef = const Dictionary&;
-
-using json = nlohmann::json;
+using Instances = std::vector<InstanceNodePtr>;
+using Materials = std::vector<MaterialPtr>;
+using Meshes    = std::vector<MeshPtr>;
+using Nodes     = std::vector<NodePtr>;
+using Shaders   = std::vector<ShaderPtr>;
 
 struct ID final {
     int value = 0;
@@ -96,109 +81,45 @@ struct ID final {
     };
 };
 
-enum class ValueType { Null, Float, Float3, Int, Reference, String };
+using PropertyName  = std::string;
+using PropertyValue = std::variant<std::monostate, int, float, Float3, std::string, ObjectPtr>;
+using PropertyStore = std::map<PropertyName, PropertyValue>;
 
-std::string to_string(ValueType value_type);
-
-class ValueRef final {
-  public:
-    ValueRef() noexcept = default;
-
-    explicit ValueRef(float* value) noexcept : m_type(ValueType::Float), value(value) {}
-    explicit ValueRef(Float3* value) noexcept : m_type(ValueType::Float3), value(value) {}
-    explicit ValueRef(int* value) noexcept : m_type(ValueType::Int), value(value) {}
-    explicit ValueRef(Object* value) noexcept : m_type(ValueType::Reference), value(value) {}
-    explicit ValueRef(std::string* value) noexcept : m_type(ValueType::String), value(value) {}
-
-    operator float&() const
-    {
-        utils::throw_runtime_error_if(m_type != ValueType::Float, "Conversion error");
-        return *static_cast<float*>(value);
-    }
-
-    operator int&() const
-    {
-        utils::throw_runtime_error_if(m_type != ValueType::Int, "Conversion error");
-        return *static_cast<int*>(value);
-    }
-
-    operator Object&() const
-    {
-        utils::throw_runtime_error_if(m_type != ValueType::Reference, "Conversion error");
-        return *static_cast<Object*>(value);
-    }
-
-    operator std::string &() const
-    {
-        utils::throw_runtime_error_if(m_type != ValueType::String, "Conversion error");
-        return *static_cast<std::string*>(value);
-    }
-
-    operator Float3&() const
-    {
-        utils::throw_runtime_error_if(m_type != ValueType::Float3, "Conversion error");
-        return *static_cast<Float3*>(value);
-    }
-
-  private:
-    using ValuePtr = void*;
-
-    ValueType m_type = ValueType::Null;
-    ValuePtr  value  = nullptr;
+struct Property final {
+    PropertyName  name;
+    PropertyValue value;
 };
 
-struct Field final {
-    using IsEditable = bool;
-
-    const char* name{};
-    const char* label{};
-    const char* description{};
-    ValueType   value_type{};
-    IsEditable  is_editable{};
-};
-
-struct Metadata final {
-    const char* object_class{};
-    const char* object_default_name{};
-    const char* object_description{};
-
-    std::vector<Field> fields;
-};
-
-inline bool IsReservedProperty(const std::string& property) noexcept
-{
-    return property == "object.name";
-}
+using json = nlohmann::json;
 
 class Object {
   public:
     virtual ~Object() noexcept = default;
 
-    auto GetID() const noexcept { return m_id; }
+    virtual auto GetProperty(std::string_view name) const -> PropertyValue                                  = 0;
+    virtual auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue = 0;
+    virtual auto GetProperties() const -> std::vector<Property>                                             = 0;
 
-    auto GetName() const noexcept -> std::string;
-    auto GetProperties() const -> DictionaryRef { return *m_dictionary; }
-    bool HasProperties() const noexcept;
+    virtual bool SetProperty(std::string_view name, const PropertyValue& value) = 0;
+    virtual bool RemoveProperty(std::string_view name)                          = 0;
 
-    void SetName(std::string name);
-    void SetProperty(Key key, Value value);
-    void RemoveProperty(Key key);
+    virtual auto ToJson() const -> json = 0;
 
-    virtual auto GetMetadata() const -> MetadataRef = 0;
-    virtual auto ToJson() const -> json             = 0;
-
-    virtual auto GetField(std::string_view field_name) -> ValueRef = 0;
+    ID GetID() const noexcept { return m_id; }
 
   protected:
     friend struct ObjectAccess;
 
-    using UniqueDictionary = std::unique_ptr<Dictionary>;
-
     Object(ID id) noexcept : m_id(id) {}
 
-    ID               m_id;
-    UniqueDictionary m_dictionary;
+    ID            m_id;
+    PropertyStore m_properties;
 };
+
+inline ID GetID(const Object* object) noexcept
+{
+    return object->GetID();
+}
 
 class MeshVertices final {
   public:
@@ -300,8 +221,12 @@ class Mesh : public Object {
     Mesh(Mesh&&) noexcept = default;
     Mesh& operator=(Mesh&&) noexcept = default;
 
-    auto GetMetadata() const noexcept -> MetadataRef override { return metadata; }
-    auto GetField(std::string_view field_name) -> ValueRef override;
+    auto GetProperty(std::string_view name) const -> PropertyValue override;
+    auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue override;
+    auto GetProperties() const -> std::vector<Property> override;
+
+    bool SetProperty(std::string_view name, const PropertyValue& value) override;
+    bool RemoveProperty(std::string_view name) override;
 
     auto GetBoundingBox() const noexcept -> const AABB& { return m_aabb; }
     auto GetVertices() const noexcept -> const MeshVertices& { return m_vertices; }
@@ -312,11 +237,14 @@ class Mesh : public Object {
   private:
     friend struct ObjectAccess;
 
+    static constexpr std::string_view                kClassName     = "mesh";
+    static constexpr std::string_view                kDefaultName   = "Mesh";
+    static constexpr std::array<std::string_view, 4> kFieldNames    = { "Min", "Max", "Vertices", "Faces" };
+    static constexpr std::array<bool, 4>             kFieldWritable = { false, false, false, false };
+
     Mesh(ID id, AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) noexcept
         : Object(id), m_aabb(aabb), m_vertices(std::move(mesh_vertices)), m_indices(std::move(mesh_indices))
     {}
-
-    static Metadata metadata;
 
     AABB         m_aabb{};
     MeshVertices m_vertices;
@@ -331,22 +259,28 @@ class Shader : public Object {
     Shader(Shader&&) = default;
     Shader& operator=(Shader&&) = default;
 
-    auto GetMetadata() const -> MetadataRef override { return metadata; }
+    auto GetProperty(std::string_view name) const -> PropertyValue override;
+    auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue override;
+    auto GetProperties() const -> std::vector<Property> override;
 
-    auto GetField(std::string_view) -> ValueRef override { return {}; }
+    bool SetProperty(std::string_view name, const PropertyValue& value) override;
+    bool RemoveProperty(std::string_view name) override;
 
     auto CreateMaterial() -> MaterialPtr;
 
-    auto GetMaterials() const -> MaterialPtrArray;
+    auto GetMaterials() const -> Materials;
 
     json ToJson() const override;
 
   protected:
     friend struct ObjectAccess;
 
-    Shader(ID id) noexcept : Object(id){};
+    static constexpr std::string_view                kClassName     = "shader";
+    static constexpr std::string_view                kDefaultName   = "Shader";
+    static constexpr std::array<std::string_view, 0> kFieldNames    = {};
+    static constexpr std::array<bool, 0>             kFieldWritable = {};
 
-    inline static Metadata metadata = { "shader", "Shader", "Shader", {} };
+    Shader(ID id) noexcept : Object(id){};
 
     std::vector<UniqueMaterial> m_materials;
 };
@@ -356,40 +290,41 @@ class Material final : public Shader {
     Material(const Material&) = delete;
     Material& operator=(const Material&) = delete;
 
-    auto GetMetadata() const -> MetadataRef override { return metadata; }
     json ToJson() const override;
 
-    auto GetInstanceNodes() const { return m_instance_nodes; }
+    auto GetInstanceNodes() const { return m_instances; }
 
     bool RemoveInstance(InstanceNodePtr node);
 
   private:
     friend struct ObjectAccess;
 
+    static constexpr std::string_view kClassName   = "material";
+    static constexpr std::string_view kDefaultName = "Material";
+
     Material(ID id) noexcept : Shader(id) {}
 
     void AddInstanceNodePtr(InstanceNodePtr mesh_instance_node);
 
-    inline static Metadata metadata = { "material", "Material", "Material", {} };
-
-    InstanceNodePtrArray m_instance_nodes;
+    Instances m_instances;
 };
 
 class Node : public Object {
   public:
-    Node(NodePtr parent, ID id) noexcept : Object(id), m_parent(parent) {}
+    virtual auto AttachNode(UniqueNode node) -> NodePtr = 0;
+    virtual auto DetachNode() -> UniqueNode             = 0;
 
-    virtual bool IsRoot() const                      = 0;
-    virtual bool IsInner() const                  = 0;
-    virtual bool IsLeaf() const                      = 0;
-    virtual bool IsAncestor(NodePtr node) const      = 0;
-    virtual bool HasChildren() const                 = 0;
-    virtual auto GetChildren() const -> NodePtrArray = 0;
-
-    virtual auto DetachNode() -> UniqueNode = 0;
+    virtual bool IsRoot() const                 = 0;
+    virtual bool IsInner() const                = 0;
+    virtual bool IsLeaf() const                 = 0;
+    virtual bool IsAncestor(NodePtr node) const = 0;
+    virtual bool HasChildren() const            = 0;
+    virtual auto GetChildren() const -> Nodes   = 0;
 
   protected:
     friend struct ObjectAccess;
+
+    Node(NodePtr parent, ID id) noexcept : Object(id), m_parent(parent) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept = 0;
 
@@ -398,14 +333,7 @@ class Node : public Object {
 
 class InnerNode : public Node {
   public:
-    auto AddGroupNode() -> GroupNodePtr;
-    auto AddTranslateNode(float x, float y, float z) -> TranslateNodePtr;
-    auto AddRotateNode(float x, float y, float z, Radians angle) -> RotateNodePtr;
-    auto AddScaleNode(float factor) -> ScaleNodePtr;
-    auto AddInstanceNode(MeshPtr mesh, MaterialPtr material) -> InstanceNodePtr;
-
-    void AttachNode(UniqueNode node);
-
+    auto AttachNode(UniqueNode node) -> NodePtr override;
     auto DetachNode() -> UniqueNode override;
 
     bool IsRoot() const override { return false; }
@@ -413,7 +341,7 @@ class InnerNode : public Node {
     bool IsLeaf() const override { return false; }
     bool IsAncestor(NodePtr node) const override;
     bool HasChildren() const override;
-    auto GetChildren() const -> NodePtrArray override;
+    auto GetChildren() const -> Nodes override;
 
   protected:
     friend struct ObjectAccess;
@@ -428,9 +356,14 @@ class RootNode final : public InnerNode {
     RootNode(const RootNode&) = delete;
     RootNode& operator=(const RootNode&) = delete;
 
-    auto GetMetadata() const -> MetadataRef override { return metadata; }
+    auto GetProperty(std::string_view name) const -> PropertyValue override;
+    auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue override;
+    auto GetProperties() const -> std::vector<Property> override;
 
-    auto GetField(std::string_view) -> ValueRef override { return {}; }
+    bool SetProperty(std::string_view name, const PropertyValue& value) override;
+    bool RemoveProperty(std::string_view name) override;
+
+    auto DetachNode() -> UniqueNode override;
 
     bool IsRoot() const override { return true; }
 
@@ -439,7 +372,10 @@ class RootNode final : public InnerNode {
   private:
     friend struct ObjectAccess;
 
-    static Metadata metadata;
+    static constexpr std::string_view                kClassName     = "root.node";
+    static constexpr std::string_view                kDefaultName   = "Root";
+    static constexpr std::array<std::string_view, 0> kFieldNames    = {};
+    static constexpr std::array<bool, 0>             kFieldWritable = {};
 
     RootNode(NodePtr parent, ID id) noexcept : InnerNode(parent, id) {}
 
@@ -450,16 +386,22 @@ class GroupNode final : public InnerNode {
     GroupNode(const GroupNode&) = delete;
     GroupNode& operator=(const GroupNode&) = delete;
 
-    auto GetMetadata() const -> MetadataRef override { return metadata; }
+    auto GetProperty(std::string_view name) const -> PropertyValue override;
+    auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue override;
+    auto GetProperties() const -> std::vector<Property> override;
 
-    auto GetField(std::string_view) -> ValueRef override { return {}; }
+    bool SetProperty(std::string_view name, const PropertyValue& value) override;
+    bool RemoveProperty(std::string_view name) override;
 
     json ToJson() const override;
 
   private:
     friend struct ObjectAccess;
 
-    static Metadata metadata;
+    static constexpr std::string_view                kClassName     = "group.node";
+    static constexpr std::string_view                kDefaultName   = "Group";
+    static constexpr std::array<std::string_view, 0> kFieldNames    = {};
+    static constexpr std::array<bool, 0>             kFieldWritable = {};
 
     GroupNode(NodePtr parent, ID id) noexcept : InnerNode(parent, id) {}
 
@@ -470,24 +412,28 @@ class TranslateNode final : public InnerNode {
     TranslateNode(const TranslateNode&) = delete;
     TranslateNode& operator=(const TranslateNode&) = delete;
 
-    auto GetMetadata() const -> MetadataRef override { return metadata; }
+    auto GetProperty(std::string_view name) const -> PropertyValue override;
+    auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue override;
+    auto GetProperties() const -> std::vector<Property> override;
 
-    auto GetField(std::string_view field_name) -> ValueRef override;
+    bool SetProperty(std::string_view name, const PropertyValue& value) override;
+    bool RemoveProperty(std::string_view name) override;
 
     json ToJson() const override;
 
   private:
     friend struct ObjectAccess;
 
-    static Metadata metadata;
+    static constexpr std::string_view                kClassName     = "translate.node";
+    static constexpr std::string_view                kDefaultName   = "Translate";
+    static constexpr std::array<std::string_view, 1> kFieldNames    = { "Distance" };
+    static constexpr std::array<bool, 1>             kFieldWritable = { true };
 
-    TranslateNode(NodePtr parent, ID id, float x, float y, float z) noexcept
-        : InnerNode(parent, id), m_amount(x, y, z)
-    {}
+    TranslateNode(NodePtr parent, ID id, Float3 distance) noexcept : InnerNode(parent, id), m_distance(distance) {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
 
-    Float3 m_amount;
+    Float3 m_distance;
 };
 
 class RotateNode final : public InnerNode {
@@ -495,19 +441,25 @@ class RotateNode final : public InnerNode {
     RotateNode(const RotateNode&) = delete;
     RotateNode& operator=(const RotateNode&) = delete;
 
-    auto GetMetadata() const -> MetadataRef override { return metadata; }
+    auto GetProperty(std::string_view name) const -> PropertyValue override;
+    auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue override;
+    auto GetProperties() const -> std::vector<Property> override;
 
-    auto GetField(std::string_view field_name) -> ValueRef override;
+    bool SetProperty(std::string_view name, const PropertyValue& value) override;
+    bool RemoveProperty(std::string_view name) override;
 
     json ToJson() const override;
 
   private:
     friend struct ObjectAccess;
 
-    static Metadata metadata;
+    static constexpr std::string_view                kClassName     = "rotate.node";
+    static constexpr std::string_view                kDefaultName   = "Rotate";
+    static constexpr std::array<std::string_view, 2> kFieldNames    = { "Axis", "Angle" };
+    static constexpr std::array<bool, 2>             kFieldWritable = { true, true };
 
-    RotateNode(NodePtr parent, ID id, float x, float y, float z, Radians angle) noexcept
-        : InnerNode(parent, id), m_axis(x, y, z), m_angle(angle)
+    RotateNode(NodePtr parent, ID id, Float3 axis, Radians angle) noexcept
+        : InnerNode(parent, id), m_axis(axis), m_angle(angle)
     {}
 
     virtual void ApplyTransform(const glm::mat4& matrix) noexcept override;
@@ -521,16 +473,22 @@ class ScaleNode final : public InnerNode {
     ScaleNode(const ScaleNode&) = delete;
     ScaleNode& operator=(const ScaleNode&) = delete;
 
-    auto GetMetadata() const -> MetadataRef override { return metadata; }
+    auto GetProperty(std::string_view name) const -> PropertyValue override;
+    auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue override;
+    auto GetProperties() const -> std::vector<Property> override;
 
-    auto GetField(std::string_view field_name) -> ValueRef override;
+    bool SetProperty(std::string_view name, const PropertyValue& value) override;
+    bool RemoveProperty(std::string_view name) override;
 
     json ToJson() const override;
 
   private:
     friend struct ObjectAccess;
 
-    static Metadata metadata;
+    static constexpr std::string_view                kClassName     = "scale.node";
+    static constexpr std::string_view                kDefaultName   = "Scale";
+    static constexpr std::array<std::string_view, 1> kFieldNames    = { "Factor" };
+    static constexpr std::array<bool, 1>             kFieldWritable = { true };
 
     ScaleNode(NodePtr parent, ID id, float factor) noexcept : InnerNode(parent, id), m_factor(factor) {}
 
@@ -546,17 +504,24 @@ class InstanceNode final : public Node {
 
     ~InstanceNode() noexcept;
 
-    auto GetMetadata() const -> MetadataRef override { return metadata; }
-    auto GetField(std::string_view field_name) -> ValueRef override;
+    auto GetProperty(std::string_view name) const -> PropertyValue override;
+    auto GetProperty(std::string_view primary, std::string_view alternative) const -> PropertyValue override;
+    auto GetProperties() const -> std::vector<Property> override;
+
+    bool SetProperty(std::string_view name, const PropertyValue& value) override;
+    bool RemoveProperty(std::string_view name) override;
+
+    auto AttachNode(UniqueNode node) -> NodePtr override;
+    auto DetachNode() -> UniqueNode override;
+
     bool IsRoot() const override { return false; }
     bool IsInner() const override { return false; }
     bool IsLeaf() const override { return true; }
     bool IsAncestor(NodePtr node) const override;
     bool HasChildren() const override { return false; }
-    auto GetChildren() const -> NodePtrArray override { return NodePtrArray{}; }
-    json ToJson() const override;
+    auto GetChildren() const -> Nodes override { return Nodes{}; }
 
-    auto DetachNode() -> UniqueNode override;
+    json ToJson() const override;
 
     auto GetMeshPtr() const noexcept { return m_mesh; }
     auto GetMaterialPtr() const noexcept { return m_material; }
@@ -565,7 +530,10 @@ class InstanceNode final : public Node {
   private:
     friend struct ObjectAccess;
 
-    static Metadata metadata;
+    static constexpr std::string_view                kClassName     = "instance.node";
+    static constexpr std::string_view                kDefaultName   = "Mesh Instance";
+    static constexpr std::array<std::string_view, 2> kFieldNames    = { "Mesh", "Material" };
+    static constexpr std::array<bool, 2>             kFieldWritable = { false, false };
 
     InstanceNode(NodePtr parent, ID id, MeshPtr mesh, MaterialPtr material) noexcept;
 
@@ -595,11 +563,17 @@ class Scene {
 
     ~Scene() noexcept;
 
-    auto GetRootNodePtr() noexcept -> RootNodePtr;
+    auto GetRootNode() noexcept -> RootNodePtr;
+
+    auto CreateGroupNode() -> UniqueGroupNode;
+    auto CreateTranslateNode(Float3 distance) -> UniqueTranslateNode;
+    auto CreateRotateNode(Float3 axis, Radians angle) -> UniqueRotateNode;
+    auto CreateScaleNode(float factor) -> UniqueScaleNode;
+    auto CreateInstanceNode(MeshPtr mesh, MaterialPtr material) -> UniqueInstanceNode;
 
     auto CreateShader() -> ShaderPtr;
 
-    auto CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices) -> MeshPtr;
+    auto CreateMesh(AABB aabb, MeshVertices vertices, MeshIndices indices) -> MeshPtr;
 
     auto ComputeDrawList() const -> DrawList;
 
@@ -608,7 +582,7 @@ class Scene {
     json ToJson() const;
 
   private:
-    UniqueShaderManager m_shader_manager;
-    UniqueMeshManager   m_mesh_manager;
-    UniqueNode          m_root_node;
+    std::vector<UniqueShader> m_shaders;
+    std::vector<UniqueMesh>   m_meshes;
+    UniqueNode                m_root;
 };

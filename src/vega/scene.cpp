@@ -4,24 +4,26 @@
 
 #include <atomic>
 #include <ranges>
-
-namespace {
-
-struct ValueToJson final {
-    void operator()(int i) { j[key] = i; }
-    void operator()(float f) { j[key] = f; }
-    void operator()(const std::string& s) { j[key] = s; }
-
-    json&              j;
-    const std::string& key;
-};
-
-} // namespace
+#include <tuple>
 
 static void to_json(json& json, const Float3& vec)
 {
     json = { vec.x, vec.y, vec.z };
 }
+
+static void to_json(json& json, ID id)
+{
+    json = id.value;
+}
+
+struct ValueToJson final {
+    void operator()(std::monostate) {}
+    void operator()(ObjectPtr value) { j[key] = value->GetID(); }
+    void operator()(auto& value) { j[key] = value; }
+
+    json&              j;
+    const std::string& key;
+};
 
 static void to_json(json& json, const UniqueNode& node)
 {
@@ -39,24 +41,19 @@ static void to_json(json& json, const AABB& aabb)
     json["aabb.max"] = aabb.max;
 }
 
-static void to_json(json& json, ID id)
+static void to_json(json& json, ShaderPtr shader)
 {
-    json = id.value;
-}
-
-static void to_json(json& json, const Shader& material)
-{
-    json = material.ToJson();
+    json = shader->ToJson();
 }
 
 static void to_json(json& json, InstanceNodePtr instance_node)
 {
-    json = instance_node->GetID();
+    json = GetID(instance_node);
 }
 
-static void to_json(json& json, const Mesh& mesh)
+static void to_json(json& json, MeshPtr mesh)
 {
-    json = mesh.ToJson();
+    json = mesh->ToJson();
 }
 
 static void to_json(json& json, const MeshVertices& vertices)
@@ -75,13 +72,13 @@ static void to_json(json& json, const MeshIndices& indices)
     json["indices.size"] = indices.GetSize();
 }
 
-struct DictionaryValues final {
-    const Dictionary* dictionary = nullptr;
+struct Properties final {
+    const PropertyStore* ptr = nullptr;
 };
 
-static void to_json(json& json, const DictionaryValues& values)
+static void to_json(json& json, const Properties& properties)
 {
-    for (const auto& [key, value] : *values.dictionary) {
+    for (const auto& [key, value] : *properties.ptr) {
         std::visit(ValueToJson{ json, key }, value);
     }
 }
@@ -98,12 +95,12 @@ static void to_json(json& json, const RotateValues& values)
 }
 
 struct TranslateValues final {
-    const Float3 amount;
+    const Float3 distance;
 };
 
 static void to_json(json& json, const TranslateValues& values)
 {
-    json["translate"] = values.amount;
+    json["translate"] = values.distance;
 }
 
 struct ScaleValues final {
@@ -146,11 +143,167 @@ static ID GetUniqueID() noexcept
     return ID(id);
 }
 
-struct ObjectAccess {
+struct ObjectAccess final {
     template <typename T, typename... Args>
     static auto MakeUnique(Args&&... args)
     {
         return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+    }
+
+    template <typename T>
+    static std::string GenerateFieldMetadata(const T& object, int index)
+    {
+        return std::string(object.kFieldWritable[index] ? "w:" : "r:") + std::string(object.kFieldNames[index]);
+    }
+
+    template <typename T, typename Fields>
+    static PropertyValue GetProperty(std::string_view name, const T& object, const Fields& fields)
+    {
+        if (name == "_class") {
+            return std::string(object.kClassName);
+        }
+        if (name == "_name") {
+            return std::string(object.kDefaultName);
+        }
+        if (name == "_id") {
+            return object.GetID().value;
+        }
+        if constexpr (std::tuple_size<Fields>::value > 0) {
+            if (name == "_field.1.meta") {
+                return GenerateFieldMetadata(object, 0);
+            } else if (name == "field.1") {
+                return std::get<0>(fields);
+            }
+        }
+        if constexpr (std::tuple_size<Fields>::value > 1) {
+            if (name == "_field.2.meta") {
+                return GenerateFieldMetadata(object, 1);
+            } else if (name == "field.2") {
+                return std::get<1>(fields);
+            }
+        }
+        if constexpr (std::tuple_size<Fields>::value > 2) {
+            if (name == "_field.3.meta") {
+                return GenerateFieldMetadata(object, 2);
+            } else if (name == "field.3") {
+                return std::get<2>(fields);
+            }
+        }
+        if constexpr (std::tuple_size<Fields>::value > 3) {
+            if (name == "_field.4.meta") {
+                return GenerateFieldMetadata(object, 3);
+            } else if (name == "field.4") {
+                return std::get<3>(fields);
+            }
+        }
+        if (auto it = object.m_properties.find(std::string(name)); it != object.m_properties.end()) {
+            return it->second;
+        }
+        return {};
+    }
+
+    template <typename T, typename Fields>
+    static PropertyValue
+    GetProperty(std::string_view primary, std::string_view alternative, const T& object, const Fields& fields)
+    {
+        if (auto value = ObjectAccess::GetProperty(primary, object, fields); value.index() != 0) {
+            return value;
+        }
+        return ObjectAccess::GetProperty(alternative, object, fields);
+    }
+
+    template <typename T, typename Args>
+    static std::vector<Property> GetProperties(const T* obj, const Args& args)
+    {
+        auto make_property = [](auto& kv) { return Property{ kv.first, kv.second }; };
+        auto view          = std::views::transform(obj->m_properties, make_property);
+        auto properties    = std::vector<Property>(view.begin(), view.end());
+
+        properties.push_back({ "_class", std::string(obj->kClassName) });
+        properties.push_back({ "_name", std::string(obj->kDefaultName) });
+        properties.push_back({ "_id", obj->GetID().value });
+
+        if constexpr (std::tuple_size<Args>::value > 0) {
+            properties.push_back({ "field.1", std::get<0>(args) });
+        }
+        if constexpr (std::tuple_size<Args>::value > 1) {
+            properties.push_back({ "field.2", std::get<1>(args) });
+        }
+        if constexpr (std::tuple_size<Args>::value > 2) {
+            properties.push_back({ "field.3", std::get<2>(args) });
+        }
+        if constexpr (std::tuple_size<Args>::value > 3) {
+            properties.push_back({ "field.4", std::get<3>(args) });
+        }
+        return properties;
+    }
+
+    template <typename T, typename Args>
+    static bool SetProperty(T& object, std::string_view name, const PropertyValue& value, Args args)
+    {
+        utils::throw_runtime_error_if(name.empty(), "Cannot set property: property name is missing");
+        utils::throw_runtime_error_if(name.starts_with('_'), "Cannot set property: builtin property");
+
+        if (name.starts_with("field.")) {
+            name.remove_prefix(strlen("field."));
+            if constexpr (std::tuple_size<Args>::value > 0) {
+                if (name == "1") {
+                    using Arg          = std::remove_pointer_t<std::tuple_element_t<0, Args>>;
+                    *std::get<0>(args) = std::get<Arg>(value);
+                    return true;
+                }
+            }
+            if constexpr (std::tuple_size<Args>::value > 1) {
+                if (name == "2") {
+                    using Arg          = std::remove_pointer_t<std::tuple_element_t<1, Args>>;
+                    *std::get<1>(args) = std::get<Arg>(value);
+                    return true;
+                }
+            }
+            if constexpr (std::tuple_size<Args>::value > 2) {
+                if (name == "3") {
+                    using Arg          = std::remove_pointer_t<std::tuple_element_t<2, Args>>;
+                    *std::get<2>(args) = std::get<Arg>(value);
+                    return true;
+                }
+            }
+            if constexpr (std::tuple_size<Args>::value > 3) {
+                if (name == "4") {
+                    using Arg          = std::remove_pointer_t<std::tuple_element_t<3, Args>>;
+                    *std::get<3>(args) = std::get<Arg>(value);
+                    return true;
+                }
+            }
+        }
+
+        auto [it, inserted] = object.m_properties.insert_or_assign(std::string(name), value);
+
+        return inserted;
+    }
+
+    template <size_t Fields>
+    static bool RemoveProperty(Object& object, std::string_view name)
+    {
+        utils::throw_runtime_error_if(name.empty(), "Cannot remove property: property name is missing");
+        utils::throw_runtime_error_if(name.starts_with('_'), "Cannot remove property: builtin property");
+
+        if (name.starts_with("field.")) {
+            name.remove_prefix(strlen("field."));
+            if constexpr (Fields > 0) {
+                utils::throw_runtime_error_if(name == "1", "Cannot remove property: builtin property");
+            }
+            if constexpr (Fields > 1) {
+                utils::throw_runtime_error_if(name == "2", "Cannot remove property: builtin property");
+            }
+            if constexpr (Fields > 2) {
+                utils::throw_runtime_error_if(name == "3", "Cannot remove property: builtin property");
+            }
+            if constexpr (Fields > 3) {
+                utils::throw_runtime_error_if(name == "4", "Cannot remove property: builtin property");
+            }
+        }
+
+        return object.m_properties.erase(std::string(name));
     }
 
     template <typename T>
@@ -162,12 +315,12 @@ struct ObjectAccess {
     template <typename T>
     static auto GetChildren(const T* parent)
     {
-        NodePtrArray ret;
-        ret.reserve(parent->m_children.size());
+        Nodes nodes;
+        nodes.reserve(parent->m_children.size());
         for (const auto& node : parent->m_children) {
-            ret.push_back(node.get());
+            nodes.push_back(node.get());
         }
-        return ret;
+        return nodes;
     }
 
     static void AddInstancePtr(InstanceNodePtr instance_node, MaterialPtr material)
@@ -176,11 +329,13 @@ struct ObjectAccess {
         material->AddInstanceNodePtr(instance_node);
     }
 
-    static void AttachNode(InnerNode* parent, UniqueNode child)
+    static NodePtr AttachNode(InnerNode* parent, UniqueNode child)
     {
         assert(parent && child);
+        auto child_ref  = child.get();
         child->m_parent = parent;
         parent->m_children.push_back(std::move(child));
+        return child_ref;
     }
 
     static UniqueNode DetachNode(NodePtr node)
@@ -189,15 +344,11 @@ struct ObjectAccess {
 
         auto parent = static_cast<InnerNode*>(node->m_parent);
 
-        if (parent == nullptr) {
-            return nullptr;
-        }
+        utils::throw_runtime_error_if(parent == nullptr, "Cannot detach node: node has no parent");
 
         auto it = std::ranges::find_if(parent->m_children, [node](auto& child) { return child.get() == node; });
 
-        if (it == parent->m_children.end()) {
-            return nullptr;
-        }
+        utils::throw_runtime_error_if(it == parent->m_children.end(), "Cannot detach node: invariant violated");
 
         auto unique_node = std::move(*it);
 
@@ -225,12 +376,9 @@ struct ObjectAccess {
     template <typename T>
     static void ThisToJson(const T* object, json& json)
     {
-        json["object.class"] = object->metadata.object_class;
-        json["object.id"]    = object->m_id;
-
-        if (object->HasProperties()) {
-            json["object.properties"] = DictionaryValues{ object->m_dictionary.get() };
-        }
+        json["object.class"]      = object->kClassName;
+        json["object.id"]         = GetID(object);
+        json["object.properties"] = Properties{ &object->m_properties };
     }
 
     template <typename T>
@@ -238,50 +386,6 @@ struct ObjectAccess {
     {
         json["owns"] = children;
     }
-};
-
-class ShaderManager {
-  public:
-    ShaderPtr CreateShader()
-    {
-        auto  id       = GetUniqueID();
-        auto& material = m_shaders[id] = ObjectAccess::MakeUnique<Shader>(id);
-        return material.get();
-    }
-
-    ShaderPtrArray GetShaders() const
-    {
-        auto view = std::views::transform(m_shaders, [](auto& shader) { return shader.second.get(); });
-        return ShaderPtrArray(view.begin(), view.end());
-    }
-
-    json ToJson() const
-    {
-        auto view = std::views::transform(m_shaders, [](auto& shader) { return std::ref(*shader.second); });
-        return nlohmann::json(ShaderRefArray(view.begin(), view.end()));
-    }
-
-  private:
-    std::unordered_map<ID, UniqueShader, ID::Hash> m_shaders;
-};
-
-class MeshManager {
-  public:
-    MeshPtr CreateMesh(AABB aabb, MeshVertices vertices, MeshIndices indices)
-    {
-        auto  id   = GetUniqueID();
-        auto& mesh = m_meshes[id] = ObjectAccess::MakeUnique<Mesh>(id, aabb, std::move(vertices), std::move(indices));
-        return mesh.get();
-    }
-
-    json ToJson() const
-    {
-        auto view = std::views::transform(m_meshes, [](auto& mesh) { return std::ref(*mesh.second); });
-        return nlohmann::json(MeshRefArray(view.begin(), view.end()));
-    }
-
-  private:
-    std::unordered_map<ID, UniqueMesh, ID::Hash> m_meshes;
 };
 
 json Mesh::ToJson() const
@@ -294,76 +398,44 @@ json Mesh::ToJson() const
     return json;
 }
 
-ValueRef Mesh::GetField(std::string_view field_name)
+PropertyValue Mesh::GetProperty(std::string_view name) const
 {
-    if (field_name == "aabb.min") {
-        return ValueRef(&m_aabb.min);
-    } else if (field_name == "aabb.max") {
-        return ValueRef(&m_aabb.max);
-    } else if (field_name == "vertex.attributes") {
-        return ValueRef(&m_vertices.VertexAttributesRef());
-    } else if (field_name == "vertex.size") {
-        return ValueRef(&m_vertices.VertexSizeRef());
-    } else if (field_name == "vertex.count") {
-        return ValueRef(&m_vertices.CountRef());
-    } else if (field_name == "index.type") {
-        return ValueRef(&m_indices.IndexTypeRef());
-    } else if (field_name == "index.size") {
-        return ValueRef(&m_indices.IndexSizeRef());
-    } else if (field_name == "index.count") {
-        return ValueRef(&m_indices.CountRef());
-    }
-    return {};
+    return ObjectAccess::GetProperty(
+        name,
+        *this,
+        std::make_tuple(m_aabb.min, m_aabb.max, m_vertices.GetCount(), m_indices.GetCount() / 3));
 }
 
-Metadata Mesh::metadata = {
-    "mesh",
-    "Mesh",
-    "Mesh",
-    { Field{ "aabb.min", "Min", nullptr, ValueType::Float3, Field::IsEditable{ false } },
-      Field{ "aabb.max", "Max", nullptr, ValueType::Float3, Field::IsEditable{ false } },
-      Field{ "vertex.attributes", "Vertex Attributes", nullptr, ValueType::String, Field::IsEditable{ false } },
-      Field{ "vertex.size", "Vertex Size", nullptr, ValueType::Int, Field::IsEditable{ false } },
-      Field{ "vertex.count", "Vertex Count", nullptr, ValueType::Int, Field::IsEditable{ false } },
-      Field{ "index.type", "Index Type", nullptr, ValueType::String, Field::IsEditable{ false } },
-      Field{ "index.size", "Index Size", nullptr, ValueType::Int, Field::IsEditable{ false } },
-      Field{ "index.count", "Index Count", nullptr, ValueType::Int, Field::IsEditable{ false } } }
-};
-
-GroupNodePtr InnerNode::AddGroupNode()
+PropertyValue Mesh::GetProperty(std::string_view primary, std::string_view alternative) const
 {
-    m_children.push_back(ObjectAccess::MakeUnique<GroupNode>(this, GetUniqueID()));
-    return static_cast<GroupNodePtr>(m_children.back().get());
+    return ObjectAccess::GetProperty(
+        primary,
+        alternative,
+        *this,
+        std::make_tuple(m_aabb.min, m_aabb.max, m_vertices.GetCount(), m_indices.GetCount() / 3));
 }
 
-TranslateNodePtr InnerNode::AddTranslateNode(float x, float y, float z)
+std::vector<Property> Mesh::GetProperties() const
 {
-    m_children.push_back(ObjectAccess::MakeUnique<TranslateNode>(this, GetUniqueID(), x, y, z));
-    return static_cast<TranslateNodePtr>(m_children.back().get());
+    return ObjectAccess::GetProperties(
+        this,
+        std::make_tuple(m_aabb.min, m_aabb.max, m_vertices.GetCount(), m_indices.GetCount() / 3));
 }
 
-RotateNodePtr InnerNode::AddRotateNode(float x, float y, float z, Radians angle)
+bool Mesh::SetProperty(std::string_view name, const PropertyValue& value)
 {
-    m_children.push_back(ObjectAccess::MakeUnique<RotateNode>(this, GetUniqueID(), x, y, z, angle));
-    return static_cast<RotateNodePtr>(m_children.back().get());
+    // TODO
+    return false;
 }
 
-ScaleNodePtr InnerNode::AddScaleNode(float factor)
+bool Mesh::RemoveProperty(std::string_view name)
 {
-    m_children.push_back(ObjectAccess::MakeUnique<ScaleNode>(this, GetUniqueID(), factor));
-    return static_cast<ScaleNodePtr>(m_children.back().get());
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
 }
 
-InstanceNodePtr InnerNode::AddInstanceNode(MeshPtr mesh, MaterialPtr material)
+NodePtr InnerNode::AttachNode(UniqueNode node)
 {
-    assert(mesh && material);
-    m_children.push_back(ObjectAccess::MakeUnique<InstanceNode>(this, GetUniqueID(), mesh, material));
-    return static_cast<InstanceNodePtr>(m_children.back().get());
-}
-
-void InnerNode::AttachNode(UniqueNode node)
-{
-    ObjectAccess::AttachNode(this, std::move(node));
+    return ObjectAccess::AttachNode(this, std::move(node));
 }
 
 UniqueNode InnerNode::DetachNode()
@@ -381,27 +453,25 @@ bool InnerNode::HasChildren() const
     return ObjectAccess::HasChildren(this);
 }
 
-NodePtrArray InnerNode::GetChildren() const
+Nodes InnerNode::GetChildren() const
 {
     return ObjectAccess::GetChildren(this);
 }
 
 Scene::Scene()
 {
-    m_shader_manager = std::make_unique<ShaderManager>();
-    m_mesh_manager   = std::make_unique<MeshManager>();
-    m_root_node      = ObjectAccess::MakeUnique<RootNode>(nullptr, GetUniqueID());
+    m_root = ObjectAccess::MakeUnique<RootNode>(nullptr, GetUniqueID());
 }
 
 DrawList Scene::ComputeDrawList() const
 {
     using namespace std::ranges;
 
-    ObjectAccess::ApplyTransform(m_root_node.get(), glm::identity<glm::mat4>());
+    ObjectAccess::ApplyTransform(m_root.get(), glm::identity<glm::mat4>());
 
     auto draw_list = DrawList{};
 
-    for (auto shader : m_shader_manager->GetShaders()) {
+    for (const auto& shader : m_shaders) {
         for (auto material : shader->GetMaterials()) {
             for (auto instance : material->GetInstanceNodes()) {
                 draw_list.push_back({ instance->GetMeshPtr(), instance->GetTransformPtr() });
@@ -416,15 +486,15 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
 {
     using namespace std::ranges;
 
-    if (m_root_node->GetChildren().empty()) {
+    if (m_root->GetChildren().empty()) {
         return AABB{ { -1, -1, -1 }, { 1, 1, 1 } };
     }
 
-    ObjectAccess::ApplyTransform(m_root_node.get(), glm::identity<glm::mat4>());
+    ObjectAccess::ApplyTransform(m_root.get(), glm::identity<glm::mat4>());
 
     auto out = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
 
-    for (auto shader : m_shader_manager->GetShaders()) {
+    for (const auto& shader : m_shaders) {
         for (auto material : shader->GetMaterials()) {
             for (auto instance : material->GetInstanceNodes()) {
                 if (auto* mesh = instance->GetMeshPtr()) {
@@ -446,7 +516,36 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
     return out;
 }
 
-Metadata RootNode::metadata = { "root.node", "Root", nullptr, {} };
+PropertyValue RootNode::GetProperty(std::string_view name) const
+{
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple());
+}
+
+PropertyValue RootNode::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple());
+}
+
+std::vector<Property> RootNode::GetProperties() const
+{
+    return ObjectAccess::GetProperties(this, std::make_tuple());
+}
+
+bool RootNode::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple());
+}
+
+bool RootNode::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
+}
+
+UniqueNode RootNode::DetachNode()
+{
+    utils::throw_runtime_error("Cannot detach node: root cannot be detached");
+    return nullptr;
+}
 
 json RootNode::ToJson() const
 {
@@ -463,6 +562,31 @@ void RootNode::ApplyTransform(const glm::mat4& matrix) noexcept
     for (auto& node : m_children) {
         ObjectAccess::ApplyTransform(static_cast<NodePtr>(node.get()), matrix);
     }
+}
+
+PropertyValue GroupNode::GetProperty(std::string_view name) const
+{
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple());
+}
+
+PropertyValue GroupNode::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple());
+}
+
+std::vector<Property> GroupNode::GetProperties() const
+{
+    return ObjectAccess::GetProperties(this, std::make_tuple());
+}
+
+bool GroupNode::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple());
+}
+
+bool GroupNode::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
 }
 
 json GroupNode::ToJson() const
@@ -482,8 +606,6 @@ void GroupNode::ApplyTransform(const glm::mat4& matrix) noexcept
     }
 }
 
-Metadata GroupNode::metadata = { "group.node", "Group", nullptr, {} };
-
 bool InstanceNode::IsAncestor(NodePtr node) const
 {
     return ObjectAccess::IsAncestor(this, node);
@@ -500,11 +622,6 @@ json InstanceNode::ToJson() const
     return json;
 }
 
-UniqueNode InstanceNode::DetachNode()
-{
-    return ObjectAccess::DetachNode(this);
-}
-
 InstanceNode::~InstanceNode() noexcept
 {
     if (m_material) {
@@ -512,23 +629,43 @@ InstanceNode::~InstanceNode() noexcept
     }
 }
 
-ValueRef InstanceNode::GetField(std::string_view field_name)
+PropertyValue InstanceNode::GetProperty(std::string_view name) const
 {
-    if (field_name == "mesh") {
-        return ValueRef(m_mesh);
-    } else if (field_name == "material") {
-        return ValueRef(m_material);
-    }
-    return {};
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_mesh, m_material));
 }
 
-Metadata InstanceNode::metadata = {
-    "instance.node",
-    "Mesh Instance",
-    nullptr,
-    { Field{ "mesh", "Mesh", nullptr, ValueType::Reference, Field::IsEditable{ false } },
-      Field{ "material", "Material", nullptr, ValueType::Reference, Field::IsEditable{ false } } }
-};
+PropertyValue InstanceNode::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(m_mesh, m_material));
+}
+
+std::vector<Property> InstanceNode::GetProperties() const
+{
+    return ObjectAccess::GetProperties(this, std::make_tuple(m_mesh, m_material));
+}
+
+bool InstanceNode::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    auto mesh     = static_cast<ObjectPtr>(m_mesh);
+    auto material = static_cast<ObjectPtr>(m_material);
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple(&mesh, &material));
+}
+
+bool InstanceNode::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
+}
+
+NodePtr InstanceNode::AttachNode(UniqueNode node)
+{
+    utils::throw_runtime_error("Cannot attach node: cannot attach to leaf node");
+    return nullptr;
+}
+
+UniqueNode InstanceNode::DetachNode()
+{
+    return ObjectAccess::DetachNode(this);
+}
 
 void InstanceNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
@@ -541,17 +678,30 @@ InstanceNode::InstanceNode(NodePtr parent, ID id, MeshPtr mesh, MaterialPtr mate
     ObjectAccess::AddInstancePtr(this, material);
 }
 
-ValueRef TranslateNode::GetField(std::string_view field_name)
+PropertyValue TranslateNode::GetProperty(std::string_view name) const
 {
-    return field_name == "translate.amount" ? ValueRef(&m_amount) : ValueRef();
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_distance));
 }
 
-Metadata TranslateNode::metadata = {
-    "translate.node",
-    "Translate",
-    "Translate Node",
-    { Field{ "translate.amount", "Amount", nullptr, ValueType::Float3, Field::IsEditable{ true } } }
-};
+PropertyValue TranslateNode::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(m_distance));
+}
+
+std::vector<Property> TranslateNode::GetProperties() const
+{
+    return ObjectAccess::GetProperties(this, std::make_tuple(m_distance));
+}
+
+bool TranslateNode::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple(&m_distance));
+}
+
+bool TranslateNode::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
+}
 
 json TranslateNode::ToJson() const
 {
@@ -560,7 +710,7 @@ json TranslateNode::ToJson() const
     ObjectAccess::ThisToJson(this, json);
     ObjectAccess::ChildrenToJson(m_children, json);
 
-    json["object.values"] = TranslateValues{ m_amount };
+    json["object.values"] = TranslateValues{ m_distance };
 
     return json;
 }
@@ -569,9 +719,34 @@ void TranslateNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     for (auto& node : m_children) {
         auto node_ptr = static_cast<NodePtr>(node.get());
-        auto amount   = glm::vec3(m_amount.x, m_amount.y, m_amount.z);
-        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::translate(amount));
+        auto distance = glm::vec3(m_distance.x, m_distance.y, m_distance.z);
+        ObjectAccess::ApplyTransform(node_ptr, matrix * glm::translate(distance));
     }
+}
+
+PropertyValue RotateNode::GetProperty(std::string_view name) const
+{
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_axis, m_angle.value));
+}
+
+PropertyValue RotateNode::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(m_axis, m_angle.value));
+}
+
+std::vector<Property> RotateNode::GetProperties() const
+{
+    return ObjectAccess::GetProperties(this, std::make_tuple(m_axis, m_angle.value));
+}
+
+bool RotateNode::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple(&m_axis, &m_angle.value));
+}
+
+bool RotateNode::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
 }
 
 json RotateNode::ToJson() const
@@ -586,24 +761,6 @@ json RotateNode::ToJson() const
     return json;
 }
 
-ValueRef RotateNode::GetField(std::string_view field_name)
-{
-    if (field_name == "rotate.axis") {
-        return ValueRef(&m_axis);
-    } else if (field_name == "rotate.angle") {
-        return ValueRef(&m_angle.value);
-    }
-    return {};
-}
-
-Metadata RotateNode::metadata = {
-    "rotate.node",
-    "Rotate",
-    "Rotate Node",
-    { Field{ "rotate.axis", "Axis", nullptr, ValueType::Float3, Field::IsEditable{ true } },
-      Field{ "rotate.angle", "Angle", nullptr, ValueType::Float, Field::IsEditable{ true } } }
-};
-
 void RotateNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     for (auto& node : m_children) {
@@ -611,6 +768,31 @@ void RotateNode::ApplyTransform(const glm::mat4& matrix) noexcept
         auto axis     = glm::vec3(m_axis.x, m_axis.y, m_axis.z);
         ObjectAccess::ApplyTransform(node_ptr, matrix * glm::rotate(m_angle.value, axis));
     }
+}
+
+PropertyValue ScaleNode::GetProperty(std::string_view name) const
+{
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_factor));
+}
+
+PropertyValue ScaleNode::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(m_factor));
+}
+
+std::vector<Property> ScaleNode::GetProperties() const
+{
+    return ObjectAccess::GetProperties(this, std::make_tuple(m_factor));
+}
+
+bool ScaleNode::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple(&m_factor));
+}
+
+bool ScaleNode::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
 }
 
 json ScaleNode::ToJson() const
@@ -625,11 +807,6 @@ json ScaleNode::ToJson() const
     return json;
 }
 
-ValueRef ScaleNode::GetField(std::string_view field_name)
-{
-    return field_name == "scale.factor" ? ValueRef(&m_factor) : ValueRef();
-}
-
 void ScaleNode::ApplyTransform(const glm::mat4& matrix) noexcept
 {
     for (auto& node : m_children) {
@@ -638,76 +815,92 @@ void ScaleNode::ApplyTransform(const glm::mat4& matrix) noexcept
     }
 }
 
-Metadata ScaleNode::metadata = {
-    "scale.node",
-    "Scale",
-    "Scale Node",
-    { Field{ "scale.factor", "Factor", nullptr, ValueType::Float, Field::IsEditable{ true } } }
-};
-
-std::string Object::GetName() const noexcept
+RootNodePtr Scene::GetRootNode() noexcept
 {
-    if (m_dictionary) {
-        if (auto it = m_dictionary->find("object.name"); it != m_dictionary->end()) {
-            return std::get<std::string>(it->second).c_str();
-        }
-    }
-    return GetMetadata().object_default_name;
+    return static_cast<RootNodePtr>(m_root.get());
 }
 
-bool Object::HasProperties() const noexcept
+UniqueGroupNode Scene::CreateGroupNode()
 {
-    return m_dictionary && !m_dictionary->empty();
+    return ObjectAccess::MakeUnique<GroupNode>(nullptr, GetUniqueID());
 }
 
-void Object::SetName(std::string name)
+UniqueTranslateNode Scene::CreateTranslateNode(Float3 distance)
 {
-    SetProperty("object.name", std::move(name));
+    return ObjectAccess::MakeUnique<TranslateNode>(nullptr, GetUniqueID(), distance);
 }
 
-void Object::SetProperty(Key key, Value value)
+UniqueRotateNode Scene::CreateRotateNode(Float3 axis, Radians angle)
 {
-    if (m_dictionary == nullptr) {
-        m_dictionary.reset(new Dictionary);
-    }
-    m_dictionary->insert_or_assign(std::move(key), std::move(value));
+    return ObjectAccess::MakeUnique<RotateNode>(nullptr, GetUniqueID(), axis, angle);
 }
 
-void Object::RemoveProperty(Key key)
+UniqueScaleNode Scene::CreateScaleNode(float factor)
 {
-    if (m_dictionary) {
-        m_dictionary->erase(key);
-    }
+    return ObjectAccess::MakeUnique<ScaleNode>(nullptr, GetUniqueID(), factor);
 }
 
-RootNodePtr Scene::GetRootNodePtr() noexcept
+UniqueInstanceNode Scene::CreateInstanceNode(MeshPtr mesh, MaterialPtr material)
 {
-    return static_cast<RootNodePtr>(m_root_node.get());
+    return ObjectAccess::MakeUnique<InstanceNode>(nullptr, GetUniqueID(), mesh, material);
 }
 
 ShaderPtr Scene::CreateShader()
 {
-    return m_shader_manager->CreateShader();
+    m_shaders.push_back(ObjectAccess::MakeUnique<Shader>(GetUniqueID()));
+    return m_shaders.back().get();
+}
+
+MeshPtr Scene::CreateMesh(AABB aabb, MeshVertices vertices, MeshIndices indices)
+{
+    m_meshes.push_back(ObjectAccess::MakeUnique<Mesh>(GetUniqueID(), aabb, std::move(vertices), std::move(indices)));
+    return m_meshes.back().get();
 }
 
 json Scene::ToJson() const
 {
     json json;
 
-    json["scene"]   = m_root_node->ToJson();
-    json["shaders"] = m_shader_manager->ToJson();
-    json["meshes"]  = m_mesh_manager->ToJson();
+    auto s_view  = std::views::transform(m_shaders, [](auto& shader) { return shader.get(); });
+    auto shaders = nlohmann::json(Shaders(s_view.begin(), s_view.end()));
+
+    auto m_view = std::views::transform(m_meshes, [](auto& mesh) { return mesh.get(); });
+    auto meshes = nlohmann::json(Meshes(m_view.begin(), m_view.end()));
+
+    json["scene"]   = m_root->ToJson();
+    json["shaders"] = shaders;
+    json["meshes"]  = meshes;
 
     return json;
 }
 
-MeshPtr Scene::CreateMesh(AABB aabb, MeshVertices mesh_vertices, MeshIndices mesh_indices)
-{
-    return m_mesh_manager->CreateMesh(aabb, std::move(mesh_vertices), std::move(mesh_indices));
-}
-
 Scene::~Scene()
 {}
+
+PropertyValue Shader::GetProperty(std::string_view name) const
+{
+    return {}; // TODO
+}
+
+PropertyValue Shader::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return {}; // TODO
+}
+
+std::vector<Property> Shader::GetProperties() const
+{
+    return {}; // TODO
+}
+
+bool Shader::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    return false; // TODO
+}
+
+bool Shader::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
+}
 
 MaterialPtr Shader::CreateMaterial()
 {
@@ -715,10 +908,10 @@ MaterialPtr Shader::CreateMaterial()
     return static_cast<MaterialPtr>(m_materials.back().get());
 }
 
-MaterialPtrArray Shader::GetMaterials() const
+Materials Shader::GetMaterials() const
 {
     auto view = std::views::transform(m_materials, [](auto& material) { return material.get(); });
-    return MaterialPtrArray(view.begin(), view.end());
+    return Materials(view.begin(), view.end());
 }
 
 json Shader::ToJson() const
@@ -737,15 +930,15 @@ json Material::ToJson() const
 
     ObjectAccess::ThisToJson(this, json);
 
-    json["object.refs"] = m_instance_nodes;
+    json["object.refs"] = m_instances;
 
     return json;
 }
 
 bool Material::RemoveInstance(InstanceNodePtr node)
 {
-    if (auto it = std::ranges::find(m_instance_nodes, node); it != m_instance_nodes.end()) {
-        m_instance_nodes.erase(it);
+    if (auto it = std::ranges::find(m_instances, node); it != m_instances.end()) {
+        m_instances.erase(it);
         return true;
     }
     return false;
@@ -753,19 +946,5 @@ bool Material::RemoveInstance(InstanceNodePtr node)
 
 void Material::AddInstanceNodePtr(InstanceNodePtr instance_node)
 {
-    m_instance_nodes.push_back(instance_node);
-}
-
-std::string to_string(ValueType value_type)
-{
-    switch (value_type) {
-    case ValueType::Null: return "Null";
-    case ValueType::Float: return "Float";
-    case ValueType::Int: return "Int";
-    case ValueType::Reference: return "Reference";
-    case ValueType::String: return "String";
-    case ValueType::Float3: return "Float3";
-    default: utils::throw_runtime_error("ValueType: Bad enum value");
-    };
-    return {};
+    m_instances.push_back(instance_node);
 }

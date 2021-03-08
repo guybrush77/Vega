@@ -259,10 +259,11 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
     auto shader   = scene->CreateShader();
     auto material = shader->CreateMaterial();
 
-    auto root_node = scene->GetRootNodePtr();
-    auto file_node = root_node->AddGroupNode();
+    auto root_node = scene->GetRootNode();
+    auto file_node = root_node->AttachNode(scene->CreateGroupNode());
 
-    file_node->SetName(filepath.filename().string());
+    file_node->SetProperty("name", filepath.filename().string());
+    file_node->SetProperty("Path", filepath.string());
 
     for (const auto& shape : shapes) {
         auto mesh = MeshPtr{};
@@ -273,9 +274,9 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
             mesh = GenerateMeshPN(scene, attributes, shape.mesh);
         }
 
-        auto instance_node = file_node->AddInstanceNode(mesh, material);
+        auto instance = file_node->AttachNode(scene->CreateInstanceNode(mesh, material));
 
-        instance_node->SetName(shape.name);
+        instance->SetProperty("name", shape.name);
     }
 }
 
