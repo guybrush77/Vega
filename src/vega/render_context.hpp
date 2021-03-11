@@ -13,7 +13,7 @@ struct GLFWwindow;
 class Gui;
 class Camera;
 class Lights;
-class MeshStore;
+class BufferManager;
 class Scene;
 
 class RenderContext {
@@ -35,7 +35,7 @@ class RenderContext {
         Gui*                 gui,
         Camera*              camera,
         Lights*              lights,
-        MeshStore*           mesh_store,
+        BufferManager*       buffer_manager,
         Scene*               scene);
 
     RenderContext(const RenderContext&) = delete;
@@ -61,7 +61,7 @@ class RenderContext {
     Gui*                 m_gui                   = nullptr;
     Camera*              m_camera                = nullptr;
     Lights*              m_lights                = nullptr;
-    MeshStore*           m_mesh_store            = nullptr;
+    BufferManager*       m_buffer_manager        = nullptr;
     Scene*               m_scene                 = nullptr;
     MouseLook            m_mouse_look            = MouseLook::None;
     bool                 m_is_any_window_hovered = false;

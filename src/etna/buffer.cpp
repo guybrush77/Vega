@@ -46,7 +46,7 @@ UniqueBuffer Buffer::Create(VmaAllocator allocator, const VkBufferCreateInfo& cr
         throw_etna_error(__FILE__, __LINE__, static_cast<Result>(result));
     }
 
-    return UniqueBuffer(Buffer(vk_buffer, allocator, allocation));
+    return UniqueBuffer(Buffer(vk_buffer, create_info.size, allocator, allocation));
 }
 
 void Buffer::Destroy() noexcept

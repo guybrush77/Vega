@@ -14,8 +14,12 @@ class Buffer {
 
     operator VkBuffer() const noexcept { return m_buffer; }
 
+    explicit operator bool() const noexcept { return m_buffer != nullptr; }
+
     bool operator==(const Buffer& rhs) const noexcept { return m_buffer == rhs.m_buffer; }
     bool operator!=(const Buffer& rhs) const noexcept { return m_buffer != rhs.m_buffer; }
+
+    auto Size() const noexcept { return m_size; }
 
     void* MapMemory();
     void  UnmapMemory();
@@ -28,8 +32,8 @@ class Buffer {
 
     friend class Device;
 
-    Buffer(VkBuffer buffer, VmaAllocator allocator, VmaAllocation allocation) noexcept
-        : m_buffer(buffer), m_allocator(allocator), m_allocation(allocation)
+    Buffer(VkBuffer buffer, VkDeviceSize size, VmaAllocator allocator, VmaAllocation allocation) noexcept
+        : m_buffer(buffer), m_size(size), m_allocator(allocator), m_allocation(allocation)
     {}
 
     static auto Create(VmaAllocator allocator, const VkBufferCreateInfo& create_info, MemoryUsage memory_usage)
@@ -38,6 +42,7 @@ class Buffer {
     void Destroy() noexcept;
 
     VkBuffer      m_buffer{};
+    VkDeviceSize  m_size{};
     VmaAllocator  m_allocator{};
     VmaAllocation m_allocation{};
 };

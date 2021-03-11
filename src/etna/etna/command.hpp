@@ -65,14 +65,14 @@ class CommandBuffer {
         DescriptorSet                   descriptor_set,
         std::initializer_list<uint32_t> dynamic_offsets);
 
-    void Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex = 0, uint32_t first_instance = 0);
+    void Draw(size_t vertex_count, size_t instance_count, size_t first_vertex = 0, size_t first_instance = 0);
 
     void DrawIndexed(
-        uint32_t index_count,
-        uint32_t instance_count,
-        uint32_t first_index    = 0,
-        int32_t  vertex_offset  = 0,
-        uint32_t first_instance = 0);
+        size_t   index_count,
+        size_t   instance_count,
+        size_t   first_index    = 0,
+        size_t   vertex_offset  = 0,
+        size_t first_instance = 0);
 
     void PipelineBarrier(
         Image2D       image,

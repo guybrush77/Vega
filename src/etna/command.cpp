@@ -146,23 +146,34 @@ void CommandBuffer::BindDescriptorSet(
         dynamic_offsets.size() ? dynamic_offsets.begin() : nullptr);
 }
 
-void CommandBuffer::Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
+void CommandBuffer::Draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance)
 {
     assert(m_command_buffer);
 
-    vkCmdDraw(m_command_buffer, vertex_count, instance_count, first_vertex, first_instance);
+    vkCmdDraw(
+        m_command_buffer,
+        narrow_cast<uint32_t>(vertex_count),
+        narrow_cast<uint32_t>(instance_count),
+        narrow_cast<uint32_t>(first_vertex),
+        narrow_cast<uint32_t>(first_instance));
 }
 
 void CommandBuffer::DrawIndexed(
-    uint32_t index_count,
-    uint32_t instance_count,
-    uint32_t first_index,
-    int32_t  vertex_offset,
-    uint32_t first_instance)
+    size_t index_count,
+    size_t instance_count,
+    size_t first_index,
+    size_t vertex_offset,
+    size_t first_instance)
 {
     assert(m_command_buffer);
 
-    vkCmdDrawIndexed(m_command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
+    vkCmdDrawIndexed(
+        m_command_buffer,
+        narrow_cast<uint32_t>(index_count),
+        narrow_cast<uint32_t>(instance_count),
+        narrow_cast<uint32_t>(first_index),
+        narrow_cast<uint32_t>(vertex_offset),
+        narrow_cast<uint32_t>(first_instance));
 }
 
 void CommandBuffer::PipelineBarrier(

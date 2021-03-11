@@ -6,6 +6,8 @@
 #include <ranges>
 #include <tuple>
 
+static constexpr auto NullParent = nullptr;
+
 static void to_json(json& json, const Float3& vec)
 {
     json = { vec.x, vec.y, vec.z };
@@ -30,20 +32,24 @@ static void to_json(json& json, const UniqueNode& node)
     json = node->ToJson();
 }
 
-static void to_json(json& json, const UniqueMaterial& material)
+static void to_json(json& json, ShaderPtr shader)
+{
+    json = shader->ToJson();
+}
+
+static void to_json(json& json, MaterialPtr material)
 {
     json = material->ToJson();
 }
 
-static void to_json(json& json, const AABB& aabb)
+static void to_json(json& json, VertexBufferPtr vertex_buffer)
 {
-    json["aabb.min"] = aabb.min;
-    json["aabb.max"] = aabb.max;
+    json = vertex_buffer->ToJson();
 }
 
-static void to_json(json& json, ShaderPtr shader)
+static void to_json(json& json, IndexBufferPtr index_buffer)
 {
-    json = shader->ToJson();
+    json = index_buffer->ToJson();
 }
 
 static void to_json(json& json, InstanceNodePtr instance_node)
@@ -54,22 +60,6 @@ static void to_json(json& json, InstanceNodePtr instance_node)
 static void to_json(json& json, MeshPtr mesh)
 {
     json = mesh->ToJson();
-}
-
-static void to_json(json& json, const MeshVertices& vertices)
-{
-    json["vertex.attributes"] = vertices.GetVertexAttributes();
-    json["vertex.size"]       = vertices.GetVertexSize();
-    json["vertex.count"]      = vertices.GetCount();
-    json["vertices.size"]     = vertices.GetSize();
-}
-
-static void to_json(json& json, const MeshIndices& indices)
-{
-    json["index.class"]  = indices.GetIndexType();
-    json["index.size"]   = indices.GetIndexSize();
-    json["index.count"]  = indices.GetCount();
-    json["indices.size"] = indices.GetSize();
 }
 
 struct Properties final {
@@ -112,29 +102,11 @@ static void to_json(json& json, const ScaleValues& values)
     json["scale"] = values.factor;
 }
 
-struct MeshNodeRefs final {
-    const ID material;
-    const ID mesh;
-};
-
-static void to_json(json& json, const MeshNodeRefs& values)
-{
-    json["material"] = values.material;
-    json["mesh"]     = values.mesh;
-}
-
 struct MeshValues final {
     const AABB*         aabb;
-    const MeshVertices* vertices;
-    const MeshIndices*  indices;
+    const VertexBuffer* vertices;
+    const IndexBuffer*  indices;
 };
-
-static void to_json(json& json, const MeshValues& values)
-{
-    json["aabb"]     = *values.aabb;
-    json["vertices"] = *values.vertices;
-    json["indices"]  = *values.indices;
-}
 
 static ID GetUniqueID() noexcept
 {
@@ -329,6 +301,12 @@ struct ObjectAccess final {
         material->AddInstanceNodePtr(instance_node);
     }
 
+    static void AddMaterialPtr(ShaderPtr shader, MaterialPtr material)
+    {
+        assert(shader && material);
+        shader->AddMaterialPtr(material);
+    }
+
     static NodePtr AttachNode(InnerNode* parent, UniqueNode child)
     {
         assert(parent && child);
@@ -393,33 +371,28 @@ json Mesh::ToJson() const
     json json;
 
     ObjectAccess::ThisToJson(this, json);
-    json["object.values"] = MeshValues{ &m_aabb, &m_vertices, &m_indices };
+
+    json["value.first-index"]       = m_first_index;
+    json["value.index-count"]       = m_index_count;
+    json["value.ref.vertex-buffer"] = m_vertex_buffer->GetID();
+    json["value.ref.index-buffer"]  = m_index_buffer->GetID();
 
     return json;
 }
 
 PropertyValue Mesh::GetProperty(std::string_view name) const
 {
-    return ObjectAccess::GetProperty(
-        name,
-        *this,
-        std::make_tuple(m_aabb.min, m_aabb.max, m_vertices.GetCount(), m_indices.GetCount() / 3));
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_aabb.min, m_aabb.max));
 }
 
 PropertyValue Mesh::GetProperty(std::string_view primary, std::string_view alternative) const
 {
-    return ObjectAccess::GetProperty(
-        primary,
-        alternative,
-        *this,
-        std::make_tuple(m_aabb.min, m_aabb.max, m_vertices.GetCount(), m_indices.GetCount() / 3));
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(m_aabb.min, m_aabb.max));
 }
 
 std::vector<Property> Mesh::GetProperties() const
 {
-    return ObjectAccess::GetProperties(
-        this,
-        std::make_tuple(m_aabb.min, m_aabb.max, m_vertices.GetCount(), m_indices.GetCount() / 3));
+    return ObjectAccess::GetProperties(this, std::make_tuple(m_aabb.min, m_aabb.max));
 }
 
 bool Mesh::SetProperty(std::string_view /*name*/, const PropertyValue& /*value*/)
@@ -460,7 +433,7 @@ Nodes InnerNode::GetChildren() const
 
 Scene::Scene()
 {
-    m_root = ObjectAccess::MakeUnique<RootNode>(nullptr, GetUniqueID());
+    m_root = ObjectAccess::MakeUnique<RootNode>(GetUniqueID(), NullParent);
 }
 
 DrawList Scene::ComputeDrawList() const
@@ -470,11 +443,12 @@ DrawList Scene::ComputeDrawList() const
     ObjectAccess::ApplyTransform(m_root.get(), glm::identity<glm::mat4>());
 
     auto draw_list = DrawList{};
+    auto index     = size_t{ 0 };
 
     for (const auto& shader : m_shaders) {
         for (auto material : shader->GetMaterials()) {
             for (auto instance : material->GetInstanceNodes()) {
-                draw_list.push_back({ instance->GetMeshPtr(), instance->GetTransformPtr() });
+                draw_list.push_back({ index++, instance->GetMeshPtr(), instance->GetTransform() });
             }
         }
     }
@@ -498,16 +472,16 @@ AABB Scene::ComputeAxisAlignedBoundingBox() const
         for (auto material : shader->GetMaterials()) {
             for (auto instance : material->GetInstanceNodes()) {
                 if (auto* mesh = instance->GetMeshPtr()) {
-                    auto& model = *instance->GetTransformPtr();
-                    auto& aabb  = mesh->GetBoundingBox();
-                    auto  vec_a = model * glm::vec4(aabb.min.x, aabb.min.y, aabb.min.z, 1);
-                    auto  vec_b = model * glm::vec4(aabb.max.x, aabb.max.y, aabb.max.z, 1);
-                    out.min.x   = std::min({ out.min.x, vec_a.x, vec_b.x });
-                    out.min.y   = std::min({ out.min.y, vec_a.y, vec_b.y });
-                    out.min.z   = std::min({ out.min.z, vec_a.z, vec_b.z });
-                    out.max.x   = std::max({ out.max.x, vec_a.x, vec_b.x });
-                    out.max.y   = std::max({ out.max.y, vec_a.y, vec_b.y });
-                    out.max.z   = std::max({ out.max.z, vec_a.z, vec_b.z });
+                    auto model = instance->GetTransform();
+                    auto aabb  = mesh->GetBoundingBox();
+                    auto vec_a = model * glm::vec4(aabb.min.x, aabb.min.y, aabb.min.z, 1);
+                    auto vec_b = model * glm::vec4(aabb.max.x, aabb.max.y, aabb.max.z, 1);
+                    out.min.x  = std::min({ out.min.x, vec_a.x, vec_b.x });
+                    out.min.y  = std::min({ out.min.y, vec_a.y, vec_b.y });
+                    out.min.z  = std::min({ out.min.z, vec_a.z, vec_b.z });
+                    out.max.x  = std::max({ out.max.x, vec_a.x, vec_b.x });
+                    out.max.y  = std::max({ out.max.y, vec_a.y, vec_b.y });
+                    out.max.z  = std::max({ out.max.z, vec_a.z, vec_b.z });
                 }
             }
         }
@@ -617,7 +591,8 @@ json InstanceNode::ToJson() const
 
     ObjectAccess::ThisToJson(this, json);
 
-    json["object.refs"] = MeshNodeRefs{ m_material->GetID(), m_mesh->GetID() };
+    json["value.ref.mesh"]     = m_mesh->GetID();
+    json["value.ref.material"] = m_material->GetID();
 
     return json;
 }
@@ -672,8 +647,8 @@ void InstanceNode::ApplyTransform(const glm::mat4& matrix) noexcept
     m_transform = matrix;
 }
 
-InstanceNode::InstanceNode(NodePtr parent, ID id, MeshPtr mesh, MaterialPtr material) noexcept
-    : Node(parent, id), m_mesh(mesh), m_material(material)
+InstanceNode::InstanceNode(ID id, NodePtr parent, MeshPtr mesh, MaterialPtr material) noexcept
+    : Node(id, parent), m_mesh(mesh), m_material(material)
 {
     ObjectAccess::AddInstancePtr(this, material);
 }
@@ -822,54 +797,94 @@ RootNodePtr Scene::GetRootNode() noexcept
 
 UniqueGroupNode Scene::CreateGroupNode()
 {
-    return ObjectAccess::MakeUnique<GroupNode>(nullptr, GetUniqueID());
+    return ObjectAccess::MakeUnique<GroupNode>(GetUniqueID(), NullParent);
 }
 
 UniqueTranslateNode Scene::CreateTranslateNode(Float3 distance)
 {
-    return ObjectAccess::MakeUnique<TranslateNode>(nullptr, GetUniqueID(), distance);
+    return ObjectAccess::MakeUnique<TranslateNode>(GetUniqueID(), NullParent, distance);
 }
 
 UniqueRotateNode Scene::CreateRotateNode(Float3 axis, Radians angle)
 {
-    return ObjectAccess::MakeUnique<RotateNode>(nullptr, GetUniqueID(), axis, angle);
+    return ObjectAccess::MakeUnique<RotateNode>(GetUniqueID(), NullParent, axis, angle);
 }
 
 UniqueScaleNode Scene::CreateScaleNode(float factor)
 {
-    return ObjectAccess::MakeUnique<ScaleNode>(nullptr, GetUniqueID(), factor);
+    return ObjectAccess::MakeUnique<ScaleNode>(GetUniqueID(), NullParent, factor);
 }
 
 UniqueInstanceNode Scene::CreateInstanceNode(MeshPtr mesh, MaterialPtr material)
 {
-    return ObjectAccess::MakeUnique<InstanceNode>(nullptr, GetUniqueID(), mesh, material);
+    return ObjectAccess::MakeUnique<InstanceNode>(GetUniqueID(), NullParent, mesh, material);
+}
+
+VertexBufferPtr Scene::CreateVertexBuffer(void* data, size_t size, std::align_val_t alignment)
+{
+    auto temp_owner    = ObjectAccess::MakeUnique<VertexBuffer>(GetUniqueID(), data, size, alignment);
+    auto vertex_buffer = temp_owner.release();
+    m_objects.insert({ vertex_buffer->GetID(), std::unique_ptr<Object>(vertex_buffer) });
+    m_vertex_buffers.push_back(vertex_buffer);
+    return vertex_buffer;
+}
+
+IndexBufferPtr Scene::CreateIndexBuffer(void* data, size_t size, std::align_val_t alignment)
+{
+    auto temp_owner   = ObjectAccess::MakeUnique<IndexBuffer>(GetUniqueID(), data, size, alignment);
+    auto index_buffer = temp_owner.release();
+    m_objects.insert({ index_buffer->GetID(), std::unique_ptr<Object>(index_buffer) });
+    m_index_buffers.push_back(index_buffer);
+    return index_buffer;
 }
 
 ShaderPtr Scene::CreateShader()
 {
-    m_shaders.push_back(ObjectAccess::MakeUnique<Shader>(GetUniqueID()));
-    return m_shaders.back().get();
+    auto temp_owner = ObjectAccess::MakeUnique<Shader>(GetUniqueID());
+    auto shader     = temp_owner.release();
+    m_objects.insert({ shader->GetID(), std::unique_ptr<Object>(shader) });
+    m_shaders.push_back(shader);
+    return shader;
 }
 
-MeshPtr Scene::CreateMesh(AABB aabb, MeshVertices vertices, MeshIndices indices)
+MaterialPtr Scene::CreateMaterial(ShaderPtr shader)
 {
-    m_meshes.push_back(ObjectAccess::MakeUnique<Mesh>(GetUniqueID(), aabb, std::move(vertices), std::move(indices)));
-    return m_meshes.back().get();
+    auto temp_owner = ObjectAccess::MakeUnique<Material>(GetUniqueID());
+    auto material   = temp_owner.release();
+    m_objects.insert({ material->GetID(), std::unique_ptr<Object>(material) });
+    m_materials.push_back(material);
+    ObjectAccess::AddMaterialPtr(shader, material);
+    return material;
+}
+
+MeshPtr Scene::CreateMesh(
+    AABB            aabb,
+    VertexBufferPtr vertex_buffer,
+    IndexBufferPtr  index_buffer,
+    size_t          first_index,
+    size_t          index_count)
+{
+    auto unique_mesh =
+        ObjectAccess::MakeUnique<Mesh>(GetUniqueID(), aabb, vertex_buffer, index_buffer, first_index, index_count);
+    auto mesh = unique_mesh.release();
+    if (auto [it, success] = m_objects.insert({ mesh->GetID(), std::unique_ptr<Object>(mesh) }); !success) {
+        utils::throw_runtime_error("Cannot create mesh");
+        return {};
+    }
+    m_meshes.push_back(mesh);
+    return mesh;
 }
 
 json Scene::ToJson() const
 {
     json json;
 
-    auto s_view  = std::views::transform(m_shaders, [](auto& shader) { return shader.get(); });
-    auto shaders = nlohmann::json(Shaders(s_view.begin(), s_view.end()));
-
-    auto m_view = std::views::transform(m_meshes, [](auto& mesh) { return mesh.get(); });
-    auto meshes = nlohmann::json(Meshes(m_view.begin(), m_view.end()));
-
-    json["scene"]   = m_root->ToJson();
-    json["shaders"] = shaders;
-    json["meshes"]  = meshes;
+    json["graph"]          = m_root->ToJson();
+    json["index-buffers"]  = nlohmann::json(m_index_buffers);
+    json["materials"]      = nlohmann::json(m_materials);
+    json["meshes"]         = nlohmann::json(m_meshes);
+    json["shaders"]        = nlohmann::json(m_shaders);
+    json["vertex-buffers"] = nlohmann::json(m_vertex_buffers);
 
     return json;
 }
@@ -902,26 +917,52 @@ bool Shader::RemoveProperty(std::string_view name)
     return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
 }
 
-MaterialPtr Shader::CreateMaterial()
-{
-    m_materials.push_back(ObjectAccess::MakeUnique<Material>(GetUniqueID()));
-    return static_cast<MaterialPtr>(m_materials.back().get());
-}
-
 Materials Shader::GetMaterials() const
 {
-    auto view = std::views::transform(m_materials, [](auto& material) { return material.get(); });
-    return Materials(view.begin(), view.end());
+    return m_materials;
 }
 
 json Shader::ToJson() const
 {
     json json;
 
+    auto view = std::views::transform(m_materials, [](auto& m) { return m->GetID(); });
+    auto materials = std::vector<ID>(view.begin(), view.end());
+
     ObjectAccess::ThisToJson(this, json);
-    ObjectAccess::ChildrenToJson(m_materials, json);
+    json["value.ref.materials"] = materials;
 
     return json;
+}
+
+void Shader::AddMaterialPtr(MaterialPtr material)
+{
+    m_materials.push_back(material);
+}
+
+PropertyValue Material::GetProperty(std::string_view /*name*/) const
+{
+    return {}; // TODO
+}
+
+PropertyValue Material::GetProperty(std::string_view /*primary*/, std::string_view /*alternative*/) const
+{
+    return {}; // TODO
+}
+
+std::vector<Property> Material::GetProperties() const
+{
+    return {}; // TODO
+}
+
+bool Material::SetProperty(std::string_view /*name*/, const PropertyValue& /*value*/)
+{
+    return false; // TODO
+}
+
+bool Material::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
 }
 
 json Material::ToJson() const
@@ -930,7 +971,7 @@ json Material::ToJson() const
 
     ObjectAccess::ThisToJson(this, json);
 
-    json["object.refs"] = m_instances;
+    json["value.ref.instances"] = m_instances;
 
     return json;
 }
@@ -947,4 +988,88 @@ bool Material::RemoveInstance(InstanceNodePtr node)
 void Material::AddInstanceNodePtr(InstanceNodePtr instance_node)
 {
     m_instances.push_back(instance_node);
+}
+
+PropertyValue VertexBuffer::GetProperty(std::string_view name) const
+{
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_size));
+}
+
+PropertyValue VertexBuffer::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(m_size));
+}
+
+std::vector<Property> VertexBuffer::GetProperties() const
+{
+    return ObjectAccess::GetProperties(this, std::make_tuple(m_size));
+}
+
+bool VertexBuffer::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple(&m_size));
+}
+
+bool VertexBuffer::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
+}
+
+json VertexBuffer::ToJson() const
+{
+    json json;
+
+    ObjectAccess::ThisToJson(this, json);
+    json["value.size"] = m_size;
+
+    return json;
+}
+
+VertexBuffer::VertexBuffer(ID id, void* src, size_t size, std::align_val_t alignment)
+    : Object(id), m_size(size), m_deleter{ alignment }
+{
+    m_data.reset(::operator new(m_size, alignment));
+    memcpy(m_data.get(), src, size);
+}
+
+PropertyValue IndexBuffer::GetProperty(std::string_view name) const
+{
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_size));
+}
+
+PropertyValue IndexBuffer::GetProperty(std::string_view primary, std::string_view alternative) const
+{
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(m_size));
+}
+
+std::vector<Property> IndexBuffer::GetProperties() const
+{
+    return ObjectAccess::GetProperties(this, std::make_tuple(m_size));
+}
+
+bool IndexBuffer::SetProperty(std::string_view name, const PropertyValue& value)
+{
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple(&m_size));
+}
+
+bool IndexBuffer::RemoveProperty(std::string_view name)
+{
+    return ObjectAccess::RemoveProperty<kFieldNames.size()>(*this, name);
+}
+
+json IndexBuffer::ToJson() const
+{
+    json json;
+
+    ObjectAccess::ThisToJson(this, json);
+    json["value.size"] = m_size;
+
+    return json;
+}
+
+IndexBuffer::IndexBuffer(ID id, void* src, size_t size, std::align_val_t alignment)
+    : Object(id), m_size(size), m_deleter{ alignment }
+{
+    m_data.reset(::operator new(m_size, alignment));
+    memcpy(m_data.get(), src, size);
 }

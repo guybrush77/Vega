@@ -1,9 +1,9 @@
 #include "render_context.hpp"
 
+#include "buffer_manager.hpp"
 #include "camera.hpp"
 #include "gui.hpp"
 #include "lights.hpp"
-#include "mesh_store.hpp"
 #include "scene.hpp"
 
 #define GLFW_INCLUDE_NONE
@@ -21,12 +21,12 @@ RenderContext::RenderContext(
     Gui*                 gui,
     Camera*              camera,
     Lights*              lights,
-    MeshStore*           mesh_store,
+    BufferManager*       buffer_manager,
     Scene*               scene)
     : m_device(device), m_graphics_queue(graphics_queue), m_pipeline(pipeline), m_pipeline_layout(pipeline_layout),
       m_window(window), m_swapchain_manager(swapchain_manager), m_frame_manager(frame_manager),
       m_descriptor_manager(descriptor_manager), m_gui(gui), m_camera(camera), m_lights(lights),
-      m_mesh_store(mesh_store), m_scene(scene)
+      m_buffer_manager(buffer_manager), m_scene(scene)
 {}
 
 void RenderContext::ProcessUserInput()
@@ -161,16 +161,17 @@ RenderContext::Status RenderContext::StartRenderLoop()
         frame.cmd_buffers.draw.SetViewport(viewport);
         frame.cmd_buffers.draw.SetScissor(scissor);
 
-        for (size_t i = 0; i < draw_list.size(); ++i) {
-            auto model_transform = ModelUniform{ *draw_list[i].transform };
-            auto offset          = m_descriptor_manager->Set(frame.index, i, model_transform);
-            auto mesh            = m_mesh_store->GetMeshRecord(draw_list[i].mesh);
+        for (const auto& [index, mesh, transform] : draw_list) {
+            auto graphics        = PipelineBindPoint::Graphics;
+            auto model_transform = ModelUniform{ transform };
+            auto offset          = m_descriptor_manager->Set(frame.index, index, model_transform);
+            auto vertex_buffer   = m_buffer_manager->GetBuffer(mesh->GetVertexBuffer());
+            auto index_buffer    = m_buffer_manager->GetBuffer(mesh->GetIndexBuffer());
 
-            frame.cmd_buffers.draw.BindVertexBuffers(mesh.vertices.buffer);
-            frame.cmd_buffers.draw.BindIndexBuffer(mesh.indices.buffer, IndexType::Uint32); // TODO: buffer type?
-            frame.cmd_buffers.draw
-                .BindDescriptorSet(PipelineBindPoint::Graphics, m_pipeline_layout, descriptor_set, { offset });
-            frame.cmd_buffers.draw.DrawIndexed(mesh.indices.count, 1);
+            frame.cmd_buffers.draw.BindVertexBuffers(vertex_buffer);
+            frame.cmd_buffers.draw.BindIndexBuffer(index_buffer, IndexType::Uint32);
+            frame.cmd_buffers.draw.BindDescriptorSet(graphics, m_pipeline_layout, descriptor_set, { offset });
+            frame.cmd_buffers.draw.DrawIndexed(mesh->GetIndexCount(), 1);
         }
 
         frame.cmd_buffers.draw.EndRenderPass();

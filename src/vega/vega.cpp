@@ -1,10 +1,10 @@
 #include "etna/etna.hpp"
 
+#include "buffer_manager.hpp"
 #include "camera.hpp"
 #include "descriptor_manager.hpp"
 #include "frame_manager.hpp"
 #include "gui.hpp"
-#include "mesh_store.hpp"
 #include "render_context.hpp"
 #include "scene.hpp"
 #include "swapchain_manager.hpp"
@@ -161,7 +161,15 @@ static MeshPtr GenerateMeshPN(ScenePtr scene, const tinyobj::attrib_t& attribute
         }
     }
 
-    return scene->CreateMesh(aabb, std::move(vertices), std::move(indices));
+    auto vertex_size   = sizeof(vertices[0]);
+    auto vertex_count  = vertices.size();
+    auto vertex_buffer = scene->CreateVertexBuffer(vertices.data(), vertex_size * vertex_count, std::align_val_t(32));
+
+    auto index_size   = sizeof(indices[0]);
+    auto index_count  = indices.size();
+    auto index_buffer = scene->CreateIndexBuffer(indices.data(), index_size * index_count, std::align_val_t(32));
+
+    return scene->CreateMesh(aabb, vertex_buffer, index_buffer, 0, index_count);
 }
 
 static MeshPtr GenerateMeshP(ScenePtr scene, const tinyobj::attrib_t& attributes, const tinyobj::mesh_t& mesh)
@@ -222,7 +230,15 @@ static MeshPtr GenerateMeshP(ScenePtr scene, const tinyobj::attrib_t& attributes
         aabb.Expand({ pos2.x, pos2.y, pos2.z });
     }
 
-    return scene->CreateMesh(aabb, std::move(vertices), std::move(indices));
+    auto vertex_size   = sizeof(vertices[0]);
+    auto vertex_count  = vertices.size();
+    auto vertex_buffer = scene->CreateVertexBuffer(vertices.data(), vertex_size * vertex_count, std::align_val_t(32));
+
+    auto index_size   = sizeof(indices[0]);
+    auto index_count  = indices.size();
+    auto index_buffer = scene->CreateIndexBuffer(indices.data(), index_size * index_count, std::align_val_t(32));
+
+    return scene->CreateMesh(aabb, vertex_buffer, index_buffer, 0, index_count);
 }
 
 void LoadObj(ScenePtr scene, std::filesystem::path filepath)
@@ -257,7 +273,7 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
     }
 
     auto shader   = scene->CreateShader();
-    auto material = shader->CreateMaterial();
+    auto material = scene->CreateMaterial(shader);
 
     auto root_node = scene->GetRootNode();
     auto file_node = root_node->AttachNode(scene->CreateGroupNode());
@@ -633,9 +649,9 @@ class EventHandler {
         GLFWwindow*    glfw_window,
         Scene*         scene,
         Camera*        camera,
-        MeshStore*     mesh_store)
+        BufferManager* buffer_manager)
         : m_render_context(render_context), m_glfw_window(glfw_window), m_scene(scene), m_camera(camera),
-          m_mesh_store(mesh_store)
+          m_buffer_manager(buffer_manager)
     {}
 
     void ScheduleCloseWindow() noexcept
@@ -677,10 +693,11 @@ class EventHandler {
         LoadObj(m_scene, m_load_file_parameters.filepath);
 
         auto draw_list = m_scene->ComputeDrawList();
-        for (DrawRecord draw_record : draw_list) {
-            m_mesh_store->Add(draw_record.mesh);
+        for (const DrawRecord& draw_record : draw_list) {
+            m_buffer_manager->CreateBuffer(draw_record.mesh->GetVertexBuffer());
+            m_buffer_manager->CreateBuffer(draw_record.mesh->GetIndexBuffer());
         }
-        m_mesh_store->Upload();
+        m_buffer_manager->Upload();
 
         auto aabb = m_scene->ComputeAxisAlignedBoundingBox();
 
@@ -703,7 +720,7 @@ class EventHandler {
     GLFWwindow*    m_glfw_window;
     Scene*         m_scene;
     Camera*        m_camera;
-    MeshStore*     m_mesh_store;
+    BufferManager* m_buffer_manager;
     Event          m_event = Event::None;
 };
 
@@ -878,7 +895,7 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
-    auto mesh_store = MeshStore(*device, queues.transfer);
+    auto buffer_manager = BufferManager(*device, queues.transfer);
 
     uint32_t image_count = 3;
     uint32_t frame_count = 2;
@@ -911,7 +928,7 @@ int main()
         lights.FillRef().AzimuthRef()    = ToRadians(25_deg).value;
     }
 
-    auto event_handler = EventHandler(&render_context, glfw_window.get(), &scene, &camera, &mesh_store);
+    auto event_handler = EventHandler(&render_context, glfw_window.get(), &scene, &camera, &buffer_manager);
 
     auto parameters = Gui::Parameters{
 
@@ -960,7 +977,7 @@ int main()
             &gui,
             &camera,
             &lights,
-            &mesh_store,
+            &buffer_manager,
             &scene);
 
         auto status = render_context.StartRenderLoop();
