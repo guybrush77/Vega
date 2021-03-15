@@ -2,47 +2,28 @@
 
 #include "etna/command.hpp"
 
-void BufferManager::CreateBuffer(VertexBufferPtr vertex_buffer)
+void BufferManager::CreateBuffer(BufferPtr buffer, etna::BufferUsage buffer_usage)
 {
     using namespace etna;
 
     assert(vertex_buffer);
 
-    auto buffer = m_device.CreateBuffer(vertex_buffer->Size(), BufferUsage::TransferSrc, MemoryUsage::CpuOnly);
-
-    auto buffer_data = buffer->MapMemory();
-    memcpy(buffer_data, vertex_buffer->Data(), vertex_buffer->Size());
-    buffer->UnmapMemory();
-
-    m_records.push_back({ vertex_buffer, BufferUsage::VertexBuffer, std::move(buffer), {} });
-}
-
-void BufferManager::CreateBuffer(IndexBufferPtr index_buffer)
-{
-    using namespace etna;
-
-    assert(index_buffer);
-
-    auto buffer = m_device.CreateBuffer(index_buffer->Size(), BufferUsage::TransferSrc, MemoryUsage::CpuOnly);
-
-    auto buffer_data = buffer->MapMemory();
-    memcpy(buffer_data, index_buffer->Data(), index_buffer->Size());
-    buffer->UnmapMemory();
-
-    m_records.push_back({ index_buffer, BufferUsage::IndexBuffer, std::move(buffer), {} });
-}
-
-etna::Buffer BufferManager::GetBuffer(VertexBufferPtr vertex_buffer) const noexcept
-{
-    if (auto it = std::ranges::find(m_records, vertex_buffer, &Record::ptr); it != m_records.end()) {
-        return *it->gpu_buffer;
+    if (std::ranges::find(m_records, buffer->GetID(), &Record::id) != m_records.end()) {
+        return;
     }
-    return {};
+
+    auto host_buffer = m_device.CreateBuffer(buffer->Size(), BufferUsage::TransferSrc, MemoryUsage::CpuOnly);
+
+    auto buffer_data = host_buffer->MapMemory();
+    memcpy(buffer_data, buffer->Data(), buffer->Size());
+    host_buffer->UnmapMemory();
+
+    m_records.push_back({ buffer->GetID(), buffer_usage, std::move(host_buffer), {} });
 }
 
-etna::Buffer BufferManager::GetBuffer(IndexBufferPtr index_buffer) const noexcept
+etna::Buffer BufferManager::GetBuffer(BufferPtr buffer) const noexcept
 {
-    if (auto it = std::ranges::find(m_records, index_buffer, &Record::ptr); it != m_records.end()) {
+    if (auto it = std::ranges::find(m_records, buffer->GetID(), &Record::id); it != m_records.end()) {
         return *it->gpu_buffer;
     }
     return {};
@@ -57,12 +38,12 @@ void BufferManager::Upload()
 
     cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
 
-    for (auto& [id, usage, cpu_buffer, gpu_buffer] : m_records) {
+    for (auto& [id, usage, host_buffer, gpu_buffer] : m_records) {
         if (gpu_buffer) {
             continue;
         }
-        gpu_buffer = m_device.CreateBuffer(cpu_buffer->Size(), usage | BufferUsage::TransferDst, MemoryUsage::GpuOnly);
-        cmd_buffer->CopyBuffer(*cpu_buffer, *gpu_buffer, cpu_buffer->Size());
+        gpu_buffer = m_device.CreateBuffer(host_buffer->Size(), usage | BufferUsage::TransferDst, MemoryUsage::GpuOnly);
+        cmd_buffer->CopyBuffer(*host_buffer, *gpu_buffer, host_buffer->Size());
     }
 
     cmd_buffer->End();

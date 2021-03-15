@@ -382,23 +382,25 @@ json Mesh::ToJson() const
 
 PropertyValue Mesh::GetProperty(std::string_view name) const
 {
-    return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_aabb.min, m_aabb.max));
+    auto triangles = utils::narrow_cast<int>(m_index_count / 3);
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple(triangles, m_aabb.min, m_aabb.max));
 }
 
 PropertyValue Mesh::GetProperty(std::string_view primary, std::string_view alternative) const
 {
-    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(m_aabb.min, m_aabb.max));
+    auto triangles = utils::narrow_cast<int>(m_index_count / 3);
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple(triangles, m_aabb.min, m_aabb.max));
 }
 
 std::vector<Property> Mesh::GetProperties() const
 {
-    return ObjectAccess::GetProperties(this, std::make_tuple(m_aabb.min, m_aabb.max));
+    auto triangles = utils::narrow_cast<int>(m_index_count / 3);
+    return ObjectAccess::GetProperties(this, std::make_tuple(triangles, m_aabb.min, m_aabb.max));
 }
 
-bool Mesh::SetProperty(std::string_view /*name*/, const PropertyValue& /*value*/)
+bool Mesh::SetProperty(std::string_view name, const PropertyValue& value)
 {
-    // TODO
-    return false;
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple());
 }
 
 bool Mesh::RemoveProperty(std::string_view name)
@@ -926,7 +928,7 @@ json Shader::ToJson() const
 {
     json json;
 
-    auto view = std::views::transform(m_materials, [](auto& m) { return m->GetID(); });
+    auto view      = std::views::transform(m_materials, [](auto& m) { return m->GetID(); });
     auto materials = std::vector<ID>(view.begin(), view.end());
 
     ObjectAccess::ThisToJson(this, json);
@@ -990,6 +992,13 @@ void Material::AddInstanceNodePtr(InstanceNodePtr instance_node)
     m_instances.push_back(instance_node);
 }
 
+Buffer::Buffer(ID id, void* src, size_t size, std::align_val_t alignment)
+    : Object(id), m_size(size), m_deleter{ alignment }
+{
+    m_data.reset(::operator new(m_size, alignment));
+    memcpy(m_data.get(), src, size);
+}
+
 PropertyValue VertexBuffer::GetProperty(std::string_view name) const
 {
     return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_size));
@@ -1025,13 +1034,6 @@ json VertexBuffer::ToJson() const
     return json;
 }
 
-VertexBuffer::VertexBuffer(ID id, void* src, size_t size, std::align_val_t alignment)
-    : Object(id), m_size(size), m_deleter{ alignment }
-{
-    m_data.reset(::operator new(m_size, alignment));
-    memcpy(m_data.get(), src, size);
-}
-
 PropertyValue IndexBuffer::GetProperty(std::string_view name) const
 {
     return ObjectAccess::GetProperty(name, *this, std::make_tuple(m_size));
@@ -1065,11 +1067,4 @@ json IndexBuffer::ToJson() const
     json["value.size"] = m_size;
 
     return json;
-}
-
-IndexBuffer::IndexBuffer(ID id, void* src, size_t size, std::align_val_t alignment)
-    : Object(id), m_size(size), m_deleter{ alignment }
-{
-    m_data.reset(::operator new(m_size, alignment));
-    memcpy(m_data.get(), src, size);
 }

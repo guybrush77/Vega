@@ -51,24 +51,6 @@ DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
 
 DECLARE_VERTEX_TYPE(VertexPN, Position3f | Normal3f)
 
-struct Index final {
-    Index() noexcept = default;
-
-    constexpr Index(tinyobj::index_t idx) noexcept
-        : vertex(static_cast<uint32_t>(idx.vertex_index)), normal(static_cast<uint32_t>(idx.normal_index)),
-          texcoord(static_cast<uint32_t>(idx.texcoord_index))
-    {}
-
-    uint32_t vertex;
-    uint32_t normal;
-    uint32_t texcoord;
-};
-
-constexpr bool operator==(const Index& lhs, const Index& rhs) noexcept
-{
-    return lhs.vertex == rhs.vertex && lhs.normal == rhs.normal && lhs.texcoord == rhs.texcoord;
-}
-
 namespace std {
 
 template <>
@@ -85,21 +67,22 @@ struct hash<VertexPN> {
     }
 };
 
-template <>
-struct hash<Index> {
-    size_t operator()(const Index& index) const noexcept
-    {
-        size_t hash = 23;
+} // namespace std
 
-        hash = hash * 31 + index.vertex;
-        hash = hash * 31 + index.normal;
-        hash = hash * 31 + index.texcoord;
-
-        return hash;
-    }
+struct TinyIndex final {
+    struct Hash final {
+        size_t operator()(const tinyobj::index_t& index) const noexcept { return index.vertex_index; }
+    };
+    struct Equal final {
+        bool operator()(const tinyobj::index_t& lhs, const tinyobj::index_t& rhs) const noexcept
+        {
+            return (lhs.vertex_index == rhs.vertex_index) && (lhs.normal_index == rhs.normal_index) &&
+                   (lhs.texcoord_index == rhs.texcoord_index);
+        }
+    };
 };
 
-} // namespace std
+using IndexMap = std::unordered_map<tinyobj::index_t, size_t, TinyIndex::Hash, TinyIndex::Equal>;
 
 struct GLFW {
     GLFW()
@@ -110,66 +93,78 @@ struct GLFW {
     ~GLFW() { glfwTerminate(); }
 } glfw;
 
-static MeshPtr GenerateMeshPN(ScenePtr scene, const tinyobj::attrib_t& attributes, const tinyobj::mesh_t& mesh)
+struct MeshRecord final {
+    AABB   aabb{};
+    int    material_id{};
+    size_t first_index{};
+    size_t index_count{};
+};
+
+using MeshRecords = std::vector<MeshRecord>;
+
+static MeshRecords GenerateMeshRecords(
+    const tinyobj::attrib_t& attributes,
+    const tinyobj::mesh_t&   mesh,
+    IndexMap*                index_map,
+    std::vector<VertexPN>*   vertices,
+    std::vector<uint32_t>*   indices)
 {
-    auto num_indices = mesh.indices.size();
+    const auto& [positions, normals, texcoords, colors] = attributes;
 
-    assert(num_indices % 3 == 0);
+    auto mesh_map = std::map<int, std::vector<uint32_t>>{};
 
-    auto index_map = std::unordered_map<Index, uint32_t>{};
-    auto vertices  = std::vector<VertexPN>{};
-    auto indices   = std::vector<uint32_t>{};
+    for (size_t i = 0; i < mesh.indices.size(); ++i) {
+        const auto& index       = mesh.indices[i];
+        const auto  material_id = mesh.material_ids[i / 3];
+        const auto  pindex      = 3 * index.vertex_index;
+        const auto  nindex      = 3 * index.normal_index;
+        const auto  position    = glm::vec3(positions[pindex + 0], positions[pindex + 1], positions[pindex + 2]);
+        const auto  normal      = glm::vec3(normals[nindex + 0], normals[nindex + 1], normals[nindex + 2]);
 
-    auto aabb = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
+        auto new_index = vertices->size();
 
-    for (size_t i = 0; i < num_indices; i += 3) {
-        for (std::size_t j = 0; j < 3; ++j) {
-            auto index = Index(mesh.indices[i + j]);
-            if (auto it = index_map.find(index); it != index_map.end()) {
-                indices.push_back(it->second);
-            } else {
-                auto position_idx = static_cast<size_t>(3) * index.vertex;
-                auto normal_idx   = static_cast<size_t>(3) * index.normal;
-
-                auto position = glm::vec3(
-                    attributes.vertices[position_idx + 0],
-                    attributes.vertices[position_idx + 1],
-                    attributes.vertices[position_idx + 2]);
-
-                auto normal = glm::vec3(
-                    attributes.normals[normal_idx + 0],
-                    attributes.normals[normal_idx + 1],
-                    attributes.normals[normal_idx + 2]);
-
-                auto vertex = VertexPN(position, normal);
-
-                vertices.push_back(vertex);
-
-                aabb.min = { std::min(aabb.min.x, vertex.position.x),
-                             std::min(aabb.min.y, vertex.position.y),
-                             std::min(aabb.min.z, vertex.position.z) };
-
-                aabb.max = { std::max(aabb.max.x, vertex.position.x),
-                             std::max(aabb.max.y, vertex.position.y),
-                             std::max(aabb.max.z, vertex.position.z) };
-
-                auto idx         = static_cast<uint32_t>(vertices.size() - 1);
-                index_map[index] = idx;
-
-                indices.push_back(idx);
-            }
+        if (auto [it, success] = index_map->try_emplace(index, vertices->size()); success) {
+            vertices->emplace_back(position, normal);
+        } else {
+            new_index = it->second;
         }
+
+        auto& index_buffer = mesh_map[material_id];
+        if (index_buffer.empty()) {
+            index_buffer.reserve(mesh.indices.size());
+        }
+        index_buffer.push_back(utils::narrow_cast<uint32_t>(new_index));
     }
 
-    auto vertex_size   = sizeof(vertices[0]);
-    auto vertex_count  = vertices.size();
-    auto vertex_buffer = scene->CreateVertexBuffer(vertices.data(), vertex_size * vertex_count, std::align_val_t(32));
+    auto mesh_records = MeshRecords{};
 
-    auto index_size   = sizeof(indices[0]);
-    auto index_count  = indices.size();
-    auto index_buffer = scene->CreateIndexBuffer(indices.data(), index_size * index_count, std::align_val_t(32));
+    for (auto& [material_id, index_buffer] : mesh_map) {
+        auto record = MeshRecord{
 
-    return scene->CreateMesh(aabb, vertex_buffer, index_buffer, 0, index_count);
+            .aabb        = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } },
+            .material_id = material_id,
+            .first_index = indices->size(),
+            .index_count = index_buffer.size()
+        };
+
+        for (uint32_t index : index_buffer) {
+            auto position = (*vertices)[index].position;
+
+            record.aabb.min = { std::min(record.aabb.min.x, position.x),
+                                std::min(record.aabb.min.y, position.y),
+                                std::min(record.aabb.min.z, position.z) };
+
+            record.aabb.max = { std::max(record.aabb.max.x, position.x),
+                                std::max(record.aabb.max.y, position.y),
+                                std::max(record.aabb.max.z, position.z) };
+
+            indices->push_back(index);
+        }
+
+        mesh_records.push_back(record);
+    }
+
+    return mesh_records;
 }
 
 static MeshPtr GenerateMeshP(ScenePtr scene, const tinyobj::attrib_t& attributes, const tinyobj::mesh_t& mesh)
@@ -255,25 +250,53 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
     auto shapes     = std::vector<tinyobj::shape_t>{};
     auto materials  = std::vector<tinyobj::material_t>{};
     auto warning    = std::string{};
-    auto err        = std::string{};
+    auto error      = std::string{};
+
+    spdlog::info("Loading file {}", filepath.string());
+
+    auto start = std::chrono::system_clock::now();
 
     bool success = tinyobj::LoadObj(
         &attributes,
         &shapes,
         &materials,
         &warning,
-        &err,
+        &error,
         filepath.string().c_str(),
         parent_dir.string().c_str(),
         true,
         false);
 
-    if (success == false) {
-        throw std::runtime_error("Failed to load file");
+    if (!success || !error.empty()) {
+        spdlog::error("{}", error);
+        utils::throw_runtime_error("Failed to load object file");
     }
 
-    auto shader   = scene->CreateShader();
-    auto material = scene->CreateMaterial(shader);
+    if (!warning.empty()) {
+        spdlog::warn("{}", warning);
+    }
+
+    auto end     = std::chrono::system_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+
+    spdlog::info("File loaded. Elapsed time: {} seconds.", elapsed);
+
+    spdlog::info("Generating scene");
+
+    start = std::chrono::system_clock::now();
+
+    auto shader       = scene->CreateShader();
+    auto material_map = std::map<int, MaterialPtr>{};
+    {
+        auto default_material = scene->CreateMaterial(shader);
+        material_map[-1]      = default_material;
+
+        for (size_t material_index = 0; material_index != materials.size(); ++material_index) {
+            auto material       = scene->CreateMaterial(shader);
+            auto index          = utils::narrow_cast<int>(material_index);
+            material_map[index] = material;
+        }
+    }
 
     auto root_node = scene->GetRootNode();
     auto file_node = root_node->AttachNode(scene->CreateGroupNode());
@@ -281,19 +304,67 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
     file_node->SetProperty("name", filepath.filename().string());
     file_node->SetProperty("Path", filepath.string());
 
-    for (const auto& shape : shapes) {
-        auto mesh = MeshPtr{};
+    auto mesh_map      = std::map<size_t, MeshRecords>{};
+    auto vertex_buffer = VertexBufferPtr{};
+    auto index_buffer  = IndexBufferPtr{};
 
-        if (attributes.normals.empty()) {
-            mesh = GenerateMeshP(scene, attributes, shape.mesh);
-        } else {
-            mesh = GenerateMeshPN(scene, attributes, shape.mesh);
+    {
+        auto index_count = size_t{ 0 };
+        for (auto& shape : shapes) {
+            index_count += shape.mesh.indices.size();
         }
 
-        auto instance = file_node->AttachNode(scene->CreateInstanceNode(mesh, material));
+        auto vertices = std::vector<VertexPN>{};
+        vertices.reserve(2 * attributes.vertices.size());
 
-        instance->SetProperty("name", shape.name);
+        auto indices = std::vector<uint32_t>{};
+        indices.reserve(index_count);
+
+        auto index_map = IndexMap{};
+        index_map.reserve(2 * attributes.vertices.size());
+
+        for (size_t shape_index = 0; shape_index < shapes.size(); ++shape_index) {
+            auto records = GenerateMeshRecords(attributes, shapes[shape_index].mesh, &index_map, &vertices, &indices);
+            mesh_map[shape_index] = std::move(records);
+        }
+
+        auto vertices_size = sizeof(vertices[0]) * vertices.size();
+        vertex_buffer      = scene->CreateVertexBuffer(vertices.data(), vertices_size, std::align_val_t(32));
+
+        auto indices_size = sizeof(indices[0]) * indices.size();
+        index_buffer      = scene->CreateIndexBuffer(indices.data(), indices_size, std::align_val_t(32));
     }
+
+    auto shape_num = 1;
+
+    for (const auto& [shape_index, mesh_records] : mesh_map) {
+        auto parent = file_node;
+        auto name   = shapes[shape_index].name;
+        if (name.empty()) {
+            name = std::string("Mesh ") + std::to_string(shape_num++);
+        }
+        if (mesh_records.size() > 1) {
+            parent = file_node->AttachNode(scene->CreateGroupNode());
+            parent->SetProperty("name", name);
+        }
+        auto mesh_num = 1;
+        for (const auto& [aabb, material_id, first, count] : mesh_records) {
+            auto mesh     = scene->CreateMesh(aabb, vertex_buffer, index_buffer, first, count);
+            auto material = material_map[material_id];
+            auto instance = parent->AttachNode(scene->CreateInstanceNode(mesh, material));
+            if (mesh_records.size() == 1) {
+                instance->SetProperty("name", name);
+            } else {
+                auto suffix = std::string(" (") + std::to_string(mesh_num++) + (")");
+                instance->SetProperty("name", name + suffix);
+            }
+        }
+    }
+
+    end     = std::chrono::system_clock::now();
+    elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+
+    spdlog::info("Scene generation finished. Elapsed time: {} seconds.", elapsed);
 }
 
 struct QueueInfo final {
@@ -694,8 +765,8 @@ class EventHandler {
 
         auto draw_list = m_scene->ComputeDrawList();
         for (const DrawRecord& draw_record : draw_list) {
-            m_buffer_manager->CreateBuffer(draw_record.mesh->GetVertexBuffer());
-            m_buffer_manager->CreateBuffer(draw_record.mesh->GetIndexBuffer());
+            m_buffer_manager->CreateBuffer(draw_record.mesh->GetVertexBuffer(), etna::BufferUsage::VertexBuffer);
+            m_buffer_manager->CreateBuffer(draw_record.mesh->GetIndexBuffer(), etna::BufferUsage::IndexBuffer);
         }
         m_buffer_manager->Upload();
 

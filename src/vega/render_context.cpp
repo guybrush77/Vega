@@ -171,7 +171,7 @@ RenderContext::Status RenderContext::StartRenderLoop()
             frame.cmd_buffers.draw.BindVertexBuffers(vertex_buffer);
             frame.cmd_buffers.draw.BindIndexBuffer(index_buffer, IndexType::Uint32);
             frame.cmd_buffers.draw.BindDescriptorSet(graphics, m_pipeline_layout, descriptor_set, { offset });
-            frame.cmd_buffers.draw.DrawIndexed(mesh->GetIndexCount(), 1);
+            frame.cmd_buffers.draw.DrawIndexed(mesh->GetIndexCount(), 1, mesh->GetFirstIndex());
         }
 
         frame.cmd_buffers.draw.EndRenderPass();

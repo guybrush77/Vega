@@ -17,19 +17,17 @@ class BufferManager {
     BufferManager(BufferManager&&) = default;
     BufferManager& operator=(BufferManager&&) = default;
 
-    void CreateBuffer(VertexBufferPtr vertex_buffer);
-    void CreateBuffer(IndexBufferPtr index_buffer);
+    void CreateBuffer(BufferPtr buffer, etna::BufferUsage buffer_usage);
 
-    auto GetBuffer(VertexBufferPtr vertex_buffer) const noexcept -> etna::Buffer;
-    auto GetBuffer(IndexBufferPtr index_buffer) const noexcept -> etna::Buffer;
+    auto GetBuffer(BufferPtr buffer) const noexcept -> etna::Buffer;
 
     void Upload();
 
   private:
     struct Record final {
-        void*              ptr{};
+        ID                 id{};
         etna::BufferUsage  usage{};
-        etna::UniqueBuffer cpu_buffer{};
+        etna::UniqueBuffer host_buffer{};
         etna::UniqueBuffer gpu_buffer{};
     };
 

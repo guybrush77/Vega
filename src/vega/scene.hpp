@@ -21,6 +21,7 @@ END_DISABLE_WARNINGS
 #include <variant>
 #include <vector>
 
+class Buffer;
 class GroupNode;
 class IndexBuffer;
 class InnerNode;
@@ -37,6 +38,7 @@ class Shader;
 class TranslateNode;
 class VertexBuffer;
 
+using BufferPtr        = Buffer*;
 using GroupNodePtr     = GroupNode*;
 using IndexBufferPtr   = IndexBuffer*;
 using InnerNodePtr     = InnerNode*;
@@ -53,6 +55,7 @@ using ShaderPtr        = Shader*;
 using TranslateNodePtr = TranslateNode*;
 using VertexBufferPtr  = VertexBuffer*;
 
+using UniqueBuffer        = std::unique_ptr<Buffer>;
 using UniqueGroupNode     = std::unique_ptr<GroupNode>;
 using UniqueInstanceNode  = std::unique_ptr<InstanceNode>;
 using UniqueMaterial      = std::unique_ptr<Material>;
@@ -126,7 +129,27 @@ inline ID GetID(const Object* object) noexcept
     return object->GetID();
 }
 
-class VertexBuffer final : public Object {
+class Buffer : public Object {
+  public:
+    Buffer(ID id) noexcept : Object(id) {}
+
+    auto Data() const noexcept { return m_data.get(); }
+    auto Size() const noexcept { return m_size; }
+
+  protected:
+    Buffer(ID id, void* src, size_t size, std::align_val_t alignment);
+
+    struct Deleter final {
+        void             operator()(void* data) { ::operator delete(data, alignment); };
+        std::align_val_t alignment{};
+    };
+
+    std::unique_ptr<void, Deleter> m_data{};
+    size_t                         m_size{};
+    Deleter                        m_deleter;
+};
+
+class VertexBuffer final : public Buffer {
   public:
     VertexBuffer(const VertexBuffer&) = delete;
     VertexBuffer& operator=(const VertexBuffer&) = delete;
@@ -143,9 +166,6 @@ class VertexBuffer final : public Object {
 
     json ToJson() const override;
 
-    auto Data() const noexcept { return m_data.get(); }
-    auto Size() const noexcept { return m_size; }
-
   private:
     friend struct ObjectAccess;
 
@@ -154,19 +174,10 @@ class VertexBuffer final : public Object {
     static constexpr std::array<std::string_view, 1> kFieldNames    = { "Size" };
     static constexpr std::array<bool, 1>             kFieldWritable = { false };
 
-    VertexBuffer(ID id, void* src, size_t size, std::align_val_t alignment);
-
-    struct Deleter final {
-        void             operator()(void* data) { ::operator delete(data, alignment); };
-        std::align_val_t alignment{};
-    };
-
-    std::unique_ptr<void, Deleter> m_data{};
-    size_t                         m_size{};
-    Deleter                        m_deleter;
+    VertexBuffer(ID id, void* src, size_t size, std::align_val_t alignment) : Buffer(id, src, size, alignment) {}
 };
 
-class IndexBuffer final : public Object {
+class IndexBuffer final : public Buffer {
   public:
     IndexBuffer(const IndexBuffer&) = delete;
     IndexBuffer& operator=(const IndexBuffer&) = delete;
@@ -183,9 +194,6 @@ class IndexBuffer final : public Object {
 
     json ToJson() const override;
 
-    auto Data() const noexcept { return m_data.get(); }
-    auto Size() const noexcept { return m_size; }
-
   private:
     friend struct ObjectAccess;
 
@@ -194,16 +202,7 @@ class IndexBuffer final : public Object {
     static constexpr std::array<std::string_view, 1> kFieldNames    = { "Size" };
     static constexpr std::array<bool, 1>             kFieldWritable = { false };
 
-    IndexBuffer(ID id, void* src, size_t size, std::align_val_t alignment);
-
-    struct Deleter final {
-        void             operator()(void* data) { ::operator delete(data, alignment); };
-        std::align_val_t alignment{};
-    };
-
-    std::unique_ptr<void, Deleter> m_data{};
-    size_t                         m_size{};
-    Deleter                        m_deleter;
+    IndexBuffer(ID id, void* src, size_t size, std::align_val_t alignment) : Buffer(id, src, size, alignment) {}
 };
 
 class Mesh : public Object {
@@ -234,8 +233,8 @@ class Mesh : public Object {
 
     static constexpr std::string_view                kClassName     = "mesh";
     static constexpr std::string_view                kDefaultName   = "Mesh";
-    static constexpr std::array<std::string_view, 2> kFieldNames    = { "Min", "Max" };
-    static constexpr std::array<bool, 2>             kFieldWritable = { false, false };
+    static constexpr std::array<std::string_view, 3> kFieldNames    = { "Triangles", "Min", "Max" };
+    static constexpr std::array<bool, 3>             kFieldWritable = { false, false, false };
 
     Mesh(
         ID              id,
