@@ -50,6 +50,8 @@ class Device {
 
     auto CreateRenderPass(const VkRenderPassCreateInfo& create_info) -> UniqueRenderPass;
 
+    auto CreateSampler(const VkSamplerCreateInfo& create_info) -> UniqueSampler;
+
     auto CreateDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& create_info) -> UniqueDescriptorSetLayout;
 
     auto CreateDescriptorPool(DescriptorPoolFlags flags, std::span<DescriptorPoolSize> pool_sizes, size_t max_sets = 0)

@@ -6,7 +6,7 @@ void BufferManager::CreateBuffer(BufferPtr buffer, etna::BufferUsage buffer_usag
 {
     using namespace etna;
 
-    assert(vertex_buffer);
+    assert(buffer);
 
     if (std::ranges::find(m_records, buffer->GetID(), &Record::id) != m_records.end()) {
         return;

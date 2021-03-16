@@ -68,10 +68,10 @@ class CommandBuffer {
     void Draw(size_t vertex_count, size_t instance_count, size_t first_vertex = 0, size_t first_instance = 0);
 
     void DrawIndexed(
-        size_t   index_count,
-        size_t   instance_count,
-        size_t   first_index    = 0,
-        size_t   vertex_offset  = 0,
+        size_t index_count,
+        size_t instance_count,
+        size_t first_index    = 0,
+        size_t vertex_offset  = 0,
         size_t first_instance = 0);
 
     void PipelineBarrier(
@@ -94,7 +94,13 @@ class CommandBuffer {
 
     void CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size);
 
-    void ResetCommandBuffer();
+    void CopyBufferToImage(
+        Buffer                                 src_buffer,
+        Image2D                                dst_image,
+        ImageLayout                            dst_image_layout,
+        std::initializer_list<BufferImageCopy> regions);
+
+    void ResetCommandBuffer(CommandBufferReset reset_flags = {});
 
     void SetViewport(Viewport viewport);
 

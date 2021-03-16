@@ -6,6 +6,7 @@
 #include "etna/pipeline.hpp"
 #include "etna/queue.hpp"
 #include "etna/renderpass.hpp"
+#include "etna/sampler.hpp"
 #include "etna/shader.hpp"
 #include "etna/surface.hpp"
 #include "etna/swapchain.hpp"
@@ -117,6 +118,12 @@ UniqueRenderPass Device::CreateRenderPass(const VkRenderPassCreateInfo& create_i
 {
     assert(m_device);
     return RenderPass::Create(m_device, create_info);
+}
+
+UniqueSampler Device::CreateSampler(const VkSamplerCreateInfo& create_info)
+{
+    assert(m_device);
+    return Sampler::Create(m_device, create_info);
 }
 
 UniqueDescriptorSetLayout Device::CreateDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& create_info)
@@ -474,8 +481,8 @@ void Device::UpdateDescriptorSets(std::initializer_list<WriteDescriptorSetRef> w
     }
 
     std::ranges::transform(write_descriptor_sets, vk_write_descriptor_sets.begin(), [](const WriteDescriptorSet& set) {
-        if (set.m_descriptor_buffer_infos.empty()) {
-            throw_etna_error(__FILE__, __LINE__, "No buffers to update in WriteDescriptorSet");
+        if (set.m_descriptor_buffer_infos.empty() && set.m_descriptor_image_infos.empty()) {
+            throw_etna_error(__FILE__, __LINE__, "Nothing to update in WriteDescriptorSet");
         }
         return static_cast<VkWriteDescriptorSet>(set);
     });

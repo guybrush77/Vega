@@ -267,11 +267,25 @@ void CommandBuffer::CopyBuffer(Buffer src_buffer, Buffer dst_buffer, size_t size
     vkCmdCopyBuffer(m_command_buffer, src_buffer, dst_buffer, 1, &buffer_copy);
 }
 
-void CommandBuffer::ResetCommandBuffer()
+void CommandBuffer::CopyBufferToImage(
+    Buffer                                 src_buffer,
+    Image2D                                dst_image,
+    ImageLayout                            dst_image_layout,
+    std::initializer_list<BufferImageCopy> regions)
 {
     assert(m_command_buffer);
 
-    vkResetCommandBuffer(m_command_buffer, {});
+    auto vk_count   = narrow_cast<uint32_t>(regions.size());
+    auto vk_regions = reinterpret_cast<const VkBufferImageCopy*>(regions.begin());
+
+    vkCmdCopyBufferToImage(m_command_buffer, src_buffer, dst_image, VkEnum(dst_image_layout), vk_count, vk_regions);
+}
+
+void CommandBuffer::ResetCommandBuffer(CommandBufferReset reset_flags)
+{
+    assert(m_command_buffer);
+
+    vkResetCommandBuffer(m_command_buffer, VkEnum(reset_flags));
 }
 
 void CommandBuffer::SetViewport(Viewport viewport)

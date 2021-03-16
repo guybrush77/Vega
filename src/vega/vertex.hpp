@@ -10,12 +10,6 @@ std::string to_string(VertexFlags value);
 template <typename>
 struct vertex_type_traits;
 
-template <typename T>
-constexpr VertexFlags vertex_flags() noexcept
-{
-    return static_cast<VertexFlags>(vertex_type_traits<T>::value);
-}
-
 template <typename>
 struct vertex_attribute_type_traits;
 
@@ -32,9 +26,3 @@ struct vertex_attribute_type_traits;
     struct vertex_type_traits<vertex_type> { \
         static constexpr auto value = vertex_attributes; \
     };
-
-template <typename T>
-concept Vertex = std::is_standard_layout_v<T>&& std::is_trivially_copyable_v<T>;
-
-template <typename T>
-concept IndexType = std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t>;

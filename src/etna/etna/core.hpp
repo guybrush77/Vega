@@ -542,6 +542,10 @@ enum class CommandBufferLevel {
 
 ETNA_DEFINE_ENUM_ANALOGUE(CommandBufferLevel)
 
+enum class CommandBufferReset { ReleaseResources = VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT };
+
+ETNA_DEFINE_FLAGS_ANALOGUE(CommandBufferReset, VkCommandBufferResetFlagBits)
+
 enum class SubpassContents {
     Inline                  = VK_SUBPASS_CONTENTS_INLINE,
     SecondaryCommandBuffers = VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
@@ -915,6 +919,7 @@ requires composable_flags<E>::value inline constexpr auto operator&(E lhs, Mask<
 
 using DeviceSize                     = VkDeviceSize;
 using Offset2D                       = VkOffset2D;
+using Offset3D                       = VkOffset3D;
 using Extent2D                       = VkExtent2D;
 using Extent3D                       = VkExtent3D;
 using Rect2D                         = VkRect2D;
@@ -922,6 +927,26 @@ using Viewport                       = VkViewport;
 using ExtensionProperties            = VkExtensionProperties;
 using PhysicalDeviceLimits           = VkPhysicalDeviceLimits;
 using PhysicalDeviceSparseProperties = VkPhysicalDeviceSparseProperties;
+
+struct ImageSubresourceLayers final {
+    ImageAspect aspectMask     = ImageAspect::Color;
+    uint32_t    mipLevel       = 0;
+    uint32_t    baseArrayLayer = 0;
+    uint32_t    layerCount     = 1;
+};
+
+static_assert(sizeof(ImageSubresourceLayers) == sizeof(VkImageSubresourceLayers));
+
+struct BufferImageCopy final {
+    DeviceSize             bufferOffset{};
+    uint32_t               bufferRowLength{};
+    uint32_t               bufferImageHeight{};
+    ImageSubresourceLayers imageSubresource{};
+    Offset3D               imageOffset{};
+    Extent3D               imageExtent{};
+};
+
+static_assert(sizeof(BufferImageCopy) == sizeof(VkBufferImageCopy));
 
 struct DescriptorPoolSize final {
     DescriptorType type;
@@ -1196,6 +1221,7 @@ class Instance;
 class Pipeline;
 class PipelineLayout;
 class RenderPass;
+class Sampler;
 class Semaphore;
 class ShaderModule;
 class SurfaceKHR;
@@ -1215,6 +1241,7 @@ using UniqueInstance            = UniqueHandle<Instance>;
 using UniquePipeline            = UniqueHandle<Pipeline>;
 using UniquePipelineLayout      = UniqueHandle<PipelineLayout>;
 using UniqueRenderPass          = UniqueHandle<RenderPass>;
+using UniqueSampler             = UniqueHandle<Sampler>;
 using UniqueSemaphore           = UniqueHandle<Semaphore>;
 using UniqueShaderModule        = UniqueHandle<ShaderModule>;
 using UniqueSurfaceKHR          = UniqueHandle<SurfaceKHR>;

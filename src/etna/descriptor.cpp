@@ -1,5 +1,7 @@
 #include "etna/descriptor.hpp"
 #include "etna/buffer.hpp"
+#include "etna/image.hpp"
+#include "etna/sampler.hpp"
 
 #include <cassert>
 
@@ -142,10 +144,24 @@ WriteDescriptorSet::WriteDescriptorSet(
 
 void WriteDescriptorSet::AddBuffer(Buffer buffer, size_t offset, size_t size)
 {
+    assert(
+        state.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+        state.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+
     m_descriptor_buffer_infos.push_back({ buffer, offset, size });
 
     state.descriptorCount = narrow_cast<uint32_t>(m_descriptor_buffer_infos.size());
     state.pBufferInfo     = m_descriptor_buffer_infos.data();
+}
+
+void WriteDescriptorSet::AddImage(Sampler sampler, ImageView2D image_view, ImageLayout image_layout)
+{
+    assert(state.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+    m_descriptor_image_infos.push_back({ sampler, image_view, VkEnum(image_layout) });
+
+    state.descriptorCount = narrow_cast<uint32_t>(m_descriptor_image_infos.size());
+    state.pImageInfo      = m_descriptor_image_infos.data();
 }
 
 } // namespace etna

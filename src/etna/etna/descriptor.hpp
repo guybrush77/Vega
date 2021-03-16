@@ -77,12 +77,15 @@ class WriteDescriptorSet {
 
     void AddBuffer(Buffer buffer, size_t offset = 0, size_t size = VK_WHOLE_SIZE);
 
+    void AddImage(Sampler sampler, ImageView2D image_view, ImageLayout image_layout);
+
     VkWriteDescriptorSet state{};
 
   private:
     friend class Device;
 
     std::vector<VkDescriptorBufferInfo> m_descriptor_buffer_infos;
+    std::vector<VkDescriptorImageInfo>  m_descriptor_image_infos;
 };
 
 class DescriptorPool {
