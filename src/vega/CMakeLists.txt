@@ -21,6 +21,7 @@ target_link_libraries(
     PRIVATE nlohmann_json::nlohmann_json
     PRIVATE shaders
     PRIVATE spdlog
+    PRIVATE stb
     PRIVATE utils
 )
 

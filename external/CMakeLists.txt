@@ -137,6 +137,22 @@ set_target_properties(spdlog PROPERTIES FOLDER "external")
 
 
 #------------------------------------------------------------------------------------
+# Fetch stb
+#------------------------------------------------------------------------------------
+
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY  https://github.com/nothings/stb
+    GIT_TAG         master
+    SOURCE_DIR      ${CMAKE_BINARY_DIR}/_deps/stb-src/stb
+)
+
+FetchContent_MakeAvailable(stb)
+
+include(stb/stb.cmake)
+
+
+#------------------------------------------------------------------------------------
 # Fetch vma
 #------------------------------------------------------------------------------------
 
@@ -147,6 +163,5 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(vma)
-FetchContent_GetProperties(vma)
 
 include(vma/vma.cmake)
