@@ -9,6 +9,7 @@
 
 BEGIN_DISABLE_WARNINGS
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/matrix.hpp>
 
 END_DISABLE_WARNINGS

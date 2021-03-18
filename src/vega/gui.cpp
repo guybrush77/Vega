@@ -20,6 +20,7 @@ BEGIN_DISABLE_WARNINGS
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/matrix_access.hpp>
 
 END_DISABLE_WARNINGS

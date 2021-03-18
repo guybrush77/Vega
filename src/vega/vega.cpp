@@ -35,39 +35,15 @@ END_DISABLE_WARNINGS
 
 enum class KhronosValidation { Disable, Enable };
 
-struct VertexPN final {
-    constexpr VertexPN(const glm::vec3& position, const glm::vec3 normal) noexcept : position(position), normal(normal)
-    {}
+struct Vertex final {
+    constexpr Vertex(const glm::vec3& position, const glm::vec3 normal) noexcept : position(position), normal(normal) {}
     glm::vec3 position;
     glm::vec3 normal;
 };
 
-bool operator==(const VertexPN& lhs, const VertexPN& rhs) noexcept
-{
-    return (lhs.position == rhs.position) && (glm::dot(lhs.normal, rhs.normal) > 0.999847695f);
-}
-
 DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
 
-DECLARE_VERTEX_TYPE(VertexPN, Position3f | Normal3f)
-
-namespace std {
-
-template <>
-struct hash<VertexPN> {
-    size_t operator()(const VertexPN& vertex) const noexcept
-    {
-        size_t hash = 23;
-
-        hash = hash * 31 + std::hash<float>{}(vertex.position.x);
-        hash = hash * 31 + std::hash<float>{}(vertex.position.y);
-        hash = hash * 31 + std::hash<float>{}(vertex.position.z);
-
-        return hash;
-    }
-};
-
-} // namespace std
+DECLARE_VERTEX_TYPE(Vertex, Position3f | Normal3f)
 
 struct TinyIndex final {
     struct Hash final {
@@ -106,7 +82,7 @@ static MeshRecords GenerateMeshRecords(
     const tinyobj::attrib_t& attributes,
     const tinyobj::mesh_t&   mesh,
     IndexMap*                index_map,
-    std::vector<VertexPN>*   vertices,
+    std::vector<Vertex>*     vertices,
     std::vector<uint32_t>*   indices)
 {
     const auto& [positions, normals, texcoords, colors] = attributes;
@@ -167,77 +143,55 @@ static MeshRecords GenerateMeshRecords(
     return mesh_records;
 }
 
-static MeshPtr GenerateMeshP(ScenePtr scene, const tinyobj::attrib_t& attributes, const tinyobj::mesh_t& mesh)
+static void GenerateNormals(tinyobj::attrib_t* attributes, std::vector<tinyobj::shape_t>* shapes)
 {
-    auto num_indices = mesh.indices.size();
+    using namespace glm;
+    using utils::narrow_cast;
 
-    assert(num_indices % 3 == 0);
+    static constexpr float kMinDot = 0.999847695f;
 
-    auto vertices = std::vector<VertexPN>{};
-    auto indices  = std::vector<uint32_t>{};
+    auto& [positions, out_normals, texcoords, colors] = *attributes;
 
-    auto index_map = std::unordered_map<VertexPN, size_t>();
+    auto normals   = std::vector<tinyobj::real_t>{};
+    auto index_map = std::unordered_map<int, int>{};
 
-    auto aabb = AABB{ { FLT_MAX, FLT_MAX, FLT_MAX }, { FLT_MIN, FLT_MIN, FLT_MIN } };
+    index_map.reserve(positions.size());
 
-    for (size_t i = 0; i < num_indices; i += 3) {
-        auto i0     = 3 * utils::narrow_cast<size_t>(mesh.indices[i + 0].vertex_index);
-        auto i1     = 3 * utils::narrow_cast<size_t>(mesh.indices[i + 1].vertex_index);
-        auto i2     = 3 * utils::narrow_cast<size_t>(mesh.indices[i + 2].vertex_index);
-        auto pos0   = glm::vec3(attributes.vertices[i0 + 0], attributes.vertices[i0 + 1], attributes.vertices[i0 + 2]);
-        auto pos1   = glm::vec3(attributes.vertices[i1 + 0], attributes.vertices[i1 + 1], attributes.vertices[i1 + 2]);
-        auto pos2   = glm::vec3(attributes.vertices[i2 + 0], attributes.vertices[i2 + 1], attributes.vertices[i2 + 2]);
-        auto e1     = pos1 - pos0;
-        auto e2     = pos2 - pos0;
-        auto normal = glm::normalize(glm::cross(e1, e2));
+    for (auto& [name, mesh, path] : *shapes) {
+        for (size_t index = 0; index < mesh.indices.size(); index += 3) {
+            auto indices = std::array{ &mesh.indices[index + 0], &mesh.indices[index + 1], &mesh.indices[index + 2] };
+            auto pindex0 = 3 * narrow_cast<size_t>(indices[0]->vertex_index);
+            auto pindex1 = 3 * narrow_cast<size_t>(indices[1]->vertex_index);
+            auto pindex2 = 3 * narrow_cast<size_t>(indices[2]->vertex_index);
+            auto p0      = vec3(positions[pindex0 + 0], positions[pindex0 + 1], positions[pindex0 + 2]);
+            auto p1      = vec3(positions[pindex1 + 0], positions[pindex1 + 1], positions[pindex1 + 2]);
+            auto p2      = vec3(positions[pindex2 + 0], positions[pindex2 + 1], positions[pindex2 + 2]);
+            auto normal  = normalize(cross(p1 - p0, p2 - p0));
 
-        auto vertex0 = VertexPN(pos0, normal);
-        auto vertex1 = VertexPN(pos1, normal);
-        auto vertex2 = VertexPN(pos2, normal);
-
-        size_t index0 = vertices.size();
-        if (auto [kv, is_inserted] = index_map.insert({ vertex0, index0 }); is_inserted) {
-            vertices.push_back(vertex0);
-        } else {
-            index0 = kv->second;
+            for (size_t i = 0; i < indices.size(); ++i) {
+                auto normal_index = narrow_cast<int>(normals.size());
+                if (auto [it, emplaced] = index_map.try_emplace(indices[i]->vertex_index, normal_index); emplaced) {
+                    normals.insert(normals.end(), { normal.x, normal.y, normal.z });
+                } else {
+                    auto current = vec3(normals[it->second + 0], normals[it->second + 1], normals[it->second + 2]);
+                    if (dot(normal, current) >= kMinDot) {
+                        normal_index = it->second;
+                    } else {
+                        normals.insert(normals.end(), { normal.x, normal.y, normal.z });
+                    }
+                }
+                indices[i]->normal_index = normal_index / 3;
+            }
         }
-
-        size_t index1 = vertices.size();
-        if (auto [kv, is_inserted] = index_map.insert({ vertex1, index1 }); is_inserted) {
-            vertices.push_back(vertex1);
-        } else {
-            index1 = kv->second;
-        }
-
-        size_t index2 = vertices.size();
-        if (auto [kv, is_inserted] = index_map.insert({ vertex2, index2 }); is_inserted) {
-            vertices.push_back(vertex2);
-        } else {
-            index2 = kv->second;
-        }
-
-        indices.push_back(etna::narrow_cast<uint32_t>(index0));
-        indices.push_back(etna::narrow_cast<uint32_t>(index1));
-        indices.push_back(etna::narrow_cast<uint32_t>(index2));
-
-        aabb.Expand({ pos0.x, pos0.y, pos0.z });
-        aabb.Expand({ pos1.x, pos1.y, pos1.z });
-        aabb.Expand({ pos2.x, pos2.y, pos2.z });
     }
 
-    auto vertex_size   = sizeof(vertices[0]);
-    auto vertex_count  = vertices.size();
-    auto vertex_buffer = scene->CreateVertexBuffer(vertices.data(), vertex_size * vertex_count, std::align_val_t(32));
-
-    auto index_size   = sizeof(indices[0]);
-    auto index_count  = indices.size();
-    auto index_buffer = scene->CreateIndexBuffer(indices.data(), index_size * index_count, std::align_val_t(32));
-
-    return scene->CreateMesh(aabb, vertex_buffer, index_buffer, 0, index_count);
+    out_normals = std::move(normals);
 }
 
 void LoadObj(ScenePtr scene, std::filesystem::path filepath)
 {
+    using namespace std::chrono;
+
     namespace fs = std::filesystem;
 
     if (false == fs::exists(filepath)) {
@@ -254,7 +208,7 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
 
     spdlog::info("Loading file {}", filepath.string());
 
-    auto start = std::chrono::system_clock::now();
+    auto start = system_clock::now();
 
     bool success = tinyobj::LoadObj(
         &attributes,
@@ -276,14 +230,21 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
         spdlog::warn("{}", warning);
     }
 
-    auto end     = std::chrono::system_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+    auto elapsed = duration_cast<duration<double>>(system_clock::now() - start).count();
 
     spdlog::info("File loaded. Elapsed time: {} seconds.", elapsed);
 
+    if (attributes.normals.empty()) {
+        spdlog::info("Generating normals");
+        start = system_clock::now();
+        GenerateNormals(&attributes, &shapes);
+        elapsed = duration_cast<duration<double>>(system_clock::now() - start).count();
+        spdlog::info("Normals generated. Elapsed time: {} seconds.", elapsed);
+    }
+
     spdlog::info("Generating scene");
 
-    start = std::chrono::system_clock::now();
+    start = system_clock::now();
 
     auto shader       = scene->CreateShader();
     auto material_map = std::map<int, MaterialPtr>{};
@@ -314,7 +275,7 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
             index_count += shape.mesh.indices.size();
         }
 
-        auto vertices = std::vector<VertexPN>{};
+        auto vertices = std::vector<Vertex>{};
         vertices.reserve(2 * attributes.vertices.size());
 
         auto indices = std::vector<uint32_t>{};
@@ -361,8 +322,7 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
         }
     }
 
-    end     = std::chrono::system_clock::now();
-    elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+    elapsed = duration_cast<duration<double>>(system_clock::now() - start).count();
 
     spdlog::info("Scene generation finished. Elapsed time: {} seconds.", elapsed);
 }
@@ -946,17 +906,17 @@ int main()
 
         builder.AddShaderStage(*vertex_shader, ShaderStage::Vertex);
         builder.AddShaderStage(*fragment_shader, ShaderStage::Fragment);
-        builder.AddVertexInputBindingDescription(Binding{ 0 }, sizeof(VertexPN));
+        builder.AddVertexInputBindingDescription(Binding{ 0 }, sizeof(Vertex));
         builder.AddVertexInputAttributeDescription(
             Location{ 0 },
             Binding{ 0 },
-            formatof(VertexPN, position),
-            offsetof(VertexPN, position));
+            formatof(Vertex, position),
+            offsetof(Vertex, position));
         builder.AddVertexInputAttributeDescription(
             Location{ 1 },
             Binding{ 0 },
-            formatof(VertexPN, normal),
-            offsetof(VertexPN, normal));
+            formatof(Vertex, normal),
+            offsetof(Vertex, normal));
         builder.AddViewport(viewport);
         builder.AddScissor(scissor);
         builder.AddDynamicStates({ DynamicState::Viewport, DynamicState::Scissor });
