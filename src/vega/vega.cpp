@@ -212,7 +212,7 @@ static std::map<int, MaterialPtr> GenerateMaterials(
     ScenePtr                                scene,
     TextureLoader*                          texture_loader,
     const std::vector<tinyobj::material_t>& tiny_materials,
-    const std::string&                      parent_folder)
+    const std::filesystem::path&            parent_dir)
 {
     auto shader       = scene->CreateShader();
     auto material_map = std::map<int, MaterialPtr>{};
@@ -228,8 +228,9 @@ static std::map<int, MaterialPtr> GenerateMaterials(
                 material->SetProperty("diffuse.color", Float3(tiny_material.diffuse));
             }
             if (false == tiny_material.diffuse_texname.empty()) {
-                texture_loader->LoadAsync(parent_folder, tiny_material.diffuse_texname);
-                material->SetProperty("diffuse.texture", tiny_material.diffuse_texname);
+                auto filepath = (parent_dir / tiny_material.diffuse_texname).string();
+                texture_loader->LoadAsync(filepath);
+                material->SetProperty("diffuse.texture", filepath);
             }
 
             auto index          = utils::narrow_cast<int>(material_index);
@@ -243,8 +244,6 @@ static std::map<int, MaterialPtr> GenerateMaterials(
 
 void LoadObj(ScenePtr scene, TextureLoader* texture_loader, std::filesystem::path filepath)
 {
-    using namespace std::chrono;
-
     namespace fs = std::filesystem;
 
     if (false == fs::exists(filepath)) {
@@ -259,9 +258,7 @@ void LoadObj(ScenePtr scene, TextureLoader* texture_loader, std::filesystem::pat
     auto warning    = std::string{};
     auto error      = std::string{};
 
-    spdlog::info("Loading file {}", filepath.string());
-
-    auto start = system_clock::now();
+    spdlog::info("Parsing scene");
 
     bool success = tinyobj::LoadObj(
         &attributes,
@@ -290,33 +287,18 @@ void LoadObj(ScenePtr scene, TextureLoader* texture_loader, std::filesystem::pat
         spdlog::warn("{}", warning);
     }
 
-    auto elapsed = duration_cast<duration<double>>(system_clock::now() - start).count();
-
-    spdlog::info("File loaded. Elapsed time: {} seconds.", elapsed);
-
     if (attributes.normals.empty()) {
         spdlog::info("Generating normals");
-        start = system_clock::now();
         GenerateNormals(&attributes, &shapes);
-        elapsed = duration_cast<duration<double>>(system_clock::now() - start).count();
-        spdlog::info("Normals generated. Elapsed time: {} seconds.", elapsed);
     }
 
     if (attributes.texcoords.empty()) {
         GenerateTexcoords(&attributes, &shapes);
     }
 
-    start = system_clock::now();
-    spdlog::info("Generating materials");
-
-    auto material_map = GenerateMaterials(scene, texture_loader, materials, parent_dir.string());
-
-    elapsed = duration_cast<duration<double>>(system_clock::now() - start).count();
-    spdlog::info("Materials generated. Elapsed time: {} seconds.", elapsed);
+    auto material_map = GenerateMaterials(scene, texture_loader, materials, parent_dir);
 
     spdlog::info("Generating scene");
-
-    start = system_clock::now();
 
     auto root_node = scene->GetRootNode();
     auto file_node = root_node->AttachNode(scene->CreateGroupNode());
@@ -380,10 +362,6 @@ void LoadObj(ScenePtr scene, TextureLoader* texture_loader, std::filesystem::pat
             }
         }
     }
-
-    elapsed = duration_cast<duration<double>>(system_clock::now() - start).count();
-
-    spdlog::info("Scene generation finished. Elapsed time: {} seconds.", elapsed);
 }
 
 struct QueueInfo final {
@@ -782,6 +760,10 @@ class EventHandler {
 
     void LoadFile()
     {
+        spdlog::info("Loading file {}", m_load_file_parameters.filepath);
+
+        auto start = std::chrono::system_clock::now();
+
         LoadObj(m_scene, m_texture_loader, m_load_file_parameters.filepath);
 
         auto draw_list = m_scene->ComputeDrawList();
@@ -789,6 +771,9 @@ class EventHandler {
             m_buffer_manager->CreateBuffer(draw_record.mesh->GetVertexBuffer(), etna::BufferUsage::VertexBuffer);
             m_buffer_manager->CreateBuffer(draw_record.mesh->GetIndexBuffer(), etna::BufferUsage::IndexBuffer);
         }
+
+        spdlog::info("Uploading data");
+
         m_buffer_manager->UploadAsync();
         m_texture_loader->UploadAsync();
 
@@ -796,6 +781,10 @@ class EventHandler {
 
         m_buffer_manager->CleanAfterUpload();
         m_texture_loader->CleanAfterUpload();
+
+        auto elapsed = duration_cast<std::chrono::duration<double>>(std::chrono::system_clock::now() - start).count();
+
+        spdlog::info("File loaded. Elapsed time: {} seconds.", elapsed);
 
         auto aabb = m_scene->ComputeAxisAlignedBoundingBox();
 

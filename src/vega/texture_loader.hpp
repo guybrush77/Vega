@@ -6,6 +6,7 @@
 #include "etna/image.hpp"
 #include "etna/queue.hpp"
 
+#include <future>
 #include <map>
 #include <string>
 
@@ -19,7 +20,7 @@ class TextureLoader {
     TextureLoader(TextureLoader&&) = default;
     TextureLoader& operator=(TextureLoader&&) = default;
 
-    void LoadAsync(const std::string& base, const std::string& file);
+    void LoadAsync(const std::string& filepath);
 
     void UploadAsync();
 
@@ -32,6 +33,7 @@ class TextureLoader {
   private:
     struct StageBuffer final {
         etna::UniqueBuffer buffer;
+        size_t             hash;
         uint32_t           width;
         uint32_t           height;
     };
@@ -41,11 +43,14 @@ class TextureLoader {
         etna::UniqueImageView2D view;
     };
 
+    StageBuffer LoadAsyncPrivate(const std::string& filepath);
+
     etna::Device              m_device;
     etna::Queue               m_transfer_queue;
     etna::UniqueCommandPool   m_command_pool;
     etna::UniqueCommandBuffer m_command_buffer;
 
-    std::map<std::string, StageBuffer> m_host_buffers;
-    std::map<std::string, ImageRecord> m_gpu_images;
+    std::vector<std::future<StageBuffer>> m_tasks;
+    std::vector<etna::UniqueBuffer>       m_host_buffers;
+    std::map<size_t, ImageRecord>         m_gpu_images;
 };
