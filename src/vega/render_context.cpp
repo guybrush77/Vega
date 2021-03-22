@@ -2,6 +2,7 @@
 
 #include "buffer_manager.hpp"
 #include "camera.hpp"
+#include "descriptor_manager.hpp"
 #include "gui.hpp"
 #include "lights.hpp"
 #include "scene.hpp"
@@ -22,11 +23,12 @@ RenderContext::RenderContext(
     Camera*              camera,
     Lights*              lights,
     BufferManager*       buffer_manager,
+    TextureLoader*       texture_loader,
     Scene*               scene)
     : m_device(device), m_graphics_queue(graphics_queue), m_pipeline(pipeline), m_pipeline_layout(pipeline_layout),
       m_window(window), m_swapchain_manager(swapchain_manager), m_frame_manager(frame_manager),
       m_descriptor_manager(descriptor_manager), m_gui(gui), m_camera(camera), m_lights(lights),
-      m_buffer_manager(buffer_manager), m_scene(scene)
+      m_buffer_manager(buffer_manager), m_texture_loader(texture_loader), m_scene(scene)
 {}
 
 void RenderContext::ProcessUserInput()
@@ -144,40 +146,52 @@ RenderContext::Status RenderContext::StartRenderLoop()
 
         m_descriptor_manager->Set(frame.index, lights);
 
+        auto image_views = std::vector<ImageView2D>{};
+
+        for (const auto& [index, mesh, material, transform] : draw_list) {
+            const auto& value   = material->GetProperty("diffuse.texture");
+            const auto  texture = std::get_if<std::string>(&value);
+            auto image_view     = texture ? m_texture_loader->GetImage(*texture) : m_texture_loader->GetDefaultImage();
+            m_descriptor_manager->Set(image_view);
+            image_views.push_back(image_view);
+        }
+
         auto clear_color    = ClearColor::Transparent;
         auto clear_depth    = ClearDepthStencil::Default;
         auto render_area    = Rect2D{ Offset2D{ 0, 0 }, extent };
         auto framebuffer    = framebuffers.draw;
-        auto descriptor_set = m_descriptor_manager->DescriptorSet(frame.index);
+        auto transforms_set = m_descriptor_manager->GetTransformsSet(frame.index);
         auto width          = narrow_cast<float>(extent.width);
         auto height         = narrow_cast<float>(extent.height);
         auto viewport       = Viewport{ 0, height, width, -height, 0, 1 };
         auto scissor        = Rect2D{ Offset2D{ 0, 0 }, extent };
 
-        frame.cmd_buffers.draw.ResetCommandBuffer();
+        frame.cmd_buffers.draw.ResetCommandBuffer(CommandBufferReset::ReleaseResources);
         frame.cmd_buffers.draw.Begin(CommandBufferUsage::OneTimeSubmit);
         frame.cmd_buffers.draw.BeginRenderPass(framebuffer, render_area, { clear_color, clear_depth });
         frame.cmd_buffers.draw.BindPipeline(PipelineBindPoint::Graphics, m_pipeline);
         frame.cmd_buffers.draw.SetViewport(viewport);
         frame.cmd_buffers.draw.SetScissor(scissor);
 
-        for (const auto& [index, mesh, transform] : draw_list) {
+        for (const auto& [index, mesh, material, transform] : draw_list) {
             auto graphics        = PipelineBindPoint::Graphics;
+            auto material_set    = m_descriptor_manager->GetTextureSet(image_views[index]);
+            auto descriptor_sets = { transforms_set, material_set };
             auto model_transform = ModelUniform{ transform };
-            auto offset          = m_descriptor_manager->Set(frame.index, index, model_transform);
+            auto offsets         = { m_descriptor_manager->Set(frame.index, index, model_transform) };
             auto vertex_buffer   = m_buffer_manager->GetBuffer(mesh->GetVertexBuffer());
             auto index_buffer    = m_buffer_manager->GetBuffer(mesh->GetIndexBuffer());
 
             frame.cmd_buffers.draw.BindVertexBuffers(vertex_buffer);
             frame.cmd_buffers.draw.BindIndexBuffer(index_buffer, IndexType::Uint32);
-            frame.cmd_buffers.draw.BindDescriptorSet(graphics, m_pipeline_layout, descriptor_set, { offset });
+            frame.cmd_buffers.draw.BindDescriptorSets(graphics, m_pipeline_layout, 0, descriptor_sets, offsets);
             frame.cmd_buffers.draw.DrawIndexed(mesh->GetIndexCount(), 1, mesh->GetFirstIndex());
         }
 
         frame.cmd_buffers.draw.EndRenderPass();
         frame.cmd_buffers.draw.End();
 
-        m_descriptor_manager->UpdateDescriptorSet(frame.index);
+        m_descriptor_manager->Flush(frame.index);
 
         m_graphics_queue.Submit(
             frame.cmd_buffers.draw,

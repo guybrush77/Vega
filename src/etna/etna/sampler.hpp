@@ -6,6 +6,14 @@ namespace etna {
 
 class Sampler {
   public:
+    struct Builder final {
+        Builder() noexcept;
+
+        Builder(Filter mag_filter, Filter min_filter, SamplerMipmapMode mipmap_mode) noexcept;
+
+        VkSamplerCreateInfo state{};
+    };
+
     Sampler() noexcept {}
     Sampler(std::nullptr_t) noexcept {}
 

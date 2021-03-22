@@ -81,6 +81,19 @@ const char* to_string(PhysicalDeviceType value) noexcept
     }
 }
 
+const char* to_string(BorderColor value) noexcept
+{
+    switch (value) {
+    case BorderColor::FloatTransparentBlack: return "FloatTransparentBlack";
+    case BorderColor::IntTransparentBlack: return "IntTransparentBlack";
+    case BorderColor::FloatOpaqueBlack: return "FloatOpaqueBlack";
+    case BorderColor::IntOpaqueBlack: return "IntOpaqueBlack";
+    case BorderColor::FloatOpaqueWhite: return "FloatOpaqueWhite";
+    case BorderColor::IntOpaqueWhite: return "IntOpaqueWhite";
+    default: return "invalid";
+    }
+}
+
 const char* to_string(Format value) noexcept
 {
     switch (value) {
@@ -348,6 +361,37 @@ const char* to_string(ColorSpaceKHR value) noexcept
     case ColorSpaceKHR::PassThroughEXT: return "PassThroughEXT";
     case ColorSpaceKHR::ExtendedSrgbNonlinearEXT: return "ExtendedSrgbNonlinearEXT";
     case ColorSpaceKHR::DisplayNativeAMD: return "DisplayNativeAMD";
+    default: return "invalid";
+    }
+}
+
+const char* to_string(Filter value) noexcept
+{
+    switch (value) {
+    case Filter::Nearest: return "Nearest";
+    case Filter::Linear: return "Linear";
+    case Filter::CubicIMG: return "CubicIMG";
+    default: return "invalid";
+    }
+}
+
+const char* to_string(SamplerMipmapMode value) noexcept
+{
+    switch (value) {
+    case SamplerMipmapMode::Nearest: return "Nearest";
+    case SamplerMipmapMode::Linear: return "Linear";
+    default: return "invalid";
+    }
+}
+
+const char* to_string(SamplerAddressMode value) noexcept
+{
+    switch (value) {
+    case SamplerAddressMode::Repeat: return "Repeat";
+    case SamplerAddressMode::MirroredRepeat: return "MirroredRepeat";
+    case SamplerAddressMode::ClampToEdge: return "ClampToEdge";
+    case SamplerAddressMode::ClampToBorder: return "ClampToBorder";
+    case SamplerAddressMode::MirrorClampToEdge: return "MirrorClampToEdge";
     default: return "invalid";
     }
 }

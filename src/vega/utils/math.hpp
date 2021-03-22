@@ -4,6 +4,7 @@
 
 struct Float3 final {
     constexpr Float3() noexcept : x(0), y(0), z(0) {}
+    constexpr Float3(const float (&f)[3]) noexcept : x(f[0]), y(f[1]), z(f[2]) {}
     constexpr Float3(float x, float y, float z) noexcept : x(x), y(y), z(z) {}
 
     union {

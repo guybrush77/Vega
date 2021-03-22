@@ -8,6 +8,7 @@
 #include "render_context.hpp"
 #include "scene.hpp"
 #include "swapchain_manager.hpp"
+#include "texture_loader.hpp"
 #include "utils/misc.hpp"
 #include "utils/resource.hpp"
 
@@ -36,11 +37,15 @@ END_DISABLE_WARNINGS
 enum class KhronosValidation { Disable, Enable };
 
 struct Vertex final {
-    constexpr Vertex(const glm::vec3& position, const glm::vec3 normal) noexcept : position(position), normal(normal) {}
+    constexpr Vertex(const glm::vec3& position, const glm::vec3& normal, const glm::vec2& uv) noexcept
+        : position(position), normal(normal), uv(uv)
+    {}
     glm::vec3 position;
     glm::vec3 normal;
+    glm::vec2 uv;
 };
 
+DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec2, etna::Format::R32G32Sfloat)
 DECLARE_VERTEX_ATTRIBUTE_TYPE(glm::vec3, etna::Format::R32G32B32Sfloat)
 
 DECLARE_VERTEX_TYPE(Vertex, Position3f | Normal3f)
@@ -94,13 +99,15 @@ static MeshRecords GenerateMeshRecords(
         const auto  material_id = mesh.material_ids[i / 3];
         const auto  pindex      = 3 * index.vertex_index;
         const auto  nindex      = 3 * index.normal_index;
+        const auto  tindex      = 2 * index.texcoord_index;
         const auto  position    = glm::vec3(positions[pindex + 0], positions[pindex + 1], positions[pindex + 2]);
         const auto  normal      = glm::vec3(normals[nindex + 0], normals[nindex + 1], normals[nindex + 2]);
+        const auto  texcoord    = glm::vec2(texcoords[tindex + 0], texcoords[tindex + 1]);
 
         auto new_index = vertices->size();
 
         if (auto [it, success] = index_map->try_emplace(index, vertices->size()); success) {
-            vertices->emplace_back(position, normal);
+            vertices->emplace_back(position, normal, texcoord);
         } else {
             new_index = it->second;
         }
@@ -188,7 +195,53 @@ static void GenerateNormals(tinyobj::attrib_t* attributes, std::vector<tinyobj::
     out_normals = std::move(normals);
 }
 
-void LoadObj(ScenePtr scene, std::filesystem::path filepath)
+static void GenerateTexcoords(tinyobj::attrib_t* attributes, std::vector<tinyobj::shape_t>* shapes)
+{
+    attributes->texcoords.clear();
+    attributes->texcoords.push_back(0.0f);
+    attributes->texcoords.push_back(0.0f);
+
+    for (auto& [name, mesh, path] : *shapes) {
+        for (auto& index : mesh.indices) {
+            index.texcoord_index = 0;
+        }
+    }
+}
+
+static std::map<int, MaterialPtr> GenerateMaterials(
+    ScenePtr                                scene,
+    TextureLoader*                          texture_loader,
+    const std::vector<tinyobj::material_t>& tiny_materials,
+    const std::string&                      parent_folder)
+{
+    auto shader       = scene->CreateShader();
+    auto material_map = std::map<int, MaterialPtr>{};
+    {
+        auto default_material = scene->CreateMaterial(shader);
+        material_map[-1]      = default_material;
+
+        auto material_index = 0;
+        for (const auto& tiny_material : tiny_materials) {
+            auto material = scene->CreateMaterial(shader);
+            material->SetProperty("name", tiny_material.name);
+            if (tiny_material.diffuse[0] > 0 || tiny_material.diffuse[1] > 0 || tiny_material.diffuse[2] > 0) {
+                material->SetProperty("diffuse.color", Float3(tiny_material.diffuse));
+            }
+            if (false == tiny_material.diffuse_texname.empty()) {
+                texture_loader->LoadAsync(parent_folder, tiny_material.diffuse_texname);
+                material->SetProperty("diffuse.texture", tiny_material.diffuse_texname);
+            }
+
+            auto index          = utils::narrow_cast<int>(material_index);
+            material_map[index] = material;
+            ++material_index;
+        }
+    }
+
+    return material_map;
+}
+
+void LoadObj(ScenePtr scene, TextureLoader* texture_loader, std::filesystem::path filepath)
 {
     using namespace std::chrono;
 
@@ -226,6 +279,13 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
         utils::throw_runtime_error("Failed to load object file");
     }
 
+    auto extension = filepath.extension().string();
+    utils::to_lower(extension.data());
+
+    if (extension != ".obj") {
+        throw std::runtime_error("File is not an .obj file");
+    }
+
     if (!warning.empty()) {
         spdlog::warn("{}", warning);
     }
@@ -242,22 +302,21 @@ void LoadObj(ScenePtr scene, std::filesystem::path filepath)
         spdlog::info("Normals generated. Elapsed time: {} seconds.", elapsed);
     }
 
+    if (attributes.texcoords.empty()) {
+        GenerateTexcoords(&attributes, &shapes);
+    }
+
+    start = system_clock::now();
+    spdlog::info("Generating materials");
+
+    auto material_map = GenerateMaterials(scene, texture_loader, materials, parent_dir.string());
+
+    elapsed = duration_cast<duration<double>>(system_clock::now() - start).count();
+    spdlog::info("Materials generated. Elapsed time: {} seconds.", elapsed);
+
     spdlog::info("Generating scene");
 
     start = system_clock::now();
-
-    auto shader       = scene->CreateShader();
-    auto material_map = std::map<int, MaterialPtr>{};
-    {
-        auto default_material = scene->CreateMaterial(shader);
-        material_map[-1]      = default_material;
-
-        for (size_t material_index = 0; material_index != materials.size(); ++material_index) {
-            auto material       = scene->CreateMaterial(shader);
-            auto index          = utils::narrow_cast<int>(material_index);
-            material_map[index] = material;
-        }
-    }
 
     auto root_node = scene->GetRootNode();
     auto file_node = root_node->AttachNode(scene->CreateGroupNode());
@@ -676,13 +735,15 @@ etna::Extent2D ComputeEtnaExtent(etna::PhysicalDevice gpu, GLFWwindow* glfw_wind
 class EventHandler {
   public:
     EventHandler(
-        RenderContext* render_context,
+        etna::Device   device,
         GLFWwindow*    glfw_window,
+        RenderContext* render_context,
         Scene*         scene,
         Camera*        camera,
-        BufferManager* buffer_manager)
-        : m_render_context(render_context), m_glfw_window(glfw_window), m_scene(scene), m_camera(camera),
-          m_buffer_manager(buffer_manager)
+        BufferManager* buffer_manager,
+        TextureLoader* texture_loader)
+        : m_device(device), m_glfw_window(glfw_window), m_render_context(render_context), m_scene(scene),
+          m_camera(camera), m_buffer_manager(buffer_manager), m_texture_loader(texture_loader)
     {}
 
     void ScheduleCloseWindow() noexcept
@@ -721,14 +782,20 @@ class EventHandler {
 
     void LoadFile()
     {
-        LoadObj(m_scene, m_load_file_parameters.filepath);
+        LoadObj(m_scene, m_texture_loader, m_load_file_parameters.filepath);
 
         auto draw_list = m_scene->ComputeDrawList();
         for (const DrawRecord& draw_record : draw_list) {
             m_buffer_manager->CreateBuffer(draw_record.mesh->GetVertexBuffer(), etna::BufferUsage::VertexBuffer);
             m_buffer_manager->CreateBuffer(draw_record.mesh->GetIndexBuffer(), etna::BufferUsage::IndexBuffer);
         }
-        m_buffer_manager->Upload();
+        m_buffer_manager->UploadAsync();
+        m_texture_loader->UploadAsync();
+
+        m_device.WaitIdle();
+
+        m_buffer_manager->CleanAfterUpload();
+        m_texture_loader->CleanAfterUpload();
 
         auto aabb = m_scene->ComputeAxisAlignedBoundingBox();
 
@@ -747,11 +814,13 @@ class EventHandler {
             aspect);
     }
 
-    RenderContext* m_render_context;
+    etna::Device   m_device;
     GLFWwindow*    m_glfw_window;
+    RenderContext* m_render_context;
     Scene*         m_scene;
     Camera*        m_camera;
     BufferManager* m_buffer_manager;
+    TextureLoader* m_texture_loader;
     Event          m_event = Event::None;
 };
 
@@ -869,25 +938,39 @@ int main()
         gui_renderpass = device->CreateRenderPass(builder.state);
     }
 
-    // Create descriptor set layouts
-    auto descriptor_set_layout = UniqueDescriptorSetLayout();
+    // Create transforms set layout
+    auto transforms_set_layout = UniqueDescriptorSetLayout();
     {
         auto builder = DescriptorSetLayout::Builder();
 
         builder
             .AddDescriptorSetLayoutBinding(Binding{ 0 }, DescriptorType::UniformBufferDynamic, 1, ShaderStage::Vertex);
         builder.AddDescriptorSetLayoutBinding(Binding{ 1 }, DescriptorType::UniformBuffer, 1, ShaderStage::Vertex);
+        builder.AddDescriptorSetLayoutBinding(Binding{ 2 }, DescriptorType::UniformBuffer, 1, ShaderStage::Fragment);
 
-        builder.AddDescriptorSetLayoutBinding(Binding{ 10 }, DescriptorType::UniformBuffer, 1, ShaderStage::Fragment);
-
-        descriptor_set_layout = device->CreateDescriptorSetLayout(builder.state);
+        transforms_set_layout = device->CreateDescriptorSetLayout(builder.state);
     }
 
-    // Create pipeline pipeline_layout
+    // Create textures set layout
+    auto textures_set_layout = UniqueDescriptorSetLayout();
+    {
+        auto builder = DescriptorSetLayout::Builder();
+
+        builder.AddDescriptorSetLayoutBinding(
+            Binding{ 10 },
+            DescriptorType::CombinedImageSampler,
+            1,
+            ShaderStage::Fragment);
+
+        textures_set_layout = device->CreateDescriptorSetLayout(builder.state);
+    }
+
+    // Create pipeline layout
     auto pipeline_layout = UniquePipelineLayout();
     {
         auto builder = PipelineLayout::Builder();
-        builder.AddDescriptorSetLayout(*descriptor_set_layout);
+        builder.AddDescriptorSetLayout(*transforms_set_layout);
+        builder.AddDescriptorSetLayout(*textures_set_layout);
         pipeline_layout = device->CreatePipelineLayout(builder.state);
     }
 
@@ -917,6 +1000,11 @@ int main()
             Binding{ 0 },
             formatof(Vertex, normal),
             offsetof(Vertex, normal));
+        builder.AddVertexInputAttributeDescription(
+            Location{ 2 },
+            Binding{ 0 },
+            formatof(Vertex, uv),
+            offsetof(Vertex, uv));
         builder.AddViewport(viewport);
         builder.AddScissor(scissor);
         builder.AddDynamicStates({ DynamicState::Viewport, DynamicState::Scissor });
@@ -926,12 +1014,14 @@ int main()
         pipeline = device->CreateGraphicsPipeline(builder.state);
     }
 
+    auto texture_loader = TextureLoader(*device, queues.graphics);
     auto buffer_manager = BufferManager(*device, queues.transfer);
 
     uint32_t image_count = 3;
     uint32_t frame_count = 2;
 
-    auto descriptor_manager = DescriptorManager(*device, frame_count, *descriptor_set_layout, gpu_properties.limits);
+    auto descriptor_manager =
+        DescriptorManager(*device, frame_count, *transforms_set_layout, *textures_set_layout, gpu_properties.limits);
 
     auto render_context = RenderContext();
 
@@ -959,7 +1049,14 @@ int main()
         lights.FillRef().AzimuthRef()    = ToRadians(25_deg).value;
     }
 
-    auto event_handler = EventHandler(&render_context, glfw_window.get(), &scene, &camera, &buffer_manager);
+    auto event_handler = EventHandler(
+        device.get(),
+        glfw_window.get(),
+        &render_context,
+        &scene,
+        &camera,
+        &buffer_manager,
+        &texture_loader);
 
     auto parameters = Gui::Parameters{
 
@@ -1009,6 +1106,7 @@ int main()
             &camera,
             &lights,
             &buffer_manager,
+            &texture_loader,
             &scene);
 
         auto status = render_context.StartRenderLoop();

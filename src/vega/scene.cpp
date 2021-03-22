@@ -450,7 +450,8 @@ DrawList Scene::ComputeDrawList() const
     for (const auto& shader : m_shaders) {
         for (auto material : shader->GetMaterials()) {
             for (auto instance : material->GetInstanceNodes()) {
-                draw_list.push_back({ index++, instance->GetMeshPtr(), instance->GetTransform() });
+                draw_list.push_back(
+                    { index++, instance->GetMeshPtr(), instance->GetMaterialPtr(), instance->GetTransform() });
             }
         }
     }
@@ -942,24 +943,24 @@ void Shader::AddMaterialPtr(MaterialPtr material)
     m_materials.push_back(material);
 }
 
-PropertyValue Material::GetProperty(std::string_view /*name*/) const
+PropertyValue Material::GetProperty(std::string_view name) const
 {
-    return {}; // TODO
+    return ObjectAccess::GetProperty(name, *this, std::make_tuple());
 }
 
-PropertyValue Material::GetProperty(std::string_view /*primary*/, std::string_view /*alternative*/) const
+PropertyValue Material::GetProperty(std::string_view primary, std::string_view alternative) const
 {
-    return {}; // TODO
+    return ObjectAccess::GetProperty(primary, alternative, *this, std::make_tuple());
 }
 
 std::vector<Property> Material::GetProperties() const
 {
-    return {}; // TODO
+    return ObjectAccess::GetProperties(this, std::make_tuple());
 }
 
-bool Material::SetProperty(std::string_view /*name*/, const PropertyValue& /*value*/)
+bool Material::SetProperty(std::string_view name, const PropertyValue& value)
 {
-    return false; // TODO
+    return ObjectAccess::SetProperty(*this, name, value, std::make_tuple());
 }
 
 bool Material::RemoveProperty(std::string_view name)

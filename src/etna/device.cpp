@@ -227,11 +227,8 @@ UniqueBuffer Device::CreateBuffer(std::size_t size, BufferUsage buffer_usage_fla
     return Buffer::Create(m_allocator, create_info, memory_usage);
 }
 
-auto Device::CreateBuffers(
-    std::size_t count,
-    std::size_t size,
-    BufferUsage buffer_usage_flags,
-    MemoryUsage memory_usage) -> std::vector<UniqueBuffer>
+std::vector<UniqueBuffer>
+Device::CreateBuffers(std::size_t count, std::size_t size, BufferUsage buffer_usage_flags, MemoryUsage memory_usage)
 {
     std::vector<UniqueBuffer> buffers;
     buffers.reserve(count);

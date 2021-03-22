@@ -20,4 +20,6 @@ inline void throw_runtime_error_if(bool condition, const char* message)
     }
 }
 
+void to_lower(char* text, size_t size = ~0U) noexcept;
+
 } // namespace utils

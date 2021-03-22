@@ -558,9 +558,10 @@ class InstanceNode final : public Node {
 };
 
 struct DrawRecord final {
-    size_t    index{};
-    MeshPtr   mesh{};
-    glm::mat4 transform{};
+    size_t      index{};
+    MeshPtr     mesh{};
+    MaterialPtr material{};
+    glm::mat4   transform{};
 };
 
 using DrawList = std::vector<DrawRecord>;

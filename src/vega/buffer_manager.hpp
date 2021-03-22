@@ -1,6 +1,7 @@
 #pragma once
 
 #include "etna/buffer.hpp"
+#include "etna/command.hpp"
 #include "etna/device.hpp"
 #include "etna/queue.hpp"
 
@@ -8,8 +9,7 @@
 
 class BufferManager {
   public:
-    BufferManager(etna::Device device, etna::Queue transfer_queue) : m_device(device), m_transfer_queue(transfer_queue)
-    {}
+    BufferManager(etna::Device device, etna::Queue transfer_queue);
 
     BufferManager(const BufferManager&) = delete;
     BufferManager& operator=(const BufferManager&) = delete;
@@ -21,7 +21,9 @@ class BufferManager {
 
     auto GetBuffer(BufferPtr buffer) const noexcept -> etna::Buffer;
 
-    void Upload();
+    void UploadAsync();
+
+    void CleanAfterUpload();
 
   private:
     struct Record final {
@@ -31,8 +33,10 @@ class BufferManager {
         etna::UniqueBuffer gpu_buffer{};
     };
 
-    etna::Device m_device;
-    etna::Queue  m_transfer_queue;
+    etna::Device              m_device;
+    etna::Queue               m_transfer_queue;
+    etna::UniqueCommandPool   m_command_pool;
+    etna::UniqueCommandBuffer m_command_buffer;
 
     std::vector<Record> m_records;
 };

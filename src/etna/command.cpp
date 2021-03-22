@@ -5,6 +5,8 @@
 #include "etna/pipeline.hpp"
 #include "etna/renderpass.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cassert>
 
 namespace etna {
@@ -125,23 +127,34 @@ void CommandBuffer::BindIndexBuffer(Buffer buffer, IndexType index_type, size_t 
     vkCmdBindIndexBuffer(m_command_buffer, vk_buffer, vk_offset, VkEnum(index_type));
 }
 
-void CommandBuffer::BindDescriptorSet(
-    PipelineBindPoint               pipeline_bind_point,
-    PipelineLayout                  pipeline_layout,
-    DescriptorSet                   descriptor_set,
-    std::initializer_list<uint32_t> dynamic_offsets)
+void CommandBuffer::BindDescriptorSets(
+    PipelineBindPoint                    pipeline_bind_point,
+    PipelineLayout                       pipeline_layout,
+    size_t                               first_set,
+    std::initializer_list<DescriptorSet> descriptor_sets,
+    std::initializer_list<uint32_t>      dynamic_offsets)
 {
     assert(m_command_buffer);
 
-    VkDescriptorSet vk_descriptor_set = descriptor_set;
+    constexpr size_t kMaxDescriptorSets = 16;
+
+    std::array<VkDescriptorSet, kMaxDescriptorSets> vk_descriptor_sets;
+
+    if (descriptor_sets.size() > vk_descriptor_sets.size()) {
+        throw_etna_error(__FILE__, __LINE__, "Too many elements in std::initializer_list<DescriptorSet>");
+    }
+
+    std::transform(descriptor_sets.begin(), descriptor_sets.end(), vk_descriptor_sets.begin(), [](DescriptorSet set) {
+        return static_cast<VkDescriptorSet>(set);
+    });
 
     vkCmdBindDescriptorSets(
         m_command_buffer,
         VkEnum(pipeline_bind_point),
         pipeline_layout,
-        0,
-        1,
-        &vk_descriptor_set,
+        narrow_cast<uint32_t>(first_set),
+        narrow_cast<uint32_t>(descriptor_sets.size()),
+        vk_descriptor_sets.data(),
         narrow_cast<uint32_t>(dynamic_offsets.size()),
         dynamic_offsets.size() ? dynamic_offsets.begin() : nullptr);
 }

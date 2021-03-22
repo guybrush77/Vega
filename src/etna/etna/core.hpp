@@ -112,6 +112,19 @@ enum class AttachmentStoreOp { Store = VK_ATTACHMENT_STORE_OP_STORE, DontCare = 
 
 ETNA_DEFINE_ENUM_ANALOGUE(AttachmentStoreOp)
 
+enum class BorderColor {
+    FloatTransparentBlack = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+    IntTransparentBlack   = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK,
+    FloatOpaqueBlack      = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+    IntOpaqueBlack        = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+    FloatOpaqueWhite      = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+    IntOpaqueWhite        = VK_BORDER_COLOR_INT_OPAQUE_WHITE
+};
+
+ETNA_DEFINE_ENUM_ANALOGUE(BorderColor)
+
+const char* to_string(BorderColor value) noexcept;
+
 enum class Format {
     Undefined                               = VK_FORMAT_UNDEFINED,
     R4G4UnormPack8                          = VK_FORMAT_R4G4_UNORM_PACK8,
@@ -418,6 +431,31 @@ enum class ColorSpaceKHR {
 ETNA_DEFINE_ENUM_ANALOGUE(ColorSpaceKHR)
 
 const char* to_string(ColorSpaceKHR value) noexcept;
+
+enum class Filter { Nearest = VK_FILTER_NEAREST, Linear = VK_FILTER_LINEAR, CubicIMG = VK_FILTER_CUBIC_IMG };
+
+ETNA_DEFINE_ENUM_ANALOGUE(Filter)
+
+const char* to_string(Filter value) noexcept;
+
+enum class SamplerMipmapMode { Nearest = VK_SAMPLER_MIPMAP_MODE_NEAREST, Linear = VK_SAMPLER_MIPMAP_MODE_LINEAR };
+
+ETNA_DEFINE_ENUM_ANALOGUE(SamplerMipmapMode)
+
+const char* to_string(SamplerMipmapMode value) noexcept;
+
+enum class SamplerAddressMode {
+    Repeat               = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    MirroredRepeat       = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+    ClampToEdge          = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    ClampToBorder        = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+    MirrorClampToEdge    = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+    MirrorClampToEdgeKHR = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE_KHR
+};
+
+ETNA_DEFINE_ENUM_ANALOGUE(SamplerAddressMode)
+
+const char* to_string(SamplerAddressMode value) noexcept;
 
 enum class PresentModeKHR {
     Immediate               = VK_PRESENT_MODE_IMMEDIATE_KHR,
@@ -831,6 +869,13 @@ enum class ImageAspect : VkImageAspectFlags {
 };
 
 ETNA_DEFINE_FLAGS_ANALOGUE(ImageAspect, VkImageAspectFlags)
+
+enum class SamplerCreate : VkSamplerCreateFlags {
+    SubsampledEXT                     = VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT,
+    SubsampledCoarseReconstructionEXT = VK_SAMPLER_CREATE_SUBSAMPLED_COARSE_RECONSTRUCTION_BIT_EXT
+};
+
+ETNA_DEFINE_FLAGS_ANALOGUE(SamplerCreate, VkSamplerCreateFlags)
 
 enum class SurfaceTransformKHR : VkSurfaceTransformFlagsKHR {
     Identity                  = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,

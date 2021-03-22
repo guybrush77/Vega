@@ -2,6 +2,17 @@
 
 #include "etna/command.hpp"
 
+BufferManager::BufferManager(etna::Device device, etna::Queue transfer_queue)
+    : m_device(device), m_transfer_queue(transfer_queue)
+{
+    using namespace etna;
+
+    auto command_pool_flags = CommandPoolCreate::Transient | CommandPoolCreate::ResetCommandBuffer;
+
+    m_command_pool   = m_device.CreateCommandPool(m_transfer_queue.FamilyIndex(), command_pool_flags);
+    m_command_buffer = m_command_pool->AllocateCommandBuffer();
+}
+
 void BufferManager::CreateBuffer(BufferPtr buffer, etna::BufferUsage buffer_usage)
 {
     using namespace etna;
@@ -29,28 +40,36 @@ etna::Buffer BufferManager::GetBuffer(BufferPtr buffer) const noexcept
     return {};
 }
 
-void BufferManager::Upload()
+void BufferManager::UploadAsync()
 {
     using namespace etna;
 
-    auto cmd_pool   = m_device.CreateCommandPool(m_transfer_queue.FamilyIndex(), CommandPoolCreate::Transient);
-    auto cmd_buffer = cmd_pool->AllocateCommandBuffer();
+    auto is_set = [](auto& buffer) { return buffer.get(); };
 
-    cmd_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
+    if (auto count = std::ranges::count_if(m_records, is_set, &Record::host_buffer); count == 0) {
+        return;
+    }
+
+    m_command_buffer->ResetCommandBuffer(CommandBufferReset::ReleaseResources);
+
+    m_command_buffer->Begin(CommandBufferUsage::OneTimeSubmit);
 
     for (auto& [id, usage, host_buffer, gpu_buffer] : m_records) {
         if (gpu_buffer) {
             continue;
         }
         gpu_buffer = m_device.CreateBuffer(host_buffer->Size(), usage | BufferUsage::TransferDst, MemoryUsage::GpuOnly);
-        cmd_buffer->CopyBuffer(*host_buffer, *gpu_buffer, host_buffer->Size());
+        m_command_buffer->CopyBuffer(*host_buffer, *gpu_buffer, host_buffer->Size());
     }
 
-    cmd_buffer->End();
+    m_command_buffer->End();
 
-    m_transfer_queue.Submit(*cmd_buffer);
+    m_transfer_queue.Submit(*m_command_buffer);
+}
 
-    m_device.WaitIdle(); // TODO
-
-    // TODO: Clear CPU buffers
+void BufferManager::CleanAfterUpload()
+{
+    for (auto& record : m_records) {
+        record.host_buffer.reset();
+    }
 }

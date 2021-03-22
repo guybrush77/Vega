@@ -7,6 +7,7 @@
 #include "descriptor_manager.hpp"
 #include "frame_manager.hpp"
 #include "swapchain_manager.hpp"
+#include "texture_loader.hpp"
 
 struct GLFWwindow;
 
@@ -36,6 +37,7 @@ class RenderContext {
         Camera*              camera,
         Lights*              lights,
         BufferManager*       buffer_manager,
+        TextureLoader*       texture_loader,
         Scene*               scene);
 
     RenderContext(const RenderContext&) = delete;
@@ -62,6 +64,7 @@ class RenderContext {
     Camera*              m_camera                = nullptr;
     Lights*              m_lights                = nullptr;
     BufferManager*       m_buffer_manager        = nullptr;
+    TextureLoader*       m_texture_loader        = nullptr;
     Scene*               m_scene                 = nullptr;
     MouseLook            m_mouse_look            = MouseLook::None;
     bool                 m_is_any_window_hovered = false;

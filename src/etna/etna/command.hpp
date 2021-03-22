@@ -59,11 +59,12 @@ class CommandBuffer {
 
     void BindIndexBuffer(Buffer buffer, IndexType index_type, size_t offset = 0);
 
-    void BindDescriptorSet(
-        PipelineBindPoint               pipeline_bind_point,
-        PipelineLayout                  pipeline_layout,
-        DescriptorSet                   descriptor_set,
-        std::initializer_list<uint32_t> dynamic_offsets);
+    void BindDescriptorSets(
+        PipelineBindPoint                    pipeline_bind_point,
+        PipelineLayout                       pipeline_layout,
+        size_t                               first_set,
+        std::initializer_list<DescriptorSet> descriptor_sets,
+        std::initializer_list<uint32_t>      dynamic_offsets = {});
 
     void Draw(size_t vertex_count, size_t instance_count, size_t first_vertex = 0, size_t first_instance = 0);
 
